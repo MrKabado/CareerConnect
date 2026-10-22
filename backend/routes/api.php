@@ -1,11 +1,14 @@
 <?php
 
+use App\Http\Controllers\Api\AdminJobListingController;
 use App\Http\Controllers\Api\AdminUserController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\CategoryController;
+use App\Http\Controllers\Api\EmployerJobListingController;
 use App\Http\Controllers\Api\EmployerVerificationController;
 use App\Http\Controllers\Api\IdentityVerificationController;
 use App\Http\Controllers\Api\OtpController;
+use App\Http\Controllers\Api\PublicJobListingController;
 use Illuminate\Support\Facades\Route;
 
 Route::middleware('throttle:5,1')->group(function (): void {
@@ -18,6 +21,11 @@ Route::middleware('throttle:5,1')->group(function (): void {
     Route::post('/forgot-password', [OtpController::class, 'forgotPassword']);
     Route::post('/reset-password', [OtpController::class, 'resetPassword']);
 });
+
+Route::get('/categories', [CategoryController::class, 'publicIndex']);
+Route::get('/jobs', [PublicJobListingController::class, 'index']);
+Route::get('/jobs/{jobListing}', [PublicJobListingController::class, 'show'])
+    ->whereNumber('jobListing');
 
 Route::middleware(['auth:sanctum', 'account.active', 'throttle:60,1'])->group(function (): void {
     Route::post('/logout', [AuthController::class, 'logout']);
@@ -36,9 +44,22 @@ Route::middleware(['auth:sanctum', 'account.active', 'throttle:60,1'])->group(fu
         Route::post('/verification/documents', [EmployerVerificationController::class, 'uploadDocument']);
         Route::post('/verification/submit', [EmployerVerificationController::class, 'submit']);
         Route::get('/verification', [EmployerVerificationController::class, 'status']);
+        Route::get('/jobs', [EmployerJobListingController::class, 'index']);
+        Route::get('/jobs/{jobListing}', [EmployerJobListingController::class, 'show'])->whereNumber('jobListing');
+    });
+
+    Route::middleware('role:employer')->group(function (): void {
+        Route::post('/jobs', [EmployerJobListingController::class, 'store']);
+        Route::put('/jobs/{jobListing}', [EmployerJobListingController::class, 'update'])->whereNumber('jobListing');
+        Route::patch('/jobs/{jobListing}/status', [EmployerJobListingController::class, 'updateStatus'])->whereNumber('jobListing');
+        Route::delete('/jobs/{jobListing}', [EmployerJobListingController::class, 'destroy'])->whereNumber('jobListing');
     });
 
     Route::middleware('role:admin')->prefix('admin')->group(function (): void {
+        Route::get('/jobs', [AdminJobListingController::class, 'index']);
+        Route::get('/jobs/{jobListing}', [AdminJobListingController::class, 'show'])->whereNumber('jobListing');
+        Route::post('/jobs/{jobListing}/deactivate', [AdminJobListingController::class, 'deactivate'])->whereNumber('jobListing');
+        Route::post('/jobs/{jobListing}/restore', [AdminJobListingController::class, 'restore'])->whereNumber('jobListing');
         Route::get('/identity-verifications', [IdentityVerificationController::class, 'index']);
         Route::get('/identity-verifications/{identityVerification}/document', [IdentityVerificationController::class, 'document']);
         Route::post('/identity-verifications/{identityVerification}/review', [IdentityVerificationController::class, 'review']);

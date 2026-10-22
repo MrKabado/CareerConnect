@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class Company extends Model
@@ -54,5 +55,10 @@ class Company extends Model
     public function verification(): HasOne
     {
         return $this->hasOne(CompanyVerification::class);
+    }
+
+    public function jobListings(): HasMany
+    {
+        return $this->hasMany(JobListing::class);
     }
 }

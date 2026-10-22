@@ -11,6 +11,20 @@ use Illuminate\Validation\Rule;
 
 class CategoryController extends Controller
 {
+    public function publicIndex(): JsonResponse
+    {
+        return response()->json([
+            'data' => Category::query()
+                ->where('is_active', true)
+                ->orderBy('name')
+                ->get(['id', 'name'])
+                ->map(fn (Category $category): array => [
+                    'id' => $category->id,
+                    'name' => $category->name,
+                ]),
+        ]);
+    }
+
     public function index(Request $request): JsonResponse
     {
         $categories = Category::query()
@@ -75,7 +89,8 @@ class CategoryController extends Controller
 
     public function destroy(Category $category): JsonResponse
     {
-        if (Company::query()->where('category_id', $category->id)->exists()) {
+        if (Company::query()->where('category_id', $category->id)->exists()
+            || $category->jobListings()->exists()) {
             return response()->json([
                 'message' => 'This category is currently in use and cannot be deleted.',
                 'code' => 'category_in_use',

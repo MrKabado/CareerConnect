@@ -82,7 +82,7 @@ Store enums as strings and back them with PHP enums.
 |---|---|
 | UserRole | `admin`, `employer`, `applicant` |
 | ListingType | `job`, `ojt` |
-| ListingStatus | `draft`, `open`, `closed` |
+| ListingStatus | `draft`, `open`, `closed`, `deactivated` |
 | WorkSetup | `onsite`, `hybrid`, `remote` |
 | EmploymentType | `full_time`, `part_time`, `contract` |
 | ApplicationStatus | `applied`, `under_review`, `shortlisted`, `interview_scheduled`, `hired`, `rejected` |
@@ -262,15 +262,15 @@ Enforce these on the server. The UI only mirrors them. Write one feature test pe
 | R2 | `looking_for_jobs` or `looking_for_ojt` must be true at all times. | 422 |
 | R3 | At most 5 interest categories and 3 desired titles per applicant. | 422 |
 | R4 | One application per applicant per listing. | 409 `already_applied` |
-| R5 | Applications go only to `open`, non-deleted listings whose company is verified. | 422 `listing_not_open` |
+| R5 | Applications go only to published `open` listings whose company is approved and whose employer account is active. | 422 `listing_not_open` |
 | R6 | Applying to an `ojt` listing requires an `applicant_ojt_details` row. | 422 `ojt_details_required` |
 | R7 | A course not on a listing's `accepted_courses` never blocks an application; it only lowers the match score. | none |
-| R8 | Creating a listing requires a verified company (latest verification `approved`). | 403 `company_not_verified` |
-| R9 | Employers read and change only their own listings and the applications to them. | 403 |
-| R10 | Status changes follow the transition table in §4.6. | 422 `invalid_status_transition` |
+| R8 | Employers may save drafts before company approval. Opening or reopening requires an active employer and a company whose `is_verified` flag and verification status are both `verified`. | 403 `company_not_verified` |
+| R9 | Employers read and change only their own listings and the applications to them. Cross-company listing IDs are hidden. | 404 |
+| R10 | Employers may transition `draft` to `open`, `open` to `closed` or `draft`, and `closed` to `open` or `draft`. Only an admin may move a listing to or from `deactivated`; restoration returns it to `closed`. | 422 `invalid_status_transition` |
 | R11 | Resumes and cover letters are visible to the owner and to employers who received an application containing them. Verification documents are visible to admins and the owning employer. Nothing private is served from a public URL. | 403 |
 | R12 | A category in use cannot be deleted; set `is_active = false` instead. Inactive categories leave selection lists but remain on existing records. | 409 `category_in_use` |
-| R13 | Deactivated users (`is_active = false`) cannot authenticate, and their tokens are revoked. | 403 `account_deactivated` |
+| R13 | Inactive or deactivated users cannot authenticate or use protected endpoints; their tokens are revoked when an admin deactivates them. | 403 `account_deactivated` |
 | R14 | The admin queue includes only verifications whose employer has a verified email. | none |
 | R15 | Rejection requires a `rejection_reason`. Submissions, approvals, and rejections are never overwritten. | 422 |
 | R16 | `job` listings require `employment_type`. `ojt` listings require `duration_hours`, `allowance_type`, `slots`, and `allowance_amount` when paid. `salary_max` is not below `salary_min`. | 422 |
@@ -439,18 +439,21 @@ One list drives job categories, company industries, and applicant interests. Adm
 |---|---|---|
 | company_id | FK → companies | |
 | category_id | FK → categories | |
-| listing_type | string(10) | ListingType |
+| listing_type | enum `job`, `ojt` | ListingType |
 | title | string(255) | |
 | description | text | |
+| responsibilities | text | |
 | requirements | text | |
 | location | string(255) | |
-| work_setup | string(10) | WorkSetup |
+| work_setup | enum `onsite`, `hybrid`, `remote` | WorkSetup |
 | employment_type | string(20), null | `job` listings only |
 | salary_min, salary_max | unsigned int, null | `job` listings only |
-| status | string(10), default `draft` | ListingStatus |
-| deleted_at | timestamp, null | Soft delete, so applications keep their history |
+| status | enum `draft`, `open`, `closed`, `deactivated`, default `draft` | ListingStatus |
+| published_at | timestamp, null | Set when opened; cleared when returned to draft |
+| created_at, updated_at | timestamp | |
 
-Indexes: `(status, listing_type)`, `category_id`, `company_id`.
+Indexes: `(status, listing_type)`, `(status, published_at)`, `category_id`, `company_id`, `location`.
+Employer deletion archives the listing as `closed`; it is not physically deleted. Public visibility also requires an active category, active employer account, `company.is_verified = true`, and a `company_verifications.status = verified` row.
 
 ### ojt_listing_details
 
@@ -465,6 +468,17 @@ One row per `ojt` listing.
 | slots | unsigned smallint | |
 | accepted_courses | json, null | Empty means any course |
 | moa_accepted | boolean, default false | |
+| created_at, updated_at | timestamp | |
+
+### job_listing_admin_actions
+
+| Column | Type | Notes |
+|---|---|---|
+| job_listing_id | FK → job_listings, cascade | |
+| admin_user_id | FK → users, null on delete | Responsible administrator |
+| action | enum `deactivated`, `restored` | Immutable moderation history |
+| reason | text, null | Required for deactivation; optional for restoration |
+| created_at, updated_at | timestamp | |
 
 `available_slots` is computed: `slots` minus the number of `hired` applications for the listing (minimum 0).
 
@@ -670,14 +684,20 @@ Compute on demand: for the returned page on search, and for the candidate pool o
 
 | Method | Path | Access | Purpose |
 |---|---|---|---|
-| GET | `/jobs` | Public | Search and filter open listings (see 8.4) |
-| GET | `/jobs/{id}` | Public | Listing detail |
+| GET | `/categories` | Public | Active categories for listing filters |
+| GET | `/jobs` | Public | Search and filter open listings (see 8.4); paginated |
+| GET | `/jobs/{id}` | Public | Public listing detail; hidden listings return 404 |
 | GET | `/companies/{id}` | Public | Verified companies only |
 | GET | `/employer/jobs` | Employer | Own listings, filter by `status` and `listing_type` |
-| POST | `/jobs` | Employer | Create (R8, R16) |
-| PUT | `/jobs/{id}` | Employer, owner | Update |
-| PATCH | `/jobs/{id}/status` | Employer, owner | `open` or `closed` |
-| DELETE | `/jobs/{id}` | Employer, owner | Soft delete |
+| GET | `/employer/jobs/{id}` | Employer, owner | Own listing detail |
+| POST | `/jobs` | Active Employer | Create a draft; company ID and status are server controlled |
+| PUT | `/jobs/{id}` | Active Employer, owner | Update listing details |
+| PATCH | `/jobs/{id}/status` | Active Employer, owner | `draft`, `open`, or `closed`; opening requires approved company |
+| DELETE | `/jobs/{id}` | Active Employer, owner | Archive as `closed` |
+| GET | `/admin/jobs` | Admin | All listings, including non-public statuses |
+| GET | `/admin/jobs/{id}` | Admin | Inspect listing and moderation history |
+| POST | `/admin/jobs/{id}/deactivate` | Admin | Deactivate with required reason |
+| POST | `/admin/jobs/{id}/restore` | Admin | Restore as `closed`; optional reason |
 
 **Applications and interviews**
 
@@ -812,15 +832,17 @@ POST /api/admin/verifications/15/reject
 
 | Parameter | Meaning |
 |---|---|
-| `q` | Keyword in title, company name, or description |
+| `keyword` | Keyword in title, description, responsibilities, or requirements |
 | `listing_type` | `job` or `ojt`; omit for both |
 | `category_id` | Category |
 | `location` | Location contains this text |
 | `employment_type` | `job` listings |
 | `work_setup` | `onsite`, `hybrid`, or `remote` |
-| `salary_min`, `salary_max` | Overlaps the listing's range (`job` listings) |
+| `min_salary`, `max_salary` | Salary range overlap (`job` listings) |
+| `min_allowance`, `max_allowance` | Paid allowance bounds (`ojt` listings) |
+| `page`, `per_page` | Pagination; `per_page` defaults to 15 and is capped at 50 |
 
-Only `open`, non-deleted listings of verified companies are returned.
+Filters are combined. Salary and allowance filters apply only to their corresponding listing type. Only published, `open` listings from approved companies with active categories and employer accounts are returned.
 
 ### 8.5 Validation reference
 

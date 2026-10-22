@@ -38,14 +38,31 @@ export async function apiRequest<T>(path: string, init: RequestInit = {}): Promi
     ...init,
     headers,
   })
-  const payload: unknown = response.status === 204 ? null : await response.json()
+  let payload: unknown = null
+
+  if (response.status !== 204) {
+    const contentType = response.headers.get('content-type') ?? ''
+    if (contentType.includes('application/json')) {
+      payload = await response.json()
+    } else {
+      payload = await response.text()
+    }
+  }
 
   if (!response.ok) {
     const body = typeof payload === 'object' && payload !== null
       ? payload as { message?: string; errors?: Record<string, string[]> }
       : {}
 
-    throw new ApiError(body.message ?? `Request failed with status ${response.status}`, response.status, body.errors)
+    const message = typeof payload === 'string' && payload.trim() !== ''
+      ? payload
+      : body.message ?? `Request failed with status ${response.status}`
+
+    throw new ApiError(message, response.status, body.errors)
+  }
+
+  if (typeof payload === 'string') {
+    throw new ApiError('The API returned a non-JSON response.', response.status)
   }
 
   return payload as T

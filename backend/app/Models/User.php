@@ -5,9 +5,10 @@ namespace App\Models;
 // use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasManyThrough;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Foundation\Auth\User as Authenticatable;
-use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Notifications\Notifiable;
 use Laravel\Sanctum\HasApiTokens;
 
@@ -64,6 +65,11 @@ class User extends Authenticatable
     public function companyVerifications(): HasMany
     {
         return $this->hasManyThrough(CompanyVerification::class, Company::class);
+    }
+
+    public function jobListings(): HasManyThrough
+    {
+        return $this->hasManyThrough(JobListing::class, Company::class);
     }
 
     public function hasRole(string $role): bool

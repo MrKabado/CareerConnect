@@ -2,6 +2,7 @@
 
 use App\Http\Middleware\ApplicantCanApply;
 use App\Http\Middleware\EnsureAccountIsActive;
+use App\Http\Middleware\EnsureListingAcceptsApplications;
 use App\Http\Middleware\RoleMiddleware;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
@@ -19,6 +20,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'role' => RoleMiddleware::class,
             'applicant.eligible' => ApplicantCanApply::class,
             'account.active' => EnsureAccountIsActive::class,
+            'listing.accepting-applications' => EnsureListingAcceptsApplications::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {

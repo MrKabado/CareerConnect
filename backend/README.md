@@ -25,6 +25,14 @@ The API uses `Authorization: Bearer <token>` and JSON responses. Sensitive endpo
 - Admin-only `GET /api/admin/identity-verifications`, `GET /api/admin/identity-verifications/{id}/document`, and `POST /api/admin/identity-verifications/{id}/review`
 - Admin-only `GET /api/admin/users`, `PATCH /api/admin/users/{id}/status`, and `POST /api/admin/users/{id}/password-reset`
 
+## Phase 3 job listings
+
+- Public visitors can browse `GET /api/jobs` and `GET /api/jobs/{id}`; supported filters include `keyword`, category, location, listing type, employment type, work setup, salary bounds, and allowance bounds. Results are paginated with `page` and `per_page` (maximum 50).
+- Active employers can manage their listings through `GET /api/employer/jobs`, `GET /api/employer/jobs/{id}`, `POST /api/jobs`, `PUT /api/jobs/{id}`, `PATCH /api/jobs/{id}/status`, and `DELETE /api/jobs/{id}`. Employer deletion archives as `closed`.
+- Drafts may be saved before company approval. Only an active employer with both `company.is_verified = true` and `company_verifications.status = verified` can open or reopen a listing.
+- Admins use `GET /api/admin/jobs`, `GET /api/admin/jobs/{id}`, `POST /api/admin/jobs/{id}/deactivate`, and `POST /api/admin/jobs/{id}/restore`. Deactivation requires a reason and each moderation action is recorded; restoration returns listings to `closed`.
+- Job salary fields are stored on `job_listings`; OJT hours, allowance, slots, courses, and MOA details are stored separately in `ojt_listing_details`.
+
 Identity documents are stored on Laravel's private local disk, never returned in general API responses, and streamed only through an authorized endpoint. Reviewed documents are deleted after `IDENTITY_DOCUMENT_RETENTION_DAYS` (730 by default); rejected documents are replaced on resubmission. The scheduler must run for automatic retention cleanup:
 
 ```sh
@@ -34,6 +42,8 @@ php artisan schedule:work
 The `app:prune-identity-documents` command can also be run directly.
 
 The `applicant.eligible` middleware is the authorization foundation for Phase 2 application submission. Attach it to application-creation routes; it returns `403` unless the account is an active applicant with verified email and approved identity verification. Job browsing routes should remain public.
+
+For future application submission, attach `listing.accepting-applications` alongside `applicant.eligible`; it rejects closed, deactivated, unpublished, or otherwise ineligible listings at submission time. The application workflow itself is not part of Phase 3.
 
 ## Tests
 
