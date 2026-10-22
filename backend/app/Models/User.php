@@ -7,6 +7,7 @@ use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Foundation\Auth\User as Authenticatable;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Notifications\Notifiable;
 use Laravel\Sanctum\HasApiTokens;
 
@@ -53,6 +54,16 @@ class User extends Authenticatable
     public function identityVerification(): HasOne
     {
         return $this->hasOne(IdentityVerification::class);
+    }
+
+    public function company(): HasOne
+    {
+        return $this->hasOne(Company::class);
+    }
+
+    public function companyVerifications(): HasMany
+    {
+        return $this->hasManyThrough(CompanyVerification::class, Company::class);
     }
 
     public function hasRole(string $role): bool
