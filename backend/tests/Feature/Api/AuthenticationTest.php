@@ -172,6 +172,14 @@ it('sends a password-reset code and revokes existing tokens after reset', functi
         'password_confirmation' => 'NewPassword123!',
     ])->assertOk();
 
+    $this->postJson('/api/reset-password', [
+        'email' => $user->email,
+        'code' => $mail->code,
+        'password' => 'AnotherPassword123!',
+        'password_confirmation' => 'AnotherPassword123!',
+    ])->assertUnprocessable()
+        ->assertJsonValidationErrors('code');
+
     expect(Hash::check('NewPassword123!', $user->refresh()->password))->toBeTrue();
     $this->assertDatabaseMissing('otp_codes', [
         'email' => $user->email,

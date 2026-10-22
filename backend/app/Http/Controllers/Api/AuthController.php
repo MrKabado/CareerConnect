@@ -10,6 +10,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\Rules\Password;
 use Illuminate\Validation\ValidationException;
 
 class AuthController extends Controller
@@ -18,14 +19,32 @@ class AuthController extends Controller
 
     public function register(Request $request): JsonResponse
     {
+        return $this->registerForRole($request, null);
+    }
+
+    public function registerApplicant(Request $request): JsonResponse
+    {
+        return $this->registerForRole($request, 'applicant');
+    }
+
+    public function registerEmployer(Request $request): JsonResponse
+    {
+        return $this->registerForRole($request, 'employer');
+    }
+
+    private function registerForRole(Request $request, ?string $forcedRole): JsonResponse
+    {
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:255'],
             'email' => ['required', 'string', 'email', 'max:255', 'unique:users,email'],
-            'password' => ['required', 'string', 'min:8', 'confirmed'],
-            'role' => ['sometimes', Rule::in(['applicant', 'employer'])],
+            'password' => ['required', 'string', 'confirmed', Password::min(12)->letters()->mixedCase()->numbers()->symbols()],
+            'role' => [
+                'sometimes',
+                Rule::in($forcedRole === null ? ['applicant', 'employer'] : [$forcedRole]),
+            ],
         ]);
 
-        $validated['role'] ??= 'applicant';
+        $validated['role'] = $forcedRole ?? ($validated['role'] ?? 'applicant');
 
         try {
             $user = User::create($validated);
@@ -90,7 +109,7 @@ class AuthController extends Controller
     {
         $validated = $request->validate([
             'current_password' => ['required', 'string'],
-            'password' => ['required', 'string', 'min:8', 'confirmed'],
+            'password' => ['required', 'string', 'confirmed', Password::min(12)->letters()->mixedCase()->numbers()->symbols()],
         ]);
 
         $user = $request->user();
