@@ -57,6 +57,11 @@ class User extends Authenticatable
         return $this->hasOne(IdentityVerification::class);
     }
 
+    public function applicantProfile(): HasOne
+    {
+        return $this->hasOne(ApplicantProfile::class);
+    }
+
     public function company(): HasOne
     {
         return $this->hasOne(Company::class);

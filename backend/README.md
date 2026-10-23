@@ -33,6 +33,14 @@ The API uses `Authorization: Bearer <token>` and JSON responses. Sensitive endpo
 - Admins use `GET /api/admin/jobs`, `GET /api/admin/jobs/{id}`, `POST /api/admin/jobs/{id}/deactivate`, and `POST /api/admin/jobs/{id}/restore`. Deactivation requires a reason and each moderation action is recorded; restoration returns listings to `closed`.
 - Job salary fields are stored on `job_listings`; OJT hours, allowance, slots, courses, and MOA details are stored separately in `ojt_listing_details`.
 
+## Phase 4 applicant profiles and onboarding
+
+- Applicants manage personal information and profile photos through `GET|PUT|PATCH /api/applicant/profile` and `POST|DELETE /api/applicant/profile/photo`.
+- Saved onboarding data is available through `GET /api/applicant/onboarding`. Seeker types, interests and skills, work preferences, job preferences, and OJT details are updated through their respective `PUT /api/applicant/onboarding/*` routes.
+- `POST /api/applicant/onboarding/complete` only completes onboarding when required details for the selected seeker types are present. Job preferences remain optional; OJT seekers must provide school, course, year level, and required hours.
+- `PATCH /api/applicant/preferences` supports partial updates across preference sections. `POST /api/applicant/finish-ojt` disables OJT seeking while preserving saved OJT information.
+- Applicant profile, normalized skills, category selections, and OJT details are stored in applicant-owned tables; photos use Laravel's configured `public` disk.
+
 Identity documents are stored on Laravel's private local disk, never returned in general API responses, and streamed only through an authorized endpoint. Reviewed documents are deleted after `IDENTITY_DOCUMENT_RETENTION_DAYS` (730 by default); rejected documents are replaced on resubmission. The scheduler must run for automatic retention cleanup:
 
 ```sh

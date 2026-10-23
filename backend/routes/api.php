@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Api\AdminJobListingController;
 use App\Http\Controllers\Api\AdminUserController;
+use App\Http\Controllers\Api\ApplicantProfileController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\CategoryController;
 use App\Http\Controllers\Api\EmployerJobListingController;
@@ -33,6 +34,20 @@ Route::middleware(['auth:sanctum', 'account.active', 'throttle:60,1'])->group(fu
     Route::put('/change-password', [AuthController::class, 'changePassword']);
 
     Route::middleware('role:applicant')->prefix('applicant')->group(function (): void {
+        Route::get('/profile', [ApplicantProfileController::class, 'show']);
+        Route::put('/profile', [ApplicantProfileController::class, 'updateProfile']);
+        Route::patch('/profile', [ApplicantProfileController::class, 'updateProfile']);
+        Route::post('/profile/photo', [ApplicantProfileController::class, 'uploadPhoto']);
+        Route::delete('/profile/photo', [ApplicantProfileController::class, 'deletePhoto']);
+        Route::get('/onboarding', [ApplicantProfileController::class, 'onboarding']);
+        Route::put('/onboarding/seeker-types', [ApplicantProfileController::class, 'updateSeekerTypes']);
+        Route::put('/onboarding/interests', [ApplicantProfileController::class, 'updateInterests']);
+        Route::put('/onboarding/work-preferences', [ApplicantProfileController::class, 'updateWorkPreferences']);
+        Route::put('/onboarding/job-preferences', [ApplicantProfileController::class, 'updateJobPreferences']);
+        Route::put('/onboarding/ojt-details', [ApplicantProfileController::class, 'updateOjtDetails']);
+        Route::post('/onboarding/complete', [ApplicantProfileController::class, 'completeOnboarding']);
+        Route::patch('/preferences', [ApplicantProfileController::class, 'updatePreferences']);
+        Route::post('/finish-ojt', [ApplicantProfileController::class, 'finishOjt']);
         Route::get('/identity-verification', [IdentityVerificationController::class, 'status']);
         Route::post('/identity-verification', [IdentityVerificationController::class, 'store']);
     });

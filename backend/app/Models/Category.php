@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Category extends Model
@@ -27,5 +28,11 @@ class Category extends Model
     public function jobListings(): HasMany
     {
         return $this->hasMany(JobListing::class);
+    }
+
+    public function applicantProfiles(): BelongsToMany
+    {
+        return $this->belongsToMany(ApplicantProfile::class, 'applicant_profile_category')
+            ->withTimestamps();
     }
 }

@@ -90,7 +90,8 @@ class CategoryController extends Controller
     public function destroy(Category $category): JsonResponse
     {
         if (Company::query()->where('category_id', $category->id)->exists()
-            || $category->jobListings()->exists()) {
+            || $category->jobListings()->exists()
+            || $category->applicantProfiles()->exists()) {
             return response()->json([
                 'message' => 'This category is currently in use and cannot be deleted.',
                 'code' => 'category_in_use',
