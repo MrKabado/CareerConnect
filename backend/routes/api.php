@@ -10,6 +10,7 @@ use App\Http\Controllers\Api\CategoryController;
 use App\Http\Controllers\Api\EmployerJobListingController;
 use App\Http\Controllers\Api\EmployerVerificationController;
 use App\Http\Controllers\Api\IdentityVerificationController;
+use App\Http\Controllers\Api\InterviewController;
 use App\Http\Controllers\Api\OtpController;
 use App\Http\Controllers\Api\PublicJobListingController;
 use Illuminate\Support\Facades\Route;
@@ -44,6 +45,11 @@ Route::middleware(['auth:sanctum', 'account.active', 'throttle:60,1'])->group(fu
         Route::get('/applications/{application}', [ApplicationController::class, 'applicantShow'])->whereNumber('application');
         Route::get('/applications/{application}/resume', [ApplicationController::class, 'applicantResume'])
             ->whereNumber('application');
+        Route::get('/interviews', [InterviewController::class, 'applicantIndex']);
+        Route::get('/interviews/upcoming', [InterviewController::class, 'applicantUpcoming']);
+        Route::get('/interviews/past', [InterviewController::class, 'applicantPast']);
+        Route::get('/interviews/{interview}', [InterviewController::class, 'applicantShow'])
+            ->whereNumber('interview');
         Route::get('/applications/{application}/status-history', [ApplicationController::class, 'applicantStatusHistory'])
             ->whereNumber('application');
         Route::get('/profile', [ApplicantProfileController::class, 'show']);
@@ -77,6 +83,18 @@ Route::middleware(['auth:sanctum', 'account.active', 'throttle:60,1'])->group(fu
         Route::get('/applications/{application}', [ApplicationController::class, 'employerShow'])->whereNumber('application');
         Route::patch('/applications/{application}/status', [ApplicationController::class, 'updateStatus'])
             ->whereNumber('application');
+        Route::post('/applications/{application}/interviews', [InterviewController::class, 'store'])
+            ->whereNumber('application');
+        Route::get('/applications/{application}/interviews', [InterviewController::class, 'applicationIndex'])
+            ->whereNumber('application');
+        Route::get('/interviews/{interview}', [InterviewController::class, 'employerShow'])
+            ->whereNumber('interview');
+        Route::put('/interviews/{interview}', [InterviewController::class, 'reschedule'])
+            ->whereNumber('interview');
+        Route::patch('/interviews/{interview}/status', [InterviewController::class, 'updateStatus'])
+            ->whereNumber('interview');
+        Route::post('/interviews/{interview}/cancel', [InterviewController::class, 'cancel'])
+            ->whereNumber('interview');
         Route::get('/applications/{application}/resume', [ApplicationController::class, 'employerResume'])
             ->whereNumber('application');
     });

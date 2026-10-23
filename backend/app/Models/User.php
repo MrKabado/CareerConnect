@@ -72,6 +72,16 @@ class User extends Authenticatable
         return $this->hasMany(Application::class, 'applicant_id');
     }
 
+    public function interviewsAsApplicant(): HasMany
+    {
+        return $this->hasMany(Interview::class, 'applicant_id');
+    }
+
+    public function interviewsAsEmployer(): HasMany
+    {
+        return $this->hasMany(Interview::class, 'employer_id');
+    }
+
     public function company(): HasOne
     {
         return $this->hasOne(Company::class);

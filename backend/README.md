@@ -49,6 +49,13 @@ The API uses `Authorization: Bearer <token>` and JSON responses. Sensitive endpo
 - Employers review only applications to their own listings through `GET /api/employer/applications`, `GET /api/employer/applications/{application}`, and `PATCH /api/employer/applications/{application}/status`. The associated submitted resume is streamed securely from `GET /api/employer/applications/{application}/resume`.
 - Application statuses are `pending`, `reviewing`, `shortlisted`, `interview`, `hired`, and `rejected`. Transitions are recorded with separate applicant-visible and internal reasons; `hired` and `rejected` are terminal. Unique application constraints prevent duplicate submissions, and historical resume versions remain attached to their submitted applications.
 
+## Phase 6 interview scheduling
+
+- Employers schedule interviews for shortlisted applications through `POST /api/employer/applications/{application}/interviews`; the application moves to `interview` in the same transaction. The single interview record per application uses UTC timestamps and stores the supplied IANA timezone for display.
+- Interview modes are `onsite`, `online`, and `phone`. Onsite interviews require a location; online interviews require a meeting URL or joining instructions. The schedule includes optional end time, applicant-facing notes, and private employer notes.
+- Employers can list and view interviews, reschedule scheduled interviews with `PUT /api/employer/interviews/{interview}`, cancel them with `POST /api/employer/interviews/{interview}/cancel`, and mark past interviews completed with `PATCH /api/employer/interviews/{interview}/status`. Rescheduling and cancellation events preserve schedule history. Cancelled interviews cannot be reopened or rescheduled; a cancellation leaves the application in `interview`.
+- Applicants retrieve their own interviews through `GET /api/applicant/interviews`, with `filter=upcoming|past|cancelled`, or the `/upcoming` and `/past` shortcuts. Applicant responses include only applicant-facing notes and hide internal employer notes.
+
 Identity documents are stored on Laravel's private local disk, never returned in general API responses, and streamed only through an authorized endpoint. Reviewed documents are deleted after `IDENTITY_DOCUMENT_RETENTION_DAYS` (730 by default); rejected documents are replaced on resubmission. The scheduler must run for automatic retention cleanup:
 
 ```sh
