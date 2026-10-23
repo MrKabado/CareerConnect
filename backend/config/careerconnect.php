@@ -2,6 +2,7 @@
 
 return [
     'identity_document_retention_days' => max(30, (int) env('IDENTITY_DOCUMENT_RETENTION_DAYS', 730)),
+    'resume_max_size_kb' => max(1, (int) env('RESUME_MAX_SIZE_KB', 5120)),
     'admin_seed' => [
         'name' => env('ADMIN_SEED_NAME'),
         'email' => env('ADMIN_SEED_EMAIL'),

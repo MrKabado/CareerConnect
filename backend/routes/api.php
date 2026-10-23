@@ -3,6 +3,8 @@
 use App\Http\Controllers\Api\AdminJobListingController;
 use App\Http\Controllers\Api\AdminUserController;
 use App\Http\Controllers\Api\ApplicantProfileController;
+use App\Http\Controllers\Api\ApplicantResumeController;
+use App\Http\Controllers\Api\ApplicationController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\CategoryController;
 use App\Http\Controllers\Api\EmployerJobListingController;
@@ -34,6 +36,16 @@ Route::middleware(['auth:sanctum', 'account.active', 'throttle:60,1'])->group(fu
     Route::put('/change-password', [AuthController::class, 'changePassword']);
 
     Route::middleware('role:applicant')->prefix('applicant')->group(function (): void {
+        Route::get('/resume', [ApplicantResumeController::class, 'show']);
+        Route::post('/resume', [ApplicantResumeController::class, 'store']);
+        Route::delete('/resume', [ApplicantResumeController::class, 'destroy']);
+        Route::get('/resume/download', [ApplicantResumeController::class, 'download']);
+        Route::get('/applications', [ApplicationController::class, 'applicantIndex']);
+        Route::get('/applications/{application}', [ApplicationController::class, 'applicantShow'])->whereNumber('application');
+        Route::get('/applications/{application}/resume', [ApplicationController::class, 'applicantResume'])
+            ->whereNumber('application');
+        Route::get('/applications/{application}/status-history', [ApplicationController::class, 'applicantStatusHistory'])
+            ->whereNumber('application');
         Route::get('/profile', [ApplicantProfileController::class, 'show']);
         Route::put('/profile', [ApplicantProfileController::class, 'updateProfile']);
         Route::patch('/profile', [ApplicantProfileController::class, 'updateProfile']);
@@ -61,6 +73,12 @@ Route::middleware(['auth:sanctum', 'account.active', 'throttle:60,1'])->group(fu
         Route::get('/verification', [EmployerVerificationController::class, 'status']);
         Route::get('/jobs', [EmployerJobListingController::class, 'index']);
         Route::get('/jobs/{jobListing}', [EmployerJobListingController::class, 'show'])->whereNumber('jobListing');
+        Route::get('/applications', [ApplicationController::class, 'employerIndex']);
+        Route::get('/applications/{application}', [ApplicationController::class, 'employerShow'])->whereNumber('application');
+        Route::patch('/applications/{application}/status', [ApplicationController::class, 'updateStatus'])
+            ->whereNumber('application');
+        Route::get('/applications/{application}/resume', [ApplicationController::class, 'employerResume'])
+            ->whereNumber('application');
     });
 
     Route::middleware('role:employer')->group(function (): void {
@@ -69,6 +87,10 @@ Route::middleware(['auth:sanctum', 'account.active', 'throttle:60,1'])->group(fu
         Route::patch('/jobs/{jobListing}/status', [EmployerJobListingController::class, 'updateStatus'])->whereNumber('jobListing');
         Route::delete('/jobs/{jobListing}', [EmployerJobListingController::class, 'destroy'])->whereNumber('jobListing');
     });
+
+    Route::post('/jobs/{jobListing}/applications', [ApplicationController::class, 'store'])
+        ->whereNumber('jobListing')
+        ->middleware(['role:applicant', 'applicant.eligible', 'listing.accepting-applications']);
 
     Route::middleware('role:admin')->prefix('admin')->group(function (): void {
         Route::get('/jobs', [AdminJobListingController::class, 'index']);

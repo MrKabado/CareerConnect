@@ -41,6 +41,14 @@ The API uses `Authorization: Bearer <token>` and JSON responses. Sensitive endpo
 - `PATCH /api/applicant/preferences` supports partial updates across preference sections. `POST /api/applicant/finish-ojt` disables OJT seeking while preserving saved OJT information.
 - Applicant profile, normalized skills, category selections, and OJT details are stored in applicant-owned tables; photos use Laravel's configured `public` disk.
 
+## Phase 5 resumes and applications
+
+- Applicants manage resume metadata and private files through `GET|POST|DELETE /api/applicant/resume`; `GET /api/applicant/resume/download` streams the current resume after authentication. Uploads accept validated PDF and DOCX files up to `RESUME_MAX_SIZE_KB` (5120 by default) and use Laravel's private `local` disk.
+- Apply with `POST /api/jobs/{jobListing}/applications`. Applications require an active applicant with verified email and identity, an open eligible listing, matching seeker preferences, required OJT details for OJT listings, and a current resume. Optional cover letters are text, up to 10,000 characters.
+- Applicant history is available from `GET /api/applicant/applications` and `GET /api/applicant/applications/{application}`. Status history and the resume snapshot for an owned application are available through `GET /api/applicant/applications/{application}/status-history` and `GET /api/applicant/applications/{application}/resume`.
+- Employers review only applications to their own listings through `GET /api/employer/applications`, `GET /api/employer/applications/{application}`, and `PATCH /api/employer/applications/{application}/status`. The associated submitted resume is streamed securely from `GET /api/employer/applications/{application}/resume`.
+- Application statuses are `pending`, `reviewing`, `shortlisted`, `interview`, `hired`, and `rejected`. Transitions are recorded with separate applicant-visible and internal reasons; `hired` and `rejected` are terminal. Unique application constraints prevent duplicate submissions, and historical resume versions remain attached to their submitted applications.
+
 Identity documents are stored on Laravel's private local disk, never returned in general API responses, and streamed only through an authorized endpoint. Reviewed documents are deleted after `IDENTITY_DOCUMENT_RETENTION_DAYS` (730 by default); rejected documents are replaced on resubmission. The scheduler must run for automatic retention cleanup:
 
 ```sh

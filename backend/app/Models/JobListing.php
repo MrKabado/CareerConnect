@@ -56,6 +56,11 @@ class JobListing extends Model
         return $this->hasMany(JobListingAdminAction::class);
     }
 
+    public function applications(): HasMany
+    {
+        return $this->hasMany(Application::class);
+    }
+
     public function scopePubliclyVisible(Builder $query): Builder
     {
         return $query
