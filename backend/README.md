@@ -56,6 +56,43 @@ The API uses `Authorization: Bearer <token>` and JSON responses. Sensitive endpo
 - Employers can list and view interviews, reschedule scheduled interviews with `PUT /api/employer/interviews/{interview}`, cancel them with `POST /api/employer/interviews/{interview}/cancel`, and mark past interviews completed with `PATCH /api/employer/interviews/{interview}/status`. Rescheduling and cancellation events preserve schedule history. Cancelled interviews cannot be reopened or rescheduled; a cancellation leaves the application in `interview`.
 - Applicants retrieve their own interviews through `GET /api/applicant/interviews`, with `filter=upcoming|past|cancelled`, or the `/upcoming` and `/past` shortcuts. Applicant responses include only applicant-facing notes and hide internal employer notes.
 
+## Phase 7 notifications
+
+- Notifications use Laravel's database notification table and are scoped to the authenticated recipient: `GET /api/notifications?per_page=15`, `GET /api/notifications/unread-count`, `PATCH /api/notifications/{notification}/read`, and `PATCH /api/notifications/read-all`.
+- Notification list responses contain `data` items with `id`, `event`, `title`, `message`, `metadata`, `read_at`, and `created_at`, plus pagination links and metadata. Unread count returns `{"count": 2}`; marking all read returns the number updated.
+- Employers are notified after an application is submitted to their listing. Applicants receive notifications for meaningful application status changes and interview scheduling, rescheduling, and cancellation. Notifications are written only after the respective database operation succeeds; unchanged transitions and repeated cancellation/reschedule requests do not create duplicates.
+- Application status notifications include applicant-visible reasons only. Interview notification metadata includes schedule details and joining instructions for the Applicant; internal employer notes are never included.
+
+Example request: `GET /api/notifications?per_page=15`
+
+```json
+{
+  "data": [
+    {
+      "id": "notification-uuid",
+      "event": "interview_scheduled",
+      "title": "Interview scheduled",
+      "message": "An interview has been scheduled for your application.",
+      "metadata": {
+        "application_id": 12,
+        "interview_id": 8,
+        "scheduled_at": "2026-11-02T09:00:00Z",
+        "mode": "online"
+      },
+      "read_at": null,
+      "created_at": "2026-10-23T10:00:00Z"
+    }
+  ],
+  "links": {},
+  "meta": {
+    "current_page": 1,
+    "last_page": 1,
+    "per_page": 15,
+    "total": 1
+  }
+}
+```
+
 Identity documents are stored on Laravel's private local disk, never returned in general API responses, and streamed only through an authorized endpoint. Reviewed documents are deleted after `IDENTITY_DOCUMENT_RETENTION_DAYS` (730 by default); rejected documents are replaced on resubmission. The scheduler must run for automatic retention cleanup:
 
 ```sh

@@ -11,6 +11,7 @@ use App\Http\Controllers\Api\EmployerJobListingController;
 use App\Http\Controllers\Api\EmployerVerificationController;
 use App\Http\Controllers\Api\IdentityVerificationController;
 use App\Http\Controllers\Api\InterviewController;
+use App\Http\Controllers\Api\NotificationController;
 use App\Http\Controllers\Api\OtpController;
 use App\Http\Controllers\Api\PublicJobListingController;
 use Illuminate\Support\Facades\Route;
@@ -35,6 +36,10 @@ Route::middleware(['auth:sanctum', 'account.active', 'throttle:60,1'])->group(fu
     Route::post('/logout', [AuthController::class, 'logout']);
     Route::get('/user', [AuthController::class, 'me']);
     Route::put('/change-password', [AuthController::class, 'changePassword']);
+    Route::get('/notifications', [NotificationController::class, 'index']);
+    Route::get('/notifications/unread-count', [NotificationController::class, 'unreadCount']);
+    Route::patch('/notifications/read-all', [NotificationController::class, 'markAllAsRead']);
+    Route::patch('/notifications/{notification}/read', [NotificationController::class, 'markAsRead']);
 
     Route::middleware('role:applicant')->prefix('applicant')->group(function (): void {
         Route::get('/resume', [ApplicantResumeController::class, 'show']);

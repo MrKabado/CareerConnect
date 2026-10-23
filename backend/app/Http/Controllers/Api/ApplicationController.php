@@ -7,6 +7,7 @@ use App\Models\Application;
 use App\Models\ApplicationStatusHistory;
 use App\Models\JobListing;
 use App\Models\User;
+use App\Services\NotificationService;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Exceptions\HttpResponseException;
 use Illuminate\Http\JsonResponse;
@@ -127,6 +128,22 @@ class ApplicationController extends Controller
             }
 
             throw $exception;
+        }
+
+        $application->loadMissing(['jobListing.company.user']);
+        $employer = $application->jobListing?->company?->user;
+        if ($employer !== null) {
+            app(NotificationService::class)->send(
+                $employer,
+                'application_submitted',
+                'New application received',
+                'A new applicant applied to '.$application->jobListing->title.'.',
+                [
+                    'application_id' => $application->id,
+                    'job_listing_id' => $application->job_listing_id,
+                    'job_listing_title' => $application->jobListing->title,
+                ],
+            );
         }
 
         return response()->json([
@@ -296,6 +313,23 @@ class ApplicationController extends Controller
 
             return [$application, true];
         });
+
+        if ($updated[1]) {
+            $updated[0]->loadMissing(['applicant', 'jobListing']);
+            app(NotificationService::class)->send(
+                $updated[0]->applicant,
+                'application_status_changed',
+                'Application status updated',
+                'Your application for '.$updated[0]->jobListing->title.' is now '.$updated[0]->status.'.',
+                [
+                    'application_id' => $updated[0]->id,
+                    'job_listing_id' => $updated[0]->job_listing_id,
+                    'job_listing_title' => $updated[0]->jobListing->title,
+                    'status' => $updated[0]->status,
+                    'public_reason' => $validated['public_reason'] ?? null,
+                ],
+            );
+        }
 
         return response()->json([
             'message' => $updated[1] ? 'Application status updated.' : 'Application status is unchanged.',

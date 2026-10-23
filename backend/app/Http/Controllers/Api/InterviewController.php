@@ -7,6 +7,7 @@ use App\Models\Application;
 use App\Models\Interview;
 use App\Models\InterviewHistory;
 use App\Models\User;
+use App\Services\NotificationService;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
@@ -73,6 +74,8 @@ class InterviewController extends Controller
             return $interview;
         });
 
+        $this->notifyApplicant($interview, 'interview_scheduled', 'Interview scheduled', 'An interview has been scheduled for your application.');
+
         return response()->json([
             'message' => 'Interview scheduled.',
             'data' => $this->interviewData($interview->load(['application.jobListing', 'applicant', 'employer', 'histories']), false),
@@ -104,7 +107,7 @@ class InterviewController extends Controller
     {
         $validated = $request->validate($this->scheduleRules());
         $this->validateOnlineMeetingDetails($request);
-        $interview = DB::transaction(function () use ($request, $interview, $validated): Interview {
+        [$interview, $changed] = DB::transaction(function () use ($request, $interview, $validated): array {
             $interview = $this->employerInterviews($request->user())
                 ->with('application')
                 ->lockForUpdate()
@@ -117,7 +120,13 @@ class InterviewController extends Controller
             }
 
             $previousSchedule = $this->historySchedule($interview);
-            $interview->fill($this->scheduleAttributes($validated));
+            $attributes = $this->scheduleAttributes($validated);
+            $interview->fill($attributes);
+
+            if (! $interview->isDirty(array_keys($attributes))) {
+                return [$interview, false];
+            }
+
             $interview->save();
             $interview->histories()->create([
                 'event_type' => 'rescheduled',
@@ -127,11 +136,15 @@ class InterviewController extends Controller
                 'created_at' => now(),
             ]);
 
-            return $interview;
+            return [$interview, true];
         });
 
+        if ($changed) {
+            $this->notifyApplicant($interview, 'interview_rescheduled', 'Interview rescheduled', 'Your interview schedule has changed.');
+        }
+
         return response()->json([
-            'message' => 'Interview rescheduled.',
+            'message' => $changed ? 'Interview rescheduled.' : 'Interview schedule is unchanged.',
             'data' => $this->interviewData($interview->load(['application.jobListing', 'applicant', 'employer', 'histories']), false),
         ]);
     }
@@ -141,12 +154,18 @@ class InterviewController extends Controller
         $validated = $request->validate([
             'reason' => ['sometimes', 'nullable', 'string', 'max:1000'],
         ]);
-        $interview = DB::transaction(function () use ($request, $interview, $validated): Interview {
+        [$interview, $changed] = DB::transaction(function () use ($request, $interview, $validated): array {
             $interview = $this->employerInterviews($request->user())
                 ->lockForUpdate()
                 ->findOrFail($interview);
 
             if ($interview->status !== 'scheduled') {
+                if ($interview->status === 'cancelled') {
+                    throw ValidationException::withMessages([
+                        'interview' => ['This interview has already been cancelled.'],
+                    ]);
+                }
+
                 throw ValidationException::withMessages([
                     'interview' => ['Only scheduled interviews can be cancelled.'],
                 ]);
@@ -169,8 +188,12 @@ class InterviewController extends Controller
                 'created_at' => now(),
             ]);
 
-            return $interview;
+            return [$interview, true];
         });
+
+        if ($changed) {
+            $this->notifyApplicant($interview, 'interview_cancelled', 'Interview cancelled', 'Your scheduled interview was cancelled.');
+        }
 
         return response()->json([
             'message' => 'Interview cancelled.',
@@ -432,5 +455,33 @@ class InterviewController extends Controller
         unset($schedule['internal_notes']);
 
         return $schedule;
+    }
+
+    private function notifyApplicant(Interview $interview, string $event, string $title, string $message): void
+    {
+        $interview->loadMissing(['applicant', 'application.jobListing']);
+        $application = $interview->application;
+        $listing = $application?->jobListing;
+
+        app(NotificationService::class)->send(
+            $interview->applicant,
+            $event,
+            $title,
+            $message,
+            [
+                'interview_id' => $interview->id,
+                'application_id' => $interview->application_id,
+                'job_listing_id' => $listing?->id,
+                'job_listing_title' => $listing?->title,
+                'scheduled_at' => $interview->scheduled_at?->toISOString(),
+                'timezone' => $interview->timezone,
+                'mode' => $interview->mode,
+                'status' => $interview->status,
+                'location' => $interview->location,
+                'meeting_url' => $interview->meeting_url,
+                'meeting_instructions' => $interview->meeting_instructions,
+                'cancellation_reason' => $interview->cancellation_reason,
+            ],
+        );
     }
 }
