@@ -10,7 +10,9 @@ import ApplicationsTableSection from "../../../components/ui/applications/Applic
 export default function ApplicationsPage() {
   const [filter, setFilter] = useState<ApplicationFilter>("All applications");
   const [search, setSearch] = useState("");
-  const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [selectedId, setSelectedId] = useState<number | null>(
+    () => applicationStore.getSnapshot()[0]?.id ?? null,
+  );
   const applications = useSyncExternalStore(
     applicationStore.subscribe,
     applicationStore.getSnapshot,
@@ -28,6 +30,28 @@ export default function ApplicationsPage() {
     });
   }, [applications, filter, search]);
 
+  function preserveSelectionIfVisible(nextFilter: ApplicationFilter, nextSearch: string) {
+    setSelectedId((previousId) => {
+      if (previousId === null) return null;
+      const selectedApplication = applications.find(
+        (application) => application.id === previousId,
+      );
+      if (!selectedApplication) return null;
+
+      const query = nextSearch.trim().toLowerCase();
+      const matchesFilter =
+        nextFilter === "All applications" ||
+        selectedApplication.track === nextFilter;
+      const matchesSearch =
+        !query ||
+        `${selectedApplication.title} ${selectedApplication.company}`
+          .toLowerCase()
+          .includes(query);
+
+      return matchesFilter && matchesSearch ? previousId : null;
+    });
+  }
+
   return (
     <div className="flex min-h-screen min-w-[320px] flex-col overflow-x-hidden bg-[#f5f8f8] font-sans text-[#263a3c] antialiased">
       <Header />
@@ -39,9 +63,12 @@ export default function ApplicationsPage() {
           filter={filter}
           onFilterChange={(nextFilter) => {
             setFilter(nextFilter);
-            setSelectedId(null);
+            preserveSelectionIfVisible(nextFilter, search);
           }}
-          onSearchChange={setSearch}
+          onSearchChange={(nextSearch) => {
+            setSearch(nextSearch);
+            preserveSelectionIfVisible(filter, nextSearch);
+          }}
           search={search}
         />
         <ApplicationsTableSection

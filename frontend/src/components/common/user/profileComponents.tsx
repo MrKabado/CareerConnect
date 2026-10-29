@@ -7,7 +7,6 @@ type ProfileIconName =
   | "settings"
   | "skills"
   | "resume"
-  | "edit"
   | "pin";
 
 function ProfileIcon({
@@ -54,11 +53,6 @@ function ProfileIcon({
         <path d="M14 3v5h5m-9 4h5m-5 4h5" />
       </>
     ),
-    edit: (
-      <>
-        <path d="m15 5 4 4M4 20l4-.8L19.2 8a2.1 2.1 0 0 0-3-3L5 16.2 4 20Z" />
-      </>
-    ),
     pin: (
       <>
         <path d="M20 10c0 5-8 12-8 12S4 15 4 10a8 8 0 1 1 16 0Z" />
@@ -88,13 +82,11 @@ function ProfileIcon({
 export function ProfilePanel({
   title,
   icon,
-  onEdit,
   children,
   className = "",
 }: {
   title: string;
   icon: ProfileIconName;
-  onEdit?: () => void;
   children: ReactNode;
   className?: string;
 }) {
@@ -109,16 +101,6 @@ export function ProfilePanel({
           </span>
           {title}
         </h2>
-        {onEdit && (
-          <button
-            className="inline-flex items-center gap-1 rounded text-[10px] font-semibold text-[#078b8d] hover:text-[#066f72] focus-visible:outline-[3px] focus-visible:outline-[#67c9c1] focus-visible:outline-offset-2"
-            onClick={onEdit}
-            type="button"
-          >
-            <ProfileIcon name="edit" size={12} />
-            Edit
-          </button>
-        )}
       </div>
       {children}
     </section>
@@ -164,9 +146,11 @@ export function ProfileTags({ tags }: { tags: string[] }) {
 export function ProfileStrengthCard({
   percentage,
   onComplete,
+  description,
 }: {
   percentage: number;
   onComplete: () => void;
+  description?: string;
 }) {
   return (
     <ProfilePanel title="Profile strength" icon="skills">
@@ -188,8 +172,8 @@ export function ProfileStrengthCard({
         />
       </div>
       <p className="mt-2 text-[9px] leading-4 text-[#829092]">
-        Add a resume and complete your preferences to help employers see more of
-        your skills.
+        {description ??
+          "Add a resume and complete your preferences to help employers see more of your skills."}
       </p>
       <button
         className="mt-2 inline-flex items-center gap-1 rounded text-[9px] font-bold text-[#078b8d] hover:underline focus-visible:outline-[3px] focus-visible:outline-[#67c9c1] focus-visible:outline-offset-2"

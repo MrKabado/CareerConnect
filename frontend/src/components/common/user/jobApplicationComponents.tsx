@@ -2,17 +2,19 @@ import { useRef, type ChangeEvent, type DragEvent } from "react";
 
 export type ApplicationStep = 1 | 2 | 3;
 
-const steps: Array<{ label: string; number: ApplicationStep }> = [
-  { label: "Application", number: 1 },
-  { label: "Review", number: 2 },
-  { label: "Submitted", number: 3 },
-];
-
 export function ApplicationStepIndicator({
   currentStep,
+  track = "Job",
 }: {
   currentStep: ApplicationStep;
+  track?: "Job" | "OJT";
 }) {
+  const steps: Array<{ label: string; number: ApplicationStep }> = [
+    { label: track === "OJT" ? "Documents" : "Application", number: 1 },
+    { label: track === "OJT" ? "OJT review" : "Review", number: 2 },
+    { label: "Submitted", number: 3 },
+  ];
+
   return (
     <ol
       aria-label="Application progress"

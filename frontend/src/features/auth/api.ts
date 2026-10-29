@@ -35,6 +35,13 @@ type UserResponse = {
   user: AuthUser;
 };
 
+type EmailVerificationResponse = {
+  message: string;
+  token_type: "Bearer";
+  token: string;
+  user: AuthUser;
+};
+
 export class ApiError extends Error {
   readonly status: number;
 
@@ -118,6 +125,20 @@ export const authApi = {
 
   me(token: string) {
     return apiRequest<UserResponse>("/user", {}, token);
+  },
+
+  requestEmailVerificationCode(email: string) {
+    return apiRequest<{ message: string }>("/otp/request", {
+      method: "POST",
+      body: JSON.stringify({ email, purpose: "email_verification" }),
+    });
+  },
+
+  verifyEmail(email: string, code: string) {
+    return apiRequest<EmailVerificationResponse>("/otp/verify", {
+      method: "POST",
+      body: JSON.stringify({ email, code }),
+    });
   },
 
   logout(token: string) {

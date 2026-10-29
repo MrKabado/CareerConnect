@@ -238,6 +238,58 @@ export const companyProfiles: Record<string, CompanyProfile> = {
       },
     ],
   },
+  "canva-philippines": {
+    id: "canva-philippines",
+    name: "Canva Philippines",
+    initials: "C",
+    location: "Makati City, Metro Manila",
+    industry: "Technology & Design",
+    teamSize: "1,000+ in PH",
+    rating: "Not provided",
+    verified: false,
+    recommended: false,
+    overview:
+      "Canva is a global visual communication platform. Its Philippines team has more than 1,000 people and includes Design, Customer Happiness, Sales, People, and Operations teams based around its Makati campus.",
+    highlights: [
+      "Canva's official careers page lists a campus in Makati City",
+      "The Philippines team has more than 1,000 members",
+      "Canva has local Design teams in the Philippines",
+    ],
+    applicationProcess: [
+      "Application steps were not provided for this internship.",
+    ],
+    lifeAt: [
+      {
+        icon: "impact",
+        title: "Empower people to design",
+        description: "Contribute to a global visual communication platform.",
+      },
+      {
+        icon: "learn",
+        title: "Work across design teams",
+        description: "Canva's Philippine teams include local designers.",
+      },
+      {
+        icon: "belong",
+        title: "Join the Makati campus",
+        description: "Canva's official careers site lists its Philippine campus in Makati City.",
+      },
+    ],
+    openRoles: [
+      {
+        id: "canva-product-design-intern",
+        title: "Product Design Intern",
+        category: "Product Design",
+        location: "Makati City, Metro Manila",
+        type: "OJT",
+        arrangement: "Not provided",
+        salary: "Not provided",
+        description:
+          "Product Design Intern opportunity with Canva Philippines. Further role-specific details were not provided.",
+        skills: [],
+      },
+    ],
+  },
 };
 
 export function getCompanyProfileSlug(companyName: string) {

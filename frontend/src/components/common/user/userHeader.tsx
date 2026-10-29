@@ -1,4 +1,6 @@
-import { Link, useLocation } from "react-router";
+import { useEffect, useRef, useState } from "react";
+import { Link, useLocation, useNavigate } from "react-router";
+import { useAuth } from "@/features/auth/useAuth";
 import applicationsNavIcon from "@/assets/Icon (7).svg";
 import recommendationsNavIcon from "@/assets/Icon (8).svg";
 import jobSearchNavIcon from "@/assets/Icon (9).svg";
@@ -28,6 +30,49 @@ function HeaderIcon({ name, size = 18 }: { name: HeaderIconName; size?: number }
 
 export default function Header() {
   const { pathname } = useLocation();
+  const navigate = useNavigate();
+  const { logout } = useAuth();
+  const [openDropdown, setOpenDropdown] = useState<
+    "notifications" | "account" | null
+  >(null);
+  const [logoutError, setLogoutError] = useState<string | null>(null);
+  const dropdownAreaRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!openDropdown) return;
+
+    function handlePointerDown(event: MouseEvent) {
+      if (
+        dropdownAreaRef.current &&
+        !dropdownAreaRef.current.contains(event.target as Node)
+      ) {
+        setOpenDropdown(null);
+      }
+    }
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") setOpenDropdown(null);
+    }
+
+    document.addEventListener("mousedown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [openDropdown]);
+
+  async function handleLogout() {
+    setLogoutError(null);
+    setOpenDropdown(null);
+    try {
+      await logout();
+      navigate("/login", { replace: true });
+    } catch {
+      setLogoutError("Unable to log out. Please try again.");
+      setOpenDropdown("account");
+    }
+  }
 
   return (
     <header className="grid h-18 grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center border-b border-[#edf1f1] bg-white px-[max(40px,calc((100vw-1136px)/2))] max-[920px]:h-16.5 max-[920px]:px-6 max-[680px]:h-15 max-[680px]:grid-cols-[1fr_auto] max-[680px]:px-4.25">
@@ -49,15 +94,100 @@ export default function Header() {
           </Link>
         ))}
       </nav>
-      <div className="flex items-center justify-self-end gap-5 max-[680px]:gap-2.5">
-        <button className="relative inline-flex size-9 items-center justify-center text-[#65787a] [-webkit-tap-highlight-color:transparent] focus-visible:outline-[3px] focus-visible:outline-[#67c9c1] focus-visible:outline-offset-[3px]" aria-label="Notifications">
-          <HeaderIcon name="bell" />
-          <span className="absolute top-1.75 right-1.75 size-1.75 rounded-full border-[1.5px] border-white bg-[#ef9c63]" />
-        </button>
-        <button className="inline-flex items-center gap-2 text-[#65787a] [-webkit-tap-highlight-color:transparent] focus-visible:outline-[3px] focus-visible:outline-[#67c9c1] focus-visible:outline-offset-[3px]" aria-label="Open profile menu">
-          <span className="grid size-8 place-items-center rounded-full bg-[#d8ede7] text-[10px] font-bold text-[#36706c]">JM</span>
-          <HeaderIcon name="chevron" size={14} />
-        </button>
+      <div
+        className="flex items-center justify-self-end gap-5 max-[680px]:gap-2.5"
+        ref={dropdownAreaRef}
+      >
+        <div className="relative">
+          <button
+            aria-expanded={openDropdown === "notifications"}
+            aria-haspopup="dialog"
+            className="relative inline-flex size-9 items-center justify-center text-[#65787a] [-webkit-tap-highlight-color:transparent] focus-visible:outline-[3px] focus-visible:outline-[#67c9c1] focus-visible:outline-offset-[3px]"
+            onClick={() =>
+              setOpenDropdown((current) =>
+                current === "notifications" ? null : "notifications",
+              )
+            }
+            type="button"
+          >
+            <span className="sr-only">Notifications</span>
+            <HeaderIcon name="bell" />
+          </button>
+          {openDropdown === "notifications" && (
+            <section
+              aria-label="Notifications"
+              className="absolute top-full right-0 z-50 mt-2 w-80 max-w-[calc(100vw-2rem)] rounded-xl border border-[#e5eeec] bg-white p-4 shadow-[0_12px_30px_rgba(27,54,52,0.16)]"
+              role="dialog"
+            >
+              <div className="flex items-center justify-between gap-3">
+                <h2 className="text-[12px] font-bold text-[#344749]">
+                  Notifications
+                </h2>
+                <button
+                  aria-label="Close notifications"
+                  className="rounded px-1 text-[18px] leading-none text-[#829092] hover:bg-[#f1f6f5] focus-visible:outline-[3px] focus-visible:outline-[#67c9c1]"
+                  onClick={() => setOpenDropdown(null)}
+                  type="button"
+                >
+                  ×
+                </button>
+              </div>
+              <p className="mt-3 text-[10px] font-semibold text-[#526365]">
+                You’re all caught up
+              </p>
+              <p className="mt-1 text-[9px] leading-4 text-[#829092]">
+                Application updates and opportunity alerts will appear here.
+              </p>
+              <Link
+                className="mt-3 inline-flex text-[9px] font-semibold text-[#078b8d] hover:underline focus-visible:outline-[3px] focus-visible:outline-[#67c9c1]"
+                onClick={() => setOpenDropdown(null)}
+                to="/applications"
+              >
+                View applications
+              </Link>
+            </section>
+          )}
+        </div>
+        <div className="relative">
+          <button
+            aria-expanded={openDropdown === "account"}
+            aria-haspopup="menu"
+            aria-label="Open profile menu"
+            className="inline-flex items-center gap-2 text-[#65787a] [-webkit-tap-highlight-color:transparent] focus-visible:outline-[3px] focus-visible:outline-[#67c9c1] focus-visible:outline-offset-[3px]"
+            onClick={() =>
+              setOpenDropdown((current) =>
+                current === "account" ? null : "account",
+              )
+            }
+            type="button"
+          >
+            <span className="grid size-8 place-items-center rounded-full bg-[#d8ede7] text-[10px] font-bold text-[#36706c]">
+              JM
+            </span>
+            <HeaderIcon name="chevron" size={14} />
+          </button>
+          {openDropdown === "account" && (
+            <div
+              aria-label="Account menu"
+              className="absolute top-full right-0 z-50 mt-2 w-44 rounded-xl border border-[#e5eeec] bg-white p-1.5 shadow-[0_12px_30px_rgba(27,54,52,0.16)]"
+              role="menu"
+            >
+              <button
+                className="flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-left text-[10px] font-semibold text-[#a2534c] hover:bg-[#fff5f4] focus-visible:outline-[3px] focus-visible:outline-[#67c9c1] focus-visible:outline-offset-[-2px]"
+                onClick={() => void handleLogout()}
+                role="menuitem"
+                type="button"
+              >
+                Log out
+              </button>
+              {logoutError && (
+                <p className="px-3 py-2 text-[9px] text-[#a2534c]" role="alert">
+                  {logoutError}
+                </p>
+              )}
+            </div>
+          )}
+        </div>
       </div>
     </header>
   );

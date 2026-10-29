@@ -1,32 +1,9 @@
 import { useNavigate } from "react-router";
 import type { ReactNode } from "react";
 import { getCompanyProfileUrl } from "@/features/companies/companyProfiles";
-
-export type OjtOpportunity = {
-  id: string;
-  company: string;
-  initials: string;
-  title: string;
-  trainingFields: string[];
-  location: string;
-  city: string;
-  countryCode: string;
-  hoursCapacity: number;
-  moaAvailable: boolean;
-  eligibleCourses: string[];
-  workSetup: string;
-  employmentType: "Internship";
-  allowance: string;
-  skills: string[];
-  posted: string;
-  description: string;
-};
-
-export type ScoredOjtOpportunity = OjtOpportunity & {
-  matchScore: number;
-  matchReasons: string[];
-  requiredHours: number | null;
-};
+import type { ScoredOjtOpportunity } from "@/features/jobs/ojtMatching";
+import { savedOpportunityStore } from "@/features/jobs/savedOpportunities";
+import { useSyncExternalStore } from "react";
 
 function LockIcon() {
   return (
@@ -161,24 +138,28 @@ function InfoIcon({
 
 export function OjtOpportunityCard({
   opportunity,
-  isTopMatch,
+  showMatchScore = false,
 }: {
   opportunity: ScoredOjtOpportunity;
-  isTopMatch: boolean;
+  showMatchScore?: boolean;
 }) {
   const navigate = useNavigate();
+  const isSaved = useSyncExternalStore(
+    savedOpportunityStore.subscribe,
+    () => savedOpportunityStore.isSaved("ojt", opportunity.id),
+    () => false,
+  );
 
   return (
     <article
       aria-label={`View ${opportunity.company} company profile`}
-      className={`cursor-pointer overflow-hidden rounded-[13px] border bg-white shadow-[0_3px_10px_rgba(39,85,82,0.025)] transition-[border-color,box-shadow] hover:border-[#b9dcda] hover:shadow-[0_7px_18px_rgba(39,85,82,0.07)] focus-visible:outline-[3px] focus-visible:outline-[#67c9c1] focus-visible:outline-offset-2 ${
-        isTopMatch
-          ? "border-[#b9dcda] shadow-[0_5px_16px_rgba(39,85,82,0.07)]"
-          : "border-[#e8eeee]"
-      }`}
+      className="cursor-pointer overflow-hidden rounded-[14px] border border-[#dcebea] bg-white shadow-[0_3px_10px_rgba(39,85,82,0.025)] transition-[border-color,box-shadow] hover:border-[#b9dcda] hover:shadow-[0_7px_18px_rgba(39,85,82,0.07)] focus-visible:outline-[3px] focus-visible:outline-[#67c9c1] focus-visible:outline-offset-2"
       onClick={() => navigate(getCompanyProfileUrl(opportunity.company))}
       onKeyDown={(event) => {
-        if (event.key === "Enter" || event.key === " ") {
+        if (
+          event.target === event.currentTarget &&
+          (event.key === "Enter" || event.key === " ")
+        ) {
           event.preventDefault();
           navigate(getCompanyProfileUrl(opportunity.company));
         }
@@ -186,80 +167,116 @@ export function OjtOpportunityCard({
       role="link"
       tabIndex={0}
     >
-      {isTopMatch && (
-        <div className="flex items-center justify-between border-b border-[#e4f2ef] bg-[#f1faf8] px-3 py-2 text-[9px] font-medium text-[#32817e]">
-          <span>✦ Recommended from your onboarding preferences</span>
-          <span className="rounded-full bg-[#def3ef] px-2 py-1 font-bold text-[#087f78]">
-            {opportunity.matchScore}% match
-          </span>
-        </div>
-      )}
-      <div className="flex items-start gap-3 px-[15px] py-[14px]">
-        <div className="grid size-9 shrink-0 place-items-center rounded-lg bg-[#078b8d] text-[13px] font-bold text-white">
+      <div className="flex items-start gap-3">
+        <div className="ml-[17px] mt-[18px] grid size-[42px] shrink-0 place-items-center rounded-[10px] border border-[#e5efed] bg-[#078b8d] text-[16px] font-bold text-white max-[600px]:ml-3 max-[600px]:mt-3 max-[600px]:size-[34px]">
           {opportunity.initials}
         </div>
-        <div className="min-w-0 flex-1">
-          <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0 flex-1 py-[17px] pr-[17px] max-[600px]:py-3 max-[600px]:pr-3">
+          <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-1.5">
-                <h3 className="text-[12px] font-bold text-[#2b3e3f]">
+                <h3 className="text-[17px] font-bold tracking-[-0.15px] text-[#2b3e3f] max-[600px]:text-[14px]">
                   {opportunity.title}
                 </h3>
                 <span className="rounded bg-[#fff0dc] px-1.5 py-0.5 text-[8px] font-semibold text-[#bd852d]">
                   OJT
                 </span>
               </div>
-              <p className="mt-1 text-[10px] font-medium text-[#647779]">
+              <p className="mt-1 text-[13px] font-medium text-[#647779] max-[600px]:text-[11px]">
                 {opportunity.company}
               </p>
             </div>
-            {!isTopMatch && (
-              <span className="whitespace-nowrap rounded-full bg-[#eff6f5] px-2 py-1 text-[9px] font-semibold text-[#54797a]">
-                {opportunity.matchScore}% match
+            <div className="flex shrink-0 items-start gap-2">
+              {showMatchScore && (
+                <span
+                  aria-label={`${opportunity.matchScore}% match`}
+                  className="whitespace-nowrap rounded-full bg-[#eff6f5] px-2 py-1 text-[9px] font-semibold text-[#54797a]"
+                >
+                  {opportunity.matchScore}% match
+                </span>
+              )}
+              <button
+                aria-label={
+                  isSaved
+                    ? `Remove ${opportunity.title} from saved jobs`
+                    : `Save ${opportunity.title}`
+                }
+                aria-pressed={isSaved}
+                className={`mt-1 rounded p-1 text-[#829294] focus-visible:outline-[3px] focus-visible:outline-[#67c9c1] focus-visible:outline-offset-2 ${isSaved ? "bg-[#eaf6ed] text-[#27834b] [&_svg]:fill-[#bfe7c8]" : ""}`}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  savedOpportunityStore.toggle("ojt", opportunity.id);
+                }}
+                type="button"
+              >
+                <svg
+                  aria-hidden="true"
+                  width="15"
+                  height="15"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.7"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <path d="M6 4h12v17l-6-4-6 4V4Z" />
+                </svg>
+              </button>
+            </div>
+          </div>
+          <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-[7px] text-[12px] text-[#778789] max-[600px]:text-[9px]">
+            {opportunity.location && (
+              <span className="inline-flex items-center gap-1">
+                <InfoIcon icon="pin">{opportunity.location}</InfoIcon>
+              </span>
+            )}
+            {opportunity.workSetup && (
+              <span className="inline-flex items-center gap-1">
+                <InfoIcon icon="briefcase">{opportunity.workSetup}</InfoIcon>
+              </span>
+            )}
+            {opportunity.allowance && (
+              <span className="font-semibold text-[#1b7776] max-[680px]:basis-full">
+                {opportunity.allowance}
               </span>
             )}
           </div>
-          <div className="mt-2 flex flex-wrap items-center gap-x-2.5 gap-y-1.5 text-[9px] text-[#778789]">
-            <InfoIcon icon="pin">{opportunity.location}</InfoIcon>
-            <InfoIcon icon="briefcase">{opportunity.workSetup}</InfoIcon>
-            <span>{opportunity.allowance}</span>
-          </div>
-          <p className="my-2 text-[9px] leading-[1.5] text-[#748385]">
-            {opportunity.description}
-          </p>
-          <div className="flex flex-wrap gap-1.5">
-            <span className="rounded-[4px] bg-[#eff6f5] px-2 py-1 text-[8px] font-medium text-[#54797a]">
+          {opportunity.description && (
+            <p className="my-2 text-[12px] leading-[1.45] text-[#748385] max-[600px]:text-[10px]">
+              {opportunity.description}
+            </p>
+          )}
+          <div className="flex flex-wrap gap-[5px]">
+            <span className="rounded-[4px] bg-[#eff6f5] px-[7px] py-1 text-[11px] font-medium text-[#54797a] max-[600px]:text-[9px]">
               {opportunity.requiredHours
                 ? `${opportunity.requiredHours} hours`
-                : `Up to ${opportunity.hoursCapacity} hours`}
+                : opportunity.hoursCapacity !== null
+                  ? `Up to ${opportunity.hoursCapacity} hours`
+                  : "Hours not specified"}
             </span>
             {opportunity.moaAvailable && (
-              <span className="rounded-[4px] bg-[#fff4df] px-2 py-1 text-[8px] font-semibold text-[#a9792a]">
+              <span className="rounded-[4px] bg-[#fff4df] px-[7px] py-1 text-[11px] font-semibold text-[#a9792a] max-[600px]:text-[9px]">
                 MOA supported
               </span>
             )}
             {opportunity.skills.map((skill) => (
               <span
-                className="rounded-[4px] bg-[#eff6f5] px-2 py-1 text-[8px] font-medium text-[#54797a]"
+                className="rounded-[4px] bg-[#eff6f5] px-[7px] py-1 text-[11px] font-medium text-[#54797a] max-[600px]:text-[9px]"
                 key={skill}
               >
                 {skill}
               </span>
             ))}
-            <span className="ml-auto self-center whitespace-nowrap text-[8px] text-[#9aa6a7]">
+          </div>
+          <div className="mt-[9px] flex items-center justify-between gap-2 border-t border-[#edf1f1] pt-2">
+            <span className="text-[10px] font-semibold text-[#078b8d]">
+              OJT opportunity
+            </span>
+            <span className="whitespace-nowrap text-[9px] text-[#9aa6a7]">
               {opportunity.posted}
             </span>
           </div>
-          {opportunity.matchReasons.length > 0 && (
-            <div className="mt-2 border-t border-[#edf1f1] pt-2">
-              <p className="text-[8px] font-semibold text-[#748789]">
-                Why it matches:{" "}
-                <span className="font-normal text-[#198a84]">
-                  {opportunity.matchReasons.join(" · ")}
-                </span>
-              </p>
-            </div>
-          )}
         </div>
       </div>
     </article>

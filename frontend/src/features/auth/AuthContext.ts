@@ -12,7 +12,8 @@ export type AuthContextValue = {
   token: string | null;
   status: AuthStatus;
   error: string | null;
-  login: (credentials: LoginCredentials, remember: boolean) => Promise<void>;
+  login: (credentials: LoginCredentials, remember: boolean) => Promise<AuthUser>;
+  verifyEmail: (email: string, code: string) => Promise<void>;
   logout: () => Promise<void>;
   refresh: () => Promise<void>;
 };

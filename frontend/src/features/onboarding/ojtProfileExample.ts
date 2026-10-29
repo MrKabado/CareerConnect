@@ -1,0 +1,15 @@
+export const ojtProfileExample = {
+  school: "Polytechnic University of the Philippines",
+  course: "BS Information Technology",
+  yearLevel: "4th Year",
+  requiredOjtHours: "480",
+  skills: ["React", "JavaScript", "Teamwork", "Research", "Communication"],
+  trainingFields: ["Information Technology", "Software Engineering"],
+  workSetup: "Hybrid",
+  preferredLocations: ["Taguig City"],
+  allowancePreference: "Paid only",
+  preferredStartDate: "2026-07-15",
+  educationPeriod: "2020 - 2024",
+  resumeName: "Jamie_Dela_Cruz_Resume.pdf",
+  resumeDetails: "Updated June 12, 2026 | 1.2 MB",
+};

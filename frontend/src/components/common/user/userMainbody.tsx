@@ -5,13 +5,16 @@ import { useNavigate } from "react-router";
 import { applicationStore } from "@/features/applications/applicationData";
 import { onboardingStore } from "@/features/onboarding/store";
 import { getJobMatch, textSimilarity } from "@/features/jobs/jobMatching";
+import {
+  getOjtMatch,
+  type ScoredOjtOpportunity,
+} from "@/features/jobs/ojtMatching";
 import { getCompanyProfileUrl } from "@/features/companies/companyProfiles";
 import { jobListings } from "@/features/jobs/jobListings";
-import ApplicationStatusList from "@/components/common/user/applicationStatusList";
+import { savedOpportunityStore } from "@/features/jobs/savedOpportunities";
 import {
   LockedOjtFilters,
   OjtOpportunityCard,
-  type ScoredOjtOpportunity,
 } from "@/components/common/user/ojtOpportunityComponents";
 import { ojtOpportunities } from "@/components/common/user/ojtOpportunityData";
 
@@ -64,70 +67,6 @@ type MainBodyProps = {
   audience: "job-seeker" | "ojt-seeker";
 };
 
-function getOjtMatch(
-  opportunity: (typeof ojtOpportunities)[number],
-  answers: ReturnType<typeof onboardingStore.getSnapshot>["answers"],
-): ScoredOjtOpportunity | null {
-  const fieldMatch =
-    answers.trainingFields.length === 0 ||
-    answers.trainingFields.some((field) =>
-      opportunity.trainingFields.some(
-        (opportunityField) => textSimilarity(field, opportunityField) > 0,
-      ),
-    );
-  const locationMatch =
-    answers.preferredLocations.length === 0 ||
-    answers.preferredLocations.some(
-      (location) =>
-        textSimilarity(location, opportunity.city) > 0 ||
-        textSimilarity(location, opportunity.location) > 0,
-    );
-
-  if (!fieldMatch || !locationMatch) return null;
-
-  const requiredHours = Number(answers.requiredOjtHours);
-  const hoursFit =
-    !requiredHours || opportunity.hoursCapacity >= requiredHours;
-  const course = answers.course.trim().toLocaleLowerCase();
-  const courseEligible =
-    !course ||
-    opportunity.eligibleCourses.some(
-      (eligibleCourse) =>
-        course.includes(eligibleCourse) || eligibleCourse.includes(course),
-    );
-  const moaFit = !answers.requiresMoa || opportunity.moaAvailable;
-  const reasons = [
-    course && courseEligible ? "Course eligible" : "",
-    answers.requiresMoa && moaFit ? "MOA available" : "",
-    requiredHours && hoursFit ? "Required hours fit" : "",
-    answers.preferredLocations.length > 0 ? "Location matches" : "",
-  ].filter(Boolean);
-
-  const factors = [
-    { weight: 35, score: fieldMatch ? 1 : 0 },
-    { weight: 30, score: locationMatch ? 1 : 0 },
-    ...(requiredHours ? [{ weight: 15, score: hoursFit ? 1 : 0 }] : []),
-    ...(course ? [{ weight: 10, score: courseEligible ? 1 : 0 }] : []),
-    ...(answers.requiresMoa ? [{ weight: 10, score: moaFit ? 1 : 0 }] : []),
-  ];
-  const totalWeight = factors.reduce((total, factor) => total + factor.weight, 0);
-  const score = Math.round(
-    (factors.reduce(
-      (total, factor) => total + factor.weight * factor.score,
-      0,
-    ) /
-      totalWeight) *
-      100,
-  );
-
-  return {
-    ...opportunity,
-    matchScore: score,
-    matchReasons: reasons,
-    requiredHours: requiredHours || null,
-  };
-}
-
 export default function MainBody({
   search,
   onSearchChange,
@@ -135,7 +74,7 @@ export default function MainBody({
 }: MainBodyProps) {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState("For you");
-  const [savedJobs, setSavedJobs] = useState<string[]>([]);
+  const [showSavedOnly, setShowSavedOnly] = useState(false);
   const [employmentTypes, setEmploymentTypes] = useState<string[]>([]);
   const [selectedWorkSetup, setSelectedWorkSetup] = useState("");
   const [selectedCountryCode, setSelectedCountryCode] = useState("");
@@ -156,6 +95,11 @@ export default function MainBody({
     applicationStore.subscribe,
     applicationStore.getSnapshot,
     applicationStore.getSnapshot,
+  );
+  const savedOpportunities = useSyncExternalStore(
+    savedOpportunityStore.subscribe,
+    savedOpportunityStore.getSnapshot,
+    () => [],
   );
   const answers = onboarding.answers;
   const hasJobSeekerPreferences =
@@ -203,6 +147,8 @@ export default function MainBody({
           `${job.title} ${job.company} ${job.skills.join(" ")}`
             .toLowerCase()
             .includes(search.toLowerCase());
+        const matchesSaved =
+          !showSavedOnly || savedOpportunities.includes(`job:${job.id}`);
         const matchesCountry =
           audience === "ojt-seeker"
             ? answers.preferredLocations.length === 0 ||
@@ -230,6 +176,7 @@ export default function MainBody({
           activeTab === "Jobs" || (audience === "job-seeker" && activeTab !== "OJT");
         return (
           matchesSearch &&
+          matchesSaved &&
           matchesCountry &&
           matchesCity &&
           matchesCategory &&
@@ -253,6 +200,8 @@ export default function MainBody({
     selectedCategories,
     selectedCity,
     selectedCountryCode,
+    savedOpportunities,
+    showSavedOnly,
   ]);
 
   const bestMatch = visibleJobs.reduce<(typeof visibleJobs)[number] | null>(
@@ -264,15 +213,46 @@ export default function MainBody({
         : best,
     null,
   );
+  const showOjtOpportunities =
+    (audience === "ojt-seeker" && activeTab !== "Jobs") ||
+    (audience === "job-seeker" && activeTab === "OJT");
   const visibleOjtOpportunities = useMemo(() => {
-    if (!hasOjtPreferences || activeTab === "Jobs") return [];
+    if (
+      activeTab === "Jobs" ||
+      (audience === "ojt-seeker" && !hasOjtPreferences) ||
+      (audience === "job-seeker" && activeTab !== "OJT")
+    ) {
+      return [];
+    }
+
+    const ojtAnswers =
+      audience === "job-seeker"
+        ? {
+            ...answers,
+            course: answers.course || "BS Information Technology",
+            requiredOjtHours: answers.requiredOjtHours || "480",
+            trainingFields:
+              answers.trainingFields.length > 0
+                ? answers.trainingFields
+                : [
+                    "Information Technology",
+                    "Software Engineering",
+                    "Design & Creative",
+                  ],
+            preferredLocations:
+              answers.preferredLocations.length > 0
+                ? answers.preferredLocations
+                : ["Taguig City"],
+          }
+        : answers;
 
     const query = search.trim().toLocaleLowerCase();
     return ojtOpportunities
-      .map((opportunity) => getOjtMatch(opportunity, answers))
+      .map((opportunity) => getOjtMatch(opportunity, ojtAnswers))
       .filter(
         (opportunity): opportunity is ScoredOjtOpportunity =>
           opportunity !== null &&
+          (!showSavedOnly || savedOpportunities.includes(`ojt:${opportunity.id}`)) &&
           (!selectedWorkSetup ||
             opportunity.workSetup.toLowerCase() ===
               selectedWorkSetup.toLowerCase()) &&
@@ -287,15 +267,14 @@ export default function MainBody({
   }, [
     activeTab,
     answers,
+    audience,
     employmentTypes,
     hasOjtPreferences,
     search,
+    savedOpportunities,
+    showSavedOnly,
     selectedWorkSetup,
   ]);
-
-  function toggleSaved(id: string) {
-    setSavedJobs((saved) => saved.includes(id) ? saved.filter((jobId) => jobId !== id) : [...saved, id]);
-  }
 
   function toggleEmploymentType(type: string) {
     setEmploymentTypes((selected) => selected.includes(type)
@@ -601,15 +580,15 @@ export default function MainBody({
         <div className="flex min-h-[54px] items-center justify-between gap-4">
           <div>
             <h2 className="text-[22px] font-bold tracking-[-0.35px] text-[#293d3e] max-[680px]:text-[17px]">
-              {audience === "ojt-seeker"
-                ? activeTab === "Jobs"
-                  ? "Job opportunities"
+              {showOjtOpportunities
+                ? audience === "job-seeker" || activeTab === "OJT"
+                  ? "OJT opportunities"
                   : "Opportunities for you"
                 : "Job opportunities"}
             </h2>
             <p className="mt-[5px] text-[11px] text-[#8a999a] max-[680px]:text-[10px]">
-                {audience === "ojt-seeker" && activeTab !== "Jobs"
-                  ? `${visibleOjtOpportunities.length} roles ranked using your onboarding profile`
+                {showOjtOpportunities
+                  ? `${visibleOjtOpportunities.length} OJT roles matched to your profile`
                   : `${visibleJobs.length} roles available`}
             </p>
             {audience === "job-seeker" && !hasJobSeekerPreferences && (
@@ -639,19 +618,31 @@ export default function MainBody({
               <button key={tab} className={`min-w-[52px] rounded-[7px] px-[13px] py-2 text-[11px] font-semibold focus-visible:outline-[3px] focus-visible:outline-[#67c9c1] focus-visible:outline-offset-[3px] ${activeTab === tab ? "bg-[#0b8b8e] text-white shadow-[0_2px_5px_rgba(7,91,94,0.17)]" : "text-[#6b7e80]"}`} role="tab" aria-selected={activeTab === tab} onClick={() => setActiveTab(tab)}>{tab}</button>
             ))}
           </div>
+          <button
+            aria-pressed={showSavedOnly}
+            className={`inline-flex items-center gap-1.5 rounded-[8px] border px-3 py-2 text-[10px] font-semibold focus-visible:outline-[3px] focus-visible:outline-[#67c9c1] focus-visible:outline-offset-2 ${
+              showSavedOnly
+                ? "border-[#9ed2aa] bg-[#eaf6ed] text-[#237a42]"
+                : "border-[#e2eaea] bg-white text-[#66787a] hover:border-[#b9ddda] hover:text-[#078789]"
+            }`}
+            onClick={() => setShowSavedOnly((savedOnly) => !savedOnly)}
+            type="button"
+          >
+            <Icon name="bookmark" size={14} />
+            Saved ({savedOpportunities.length})
+          </button>
           <span className="hidden text-[11px] text-[#718184] max-[680px]:inline">
-            {audience === "ojt-seeker" && activeTab !== "Jobs"
+            {showOjtOpportunities
               ? visibleOjtOpportunities.length
               : visibleJobs.length}{" "}
             results
           </span>
         </div>
 
-        {audience === "ojt-seeker" && activeTab !== "Jobs" ? (
+        {showOjtOpportunities ? (
           <div className="flex flex-col gap-[10px]">
-            {visibleOjtOpportunities.map((opportunity, index) => (
+            {visibleOjtOpportunities.map((opportunity) => (
               <OjtOpportunityCard
-                isTopMatch={index === 0}
                 key={opportunity.id}
                 opportunity={opportunity}
               />
@@ -659,14 +650,14 @@ export default function MainBody({
             {visibleOjtOpportunities.length === 0 && (
               <div className="rounded-[13px] border border-dashed border-[#cadbda] bg-white px-5 py-[50px] text-center">
                 <h3 className="text-[15px] font-semibold text-[#203638]">
-                  {hasOjtPreferences
-                    ? "No matching OJT opportunities"
-                    : "Your OJT recommendations are not ready yet"}
+                  {audience === "ojt-seeker" && !hasOjtPreferences
+                    ? "Your OJT recommendations are not ready yet"
+                    : "No matching OJT opportunities"}
                 </h3>
                 <p className="mt-1 text-xs text-[#718184]">
-                  {hasOjtPreferences
-                    ? "Try a different search, or update your OJT preferences to explore other matches."
-                    : "Complete your OJT profile to see opportunities matched to your training field and preferred location."}
+                  {audience === "ojt-seeker" && !hasOjtPreferences
+                    ? "Complete OJT onboarding to see opportunities matched to your training field and preferred location."
+                    : "Try a different search, or update your OJT preferences to explore other matches."}
                 </p>
               </div>
             )}
@@ -713,7 +704,7 @@ export default function MainBody({
                           {job.matchScore}% match
                         </span>
                       )}
-                      <button className={`inline-flex size-[22px] flex-none items-center justify-center rounded border border-transparent text-[#859596] hover:border-[#b9ddda] hover:bg-[#eff9f7] hover:text-[#078789] focus-visible:outline-[3px] focus-visible:outline-[#67c9c1] focus-visible:outline-offset-[3px] ${savedJobs.includes(job.id) ? "border-[#b9ddda] bg-[#eff9f7] text-[#078789] [&_svg]:fill-[#bfe8e2]" : ""}`} aria-label={savedJobs.includes(job.id) ? `Remove ${job.title} from saved jobs` : `Save ${job.title}`} onClick={(event) => { event.stopPropagation(); toggleSaved(job.id); }}>
+                      <button className={`inline-flex size-[22px] flex-none items-center justify-center rounded border border-transparent text-[#859596] hover:border-[#b9ddda] hover:bg-[#eff9f7] hover:text-[#078789] focus-visible:outline-[3px] focus-visible:outline-[#67c9c1] focus-visible:outline-offset-[3px] ${savedOpportunityStore.isSaved("job", job.id) ? "border-[#9ed2aa] bg-[#eaf6ed] text-[#27834b] [&_svg]:fill-[#bfe7c8]" : ""}`} aria-label={savedOpportunityStore.isSaved("job", job.id) ? `Remove ${job.title} from saved jobs` : `Save ${job.title}`} aria-pressed={savedOpportunityStore.isSaved("job", job.id)} onClick={(event) => { event.stopPropagation(); savedOpportunityStore.toggle("job", job.id); }}>
                         <Icon name="bookmark" size={19} />
                       </button>
                     </div>
@@ -753,7 +744,6 @@ export default function MainBody({
           ) : null}
         </div>
         )}
-        <ApplicationStatusList />
       </div>
     </section>
   );

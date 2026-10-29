@@ -67,6 +67,8 @@ export default function JobApplicationPage() {
           track: "OJT" as const,
         }
       : undefined;
+  const returnPath = opportunity?.track === "OJT" ? "/ojt-search" : "/job-search";
+  const ojtAnswers = onboardingStore.getSnapshot().answers;
   const existingApplication = jobId
     ? applicationStore
         .getSnapshot()
@@ -98,9 +100,9 @@ export default function JobApplicationPage() {
           </p>
           <Link
             className="mt-5 rounded-lg bg-[#078b98] px-4 py-2.5 text-[11px] font-semibold text-white"
-            to="/job-search"
+            to={returnPath}
           >
-            Back to job search
+            Back to opportunity search
           </Link>
         </div>
       </ApplicationLayout>
@@ -182,7 +184,8 @@ export default function JobApplicationPage() {
           className="inline-flex items-center gap-1.5 text-[10px] font-semibold text-[#16878b] hover:text-[#086f73] focus-visible:outline-[3px] focus-visible:outline-[#67c9c1] focus-visible:outline-offset-2"
           to="/job-search"
         >
-          <span aria-hidden="true">←</span> Back to job
+          <span aria-hidden="true">←</span>
+          {selectedOpportunity.track === "OJT" ? " Back to OJT search" : " Back to job"}
         </Link>
 
         <header className="mt-5 text-center">
@@ -190,11 +193,11 @@ export default function JobApplicationPage() {
             Apply to {selectedOpportunity.company}
           </h1>
           <p className="mt-1 text-[11px] text-[#829091]">
-            {selectedOpportunity.location} · {selectedOpportunity.category} · {selectedOpportunity.arrangement}
+            {selectedOpportunity.location || "Location not specified"} · {selectedOpportunity.category || "OJT"} · {selectedOpportunity.arrangement || "Work setup not specified"}
           </p>
         </header>
 
-        <ApplicationStepIndicator currentStep={step} />
+        <ApplicationStepIndicator currentStep={step} track={selectedOpportunity.track} />
 
         <section
           aria-live="polite"
@@ -203,10 +206,14 @@ export default function JobApplicationPage() {
           {step === 1 && (
             <>
               <h2 className="text-[15px] font-bold text-[#2c3e40]">
-                Your application
+                {selectedOpportunity.track === "OJT"
+                  ? "Your OJT application"
+                  : "Your application"}
               </h2>
               <p className="mt-1 text-[10px] text-[#839192]">
-                Add the documents you’d like to share with the hiring team.
+                {selectedOpportunity.track === "OJT"
+                  ? "Attach your resume and optional application letter. Your school and training details will be included for review."
+                  : "Add the documents you’d like to share with the hiring team."}
               </p>
 
               <div className="mt-4 space-y-4">
@@ -241,10 +248,14 @@ export default function JobApplicationPage() {
           {step === 2 && (
             <>
               <h2 className="text-[15px] font-bold text-[#2c3e40]">
-                Review your application
+                {selectedOpportunity.track === "OJT"
+                  ? "Review your OJT application"
+                  : "Review your application"}
               </h2>
               <p className="mt-1 text-[10px] text-[#839192]">
-                Make sure everything looks right before submitting.
+                {selectedOpportunity.track === "OJT"
+                  ? "Check your school requirements and documents before submitting."
+                  : "Make sure everything looks right before submitting."}
               </p>
 
               <div className="mt-4 space-y-3">
@@ -252,6 +263,40 @@ export default function JobApplicationPage() {
                   label="Position"
                   value={`${selectedOpportunity.title} at ${selectedOpportunity.company}`}
                 />
+                {selectedOpportunity.track === "OJT" && (
+                  <>
+                    <ApplicationReviewRow
+                      label="School"
+                      value={ojtAnswers.school || "Not provided"}
+                    />
+                    <ApplicationReviewRow
+                      label="Course"
+                      value={ojtAnswers.course || "Not provided"}
+                    />
+                    <ApplicationReviewRow
+                      label="Year level"
+                      value={ojtAnswers.yearLevel || "Not provided"}
+                    />
+                    <ApplicationReviewRow
+                      label="Required OJT hours"
+                      value={ojtAnswers.requiredOjtHours
+                        ? `${ojtAnswers.requiredOjtHours} hours`
+                        : "Not provided"}
+                    />
+                    <ApplicationReviewRow
+                      label="School MOA requirement"
+                      value={ojtAnswers.requiresMoa ? "Required" : "Not required"}
+                    />
+                    <ApplicationReviewRow
+                      label="Preferred start date"
+                      value={ojtAnswers.preferredStartDate || "Not provided"}
+                    />
+                    <ApplicationReviewRow
+                      label="Allowance preference"
+                      value={ojtAnswers.allowancePreference || "Not provided"}
+                    />
+                  </>
+                )}
                 <ApplicationReviewRow
                   label="Resume"
                   value={resume?.name ?? "Not included"}
@@ -290,11 +335,14 @@ export default function JobApplicationPage() {
               <h2 className="mt-4 text-[18px] font-bold tracking-[-0.3px] text-[#293d3e]">
                 {isAlreadySubmitted
                   ? "Application already submitted"
-                  : "Application submitted"}
+                  : selectedOpportunity.track === "OJT"
+                    ? "OJT application submitted"
+                    : "Application submitted"}
               </h2>
               <p className="mt-2 max-w-[390px] text-[11px] leading-5 text-[#7e8d8e]">
-                Your application for {selectedOpportunity.title} has been sent to {selectedOpportunity.company}.
-                You can track its progress in My Applications.
+                {selectedOpportunity.track === "OJT"
+                  ? `Your OJT application for ${selectedOpportunity.title} has been added to My Applications, where you can track its status.`
+                  : `Your application for ${selectedOpportunity.title} has been sent to ${selectedOpportunity.company}. You can track its progress in My Applications.`}
               </p>
               {submitError && (
                 <p className="mt-3 text-[10px] text-[#b34840]">{submitError}</p>

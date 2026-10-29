@@ -1,6 +1,10 @@
 import { useState, type FormEvent } from "react";
 import { useNavigate } from "react-router";
 import { useAuth } from "@/features/auth/useAuth";
+import {
+  employerRegistrationApi,
+  getEmployerStatusPath,
+} from "@/features/employer-registration/api";
 import LoginPageView from "@/components/ui/LoginPageView";
 
 export default function LoginPage() {
@@ -16,14 +20,23 @@ export default function LoginPage() {
     setIsSubmitting(true);
 
     try {
-      await login(
+      const authenticatedUser = await login(
         {
           email: String(formData.get("email") ?? ""),
           password: String(formData.get("password") ?? ""),
         },
         formData.has("remember"),
       );
-      navigate("/onboarding", { replace: true });
+      if (authenticatedUser.role === "employer") {
+        navigate(
+          getEmployerStatusPath(
+            employerRegistrationApi.getSnapshot()?.status,
+          ),
+          { replace: true },
+        );
+      } else {
+        navigate("/onboarding", { replace: true });
+      }
     } catch (error) {
       setLoginError(
         error instanceof Error ? error.message : "Unable to log in.",

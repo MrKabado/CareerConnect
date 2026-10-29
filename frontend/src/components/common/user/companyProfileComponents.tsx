@@ -178,9 +178,11 @@ export function CompanyOpenRoles({ profile }: { profile: CompanyProfile }) {
                   >
                     {role.type}
                   </span>
-                  <span className="rounded-full bg-[#eff6f5] px-1.5 py-0.5 text-[8px] font-semibold text-[#54797a]">
-                    {role.type === "OJT" ? "93%" : "96%"} match
-                  </span>
+                  {role.type !== "OJT" && (
+                    <span className="rounded-full bg-[#eff6f5] px-1.5 py-0.5 text-[8px] font-semibold text-[#54797a]">
+                      96% match
+                    </span>
+                  )}
                 </div>
                 <p className="mt-1 text-[9px] font-medium text-[#718184]">
                   {role.category}

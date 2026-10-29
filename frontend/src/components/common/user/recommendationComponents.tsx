@@ -2,6 +2,7 @@ import { useState, useSyncExternalStore } from "react";
 import type { ReactNode } from "react";
 import { Link, useNavigate } from "react-router";
 import { applicationStore } from "@/features/applications/applicationData";
+import { savedOpportunityStore } from "@/features/jobs/savedOpportunities";
 import { getCompanyProfileUrl } from "@/features/companies/companyProfiles";
 import type { JobListing } from "@/features/jobs/jobListings";
 
@@ -111,8 +112,12 @@ export function RecommendedJobCard({
   isBestMatch: boolean;
 }) {
   const navigate = useNavigate();
-  const [isSaved, setIsSaved] = useState(false);
   const [showMatchReasons, setShowMatchReasons] = useState(false);
+  const isSaved = useSyncExternalStore(
+    savedOpportunityStore.subscribe,
+    () => savedOpportunityStore.isSaved("job", job.id),
+    () => false,
+  );
   const matchScore = job.matchScore ?? 0;
   const hasApplied = useSyncExternalStore(
     applicationStore.subscribe,
@@ -175,11 +180,13 @@ export function RecommendedJobCard({
                 aria-label={isSaved ? "Remove saved job" : "Save job"}
                 aria-pressed={isSaved}
                 className={`mt-1 rounded p-1 focus-visible:outline-[3px] focus-visible:outline-[#67c9c1] focus-visible:outline-offset-2 ${
-                  isSaved ? "text-[#078b8d]" : "text-[#829294]"
+                  isSaved
+                    ? "bg-[#eaf6ed] text-[#27834b] [&_svg]:fill-[#bfe7c8]"
+                    : "text-[#829294]"
                 }`}
                 onClick={(event) => {
                   event.stopPropagation();
-                  setIsSaved((saved) => !saved);
+                  savedOpportunityStore.toggle("job", job.id);
                 }}
                 type="button"
               >

@@ -1,4 +1,4 @@
-import type { OjtOpportunity } from "@/components/common/user/ojtOpportunityComponents";
+import type { OjtOpportunity } from "@/features/jobs/ojtMatching";
 
 export const ojtOpportunities: OjtOpportunity[] = [
   {
@@ -22,7 +22,7 @@ export const ojtOpportunities: OjtOpportunity[] = [
     employmentType: "Internship",
     allowance: "Paid internship",
     skills: ["React / UI/UX"],
-    posted: "Today",
+    posted: "Date not specified",
     description:
       "Join a mentor-led engineering squad and complete your required hours while contributing to real fintech products.",
   },
@@ -50,5 +50,25 @@ export const ojtOpportunities: OjtOpportunity[] = [
     posted: "1 week ago",
     description:
       "Support a people-first employee experience while learning the foundations of modern HR operations.",
+  },
+  {
+    id: "canva-product-design-intern",
+    company: "Canva Philippines",
+    initials: "C",
+    title: "Product Design Intern",
+    trainingFields: ["Design & Creative"],
+    location: "Makati City, Metro Manila",
+    city: "Makati City",
+    countryCode: "PH",
+    hoursCapacity: null,
+    moaAvailable: null,
+    eligibleCourses: [],
+    workSetup: "",
+    employmentType: "Internship",
+    allowance: "",
+    skills: [],
+    posted: "Date not specified",
+    description:
+      "Join Canva Philippines' design team. The local team is based at Canva's Makati City campus.",
   },
 ];

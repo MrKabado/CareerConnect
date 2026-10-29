@@ -123,9 +123,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUser(response.user);
       setError(null);
       setStatus("authenticated");
+      return response.user;
     },
     [],
   );
+
+  const verifyEmail = useCallback(async (email: string, code: string) => {
+    const response = await authApi.verifyEmail(email, code);
+    clearStoredToken();
+    sessionStorage.setItem(TOKEN_STORAGE_KEY, response.token);
+    setToken(response.token);
+    setUser(response.user);
+    setError(null);
+    setStatus("authenticated");
+  }, []);
 
   const logout = useCallback(async () => {
     if (token) {
@@ -140,8 +151,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [token]);
 
   const value = useMemo(
-    () => ({ user, token, status, error, login, logout, refresh }),
-    [user, token, status, error, login, logout, refresh],
+    () => ({ user, token, status, error, login, verifyEmail, logout, refresh }),
+    [user, token, status, error, login, verifyEmail, logout, refresh],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
