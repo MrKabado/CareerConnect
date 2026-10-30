@@ -21,6 +21,10 @@ import RequireEmployerStatus from "@/features/employer-registration/RequireEmplo
 import EmployerRoutePlaceholder from "@/features/employer-registration/components/EmployerRoutePlaceholder";
 import EmployerRegisterPage from "@/pages/employer/register";
 import EmployerVerifyEmailPage from "@/pages/employer/verify-email";
+import EmployerOverviewPage from "@/pages/employer/overview";
+import EmployerJobListingPage from "@/pages/employer/jobListing";
+import EmployerApplicantsPage from "@/pages/employer/applicants";
+import EmployerCompanyProfilePage from "@/pages/employer/company-profile";
 
 createRoot(document.getElementById("root")!).render(
   <BrowserRouter>
@@ -81,10 +85,7 @@ createRoot(document.getElementById("root")!).render(
           path="/employer/overview"
           element={
             <RequireEmployerStatus access="dashboard">
-              <EmployerRoutePlaceholder
-                title="Employer overview"
-                description="Your hiring activity and company overview will appear here."
-              />
+              <EmployerOverviewPage />
             </RequireEmployerStatus>
           }
         />
@@ -92,10 +93,7 @@ createRoot(document.getElementById("root")!).render(
           path="/employer/listings"
           element={
             <RequireEmployerStatus access="dashboard">
-              <EmployerRoutePlaceholder
-                title="Job listings"
-                description="Manage your company's job and OJT listings."
-              />
+              <EmployerJobListingPage />
             </RequireEmployerStatus>
           }
         />
@@ -103,10 +101,15 @@ createRoot(document.getElementById("root")!).render(
           path="/employer/applicants"
           element={
             <RequireEmployerStatus access="dashboard">
-              <EmployerRoutePlaceholder
-                title="Applicants"
-                description="Review applicants for your open opportunities."
-              />
+              <EmployerApplicantsPage />
+            </RequireEmployerStatus>
+          }
+        />
+        <Route
+          path="/employer/company-profile"
+          element={
+            <RequireEmployerStatus access="dashboard">
+              <EmployerCompanyProfilePage />
             </RequireEmployerStatus>
           }
         />
