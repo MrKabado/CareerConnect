@@ -1,0 +1,21 @@
+@import 'tailwindcss';
+
+@theme {
+  --color-brand-50: #eef8f7;
+  --color-brand-600: #078b8d;
+  --color-brand-700: #06787a;
+  --color-ink: #263638;
+  --color-muted: #718181;
+  --color-line: #dfe8e7;
+  --color-canvas: #f5f8f8;
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+}
