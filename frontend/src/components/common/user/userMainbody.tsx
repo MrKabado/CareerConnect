@@ -344,7 +344,7 @@ export default function MainBody({
   }
 
   return (
-    <section className="mx-auto grid max-w-[1216px] grid-cols-[296px_minmax(0,1fr)] items-start gap-7 py-12 pb-[68px] max-[1300px]:mx-10 max-[920px]:mx-6 max-[920px]:grid-cols-[210px_minmax(0,1fr)] max-[920px]:gap-[18px] max-[680px]:mx-0 max-[680px]:block max-[680px]:px-4 max-[680px]:pt-[23px] max-[680px]:pb-[42px]" id="jobs">
+    <section className="mx-auto grid max-w-[1136px] grid-cols-[296px_minmax(0,1fr)] items-start gap-7 py-12 pb-[68px] max-[1300px]:mx-[max(40px,calc((100vw-1136px)/2))] max-[920px]:mx-6 max-[920px]:grid-cols-[210px_minmax(0,1fr)] max-[920px]:gap-[18px] max-[680px]:mx-0 max-[680px]:block max-[680px]:px-4 max-[680px]:pt-[23px] max-[680px]:pb-[42px]" id="jobs">
       <aside className="rounded-[14px] border border-[#e9eeee] bg-white px-[18px] pt-5 pb-[18px] shadow-[0_3px_12px_rgba(47,77,76,0.025)] max-[920px]:px-[14px] max-[680px]:hidden">
         <div className="mb-6 flex items-center justify-between">
           <h2 className="text-[17px] font-bold tracking-[-0.35px] text-[#293d3e]">Filters</h2>

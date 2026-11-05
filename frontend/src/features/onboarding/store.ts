@@ -27,6 +27,7 @@ export type OnboardingAnswers = {
   workSetup: string;
   preferredLocations: string[];
   resumeFile: File | null;
+  coverLetterFile: File | null;
   resumeSkipped: boolean;
 };
 
@@ -68,6 +69,7 @@ const initialState: OnboardingState = {
     workSetup: "",
     preferredLocations: [],
     resumeFile: null,
+    coverLetterFile: null,
     resumeSkipped: false,
   },
   currentStep: "goal",

@@ -23,8 +23,14 @@ import EmployerRegisterPage from "@/pages/employer/register";
 import EmployerVerifyEmailPage from "@/pages/employer/verify-email";
 import EmployerOverviewPage from "@/pages/employer/overview";
 import EmployerJobListingPage from "@/pages/employer/jobListing";
-import EmployerApplicantsPage from "@/pages/employer/applicants";
+import EmployerJobListingReviewPage from "@/pages/employer/jobListing/review";
+import EmployerHiringSetupPage from "@/pages/employer/hiring-setup";
+import EmployerApplicantsPage from "@/pages/employer/applicants/pipeline";
+import EmployerApplicantDetailPage from "@/pages/employer/applicants/detail";
 import EmployerCompanyProfilePage from "@/pages/employer/company-profile";
+import EmployerVerificationPage from "@/pages/employer/verification";
+import ApplicantMessagesPage from "@/pages/user/messages";
+import EmployerMessagesPage from "@/pages/employer/messages";
 
 createRoot(document.getElementById("root")!).render(
   <BrowserRouter>
@@ -37,6 +43,8 @@ createRoot(document.getElementById("root")!).render(
         <Route path="/ojt-search" element={<OjtSearchPage />} />
         <Route path="/recommendations" element={<RecommendationsPage />} />
         <Route path="/applications" element={<ApplicationsPage />} />
+        <Route path="/messages" element={<ApplicantMessagesPage />} />
+        <Route path="/messages/:conversationId" element={<ApplicantMessagesPage />} />
         <Route path="/profile" element={<ProfilePage />} />
         <Route path="/company/:companyName" element={<CompanyProfilePage />} />
         <Route path="/apply/:jobId" element={<JobApplicationPage />} />
@@ -63,10 +71,7 @@ createRoot(document.getElementById("root")!).render(
           path="/employer/verification"
           element={
             <RequireEmployerStatus access="verification">
-              <EmployerRoutePlaceholder
-                title="Company verification"
-                description="Upload company documents to continue employer verification."
-              />
+              <EmployerVerificationPage />
             </RequireEmployerStatus>
           }
         />
@@ -98,10 +103,50 @@ createRoot(document.getElementById("root")!).render(
           }
         />
         <Route
+          path="/employer/listings/review"
+          element={
+            <RequireEmployerStatus access="dashboard">
+              <EmployerJobListingReviewPage />
+            </RequireEmployerStatus>
+          }
+        />
+        <Route
+          path="/employer/hiring-setup"
+          element={
+            <RequireEmployerStatus access="dashboard">
+              <EmployerHiringSetupPage />
+            </RequireEmployerStatus>
+          }
+        />
+        <Route
           path="/employer/applicants"
           element={
             <RequireEmployerStatus access="dashboard">
               <EmployerApplicantsPage />
+            </RequireEmployerStatus>
+          }
+        />
+        <Route
+          path="/employer/applicants/:applicantId"
+          element={
+            <RequireEmployerStatus access="dashboard">
+              <EmployerApplicantDetailPage />
+            </RequireEmployerStatus>
+          }
+        />
+        <Route
+          path="/employer/messages"
+          element={
+            <RequireEmployerStatus access="dashboard">
+              <EmployerMessagesPage />
+            </RequireEmployerStatus>
+          }
+        />
+        <Route
+          path="/employer/messages/:conversationId"
+          element={
+            <RequireEmployerStatus access="dashboard">
+              <EmployerMessagesPage />
             </RequireEmployerStatus>
           }
         />

@@ -115,6 +115,24 @@ const statusGuidance: Record<ApplicationStatus, string> = {
   Rejected: "This application was not moved forward. You can continue exploring other opportunities.",
 };
 
+function formatInterviewSchedule(details: NonNullable<Application["interviewSchedule"]>) {
+  const date = new Date(`${details.date}T00:00:00Z`);
+  const displayDate = Number.isNaN(date.getTime())
+    ? details.date
+    : new Intl.DateTimeFormat("en-US", {
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+        timeZone: "UTC",
+      }).format(date);
+  const [hour, minute] = details.time.split(":").map(Number);
+  const displayTime = Number.isInteger(hour) && Number.isInteger(minute)
+    ? `${hour % 12 || 12}:${String(minute).padStart(2, "0")} ${hour >= 12 ? "PM" : "AM"}`
+    : details.time;
+
+  return `${displayDate} · ${displayTime} ${details.timezone}`;
+}
+
 export function ApplicationDetailPanel({
   application,
   onClose,
@@ -216,6 +234,11 @@ export function ApplicationDetailPanel({
                         {application.appliedAt}
                       </span>
                     )}
+                    {stage === "Interview Scheduled" && application.interviewSchedule && (
+                      <span className="ml-1.5 text-[8px] text-[#647779]">
+                        {formatInterviewSchedule(application.interviewSchedule)}
+                      </span>
+                    )}
                   </span>
                 </li>
               );
@@ -223,7 +246,9 @@ export function ApplicationDetailPanel({
           </ol>
         </section>
 
-        {(application.resumeFileName || application.applicationLetterFileName) && (
+        {(application.resumeFileName ||
+          application.applicationLetterFileName ||
+          application.coverLetterFileName) && (
           <section className="border-t border-[#edf1f1] pt-3">
             <h3 className="text-[8px] font-bold uppercase tracking-[0.04em] text-[#8a999a]">
               Submitted documents
@@ -234,6 +259,9 @@ export function ApplicationDetailPanel({
               )}
               {application.applicationLetterFileName && (
                 <li>Application letter: {application.applicationLetterFileName}</li>
+              )}
+              {application.coverLetterFileName && (
+                <li>Cover letter: {application.coverLetterFileName}</li>
               )}
             </ul>
           </section>

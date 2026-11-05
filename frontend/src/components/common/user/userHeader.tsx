@@ -1,10 +1,12 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router";
 import { useAuth } from "@/features/auth/useAuth";
+import { getApplicantMessagingActor } from "@/features/messaging/api";
 import applicationsNavIcon from "@/assets/Icon (7).svg";
 import recommendationsNavIcon from "@/assets/Icon (8).svg";
 import jobSearchNavIcon from "@/assets/Icon (9).svg";
 import profileNavIcon from "@/assets/Icon (10).svg";
+import { useUnreadCount } from "@/features/messaging/hooks";
 
 const navItems = [
   { label: "Job Search", to: "/job-search", icon: jobSearchNavIcon },
@@ -13,11 +15,10 @@ const navItems = [
   { label: "Profile", to: "/profile", icon: profileNavIcon },
 ] as const;
 
-type HeaderIconName = "bell" | "chevron";
+type HeaderIconName = "chevron";
 
 function HeaderIcon({ name, size = 18 }: { name: HeaderIconName; size?: number }) {
   const paths: Record<HeaderIconName, React.ReactNode> = {
-    bell: <><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9m-8 12a2 2 0 0 0 4 0" /></>,
     chevron: <path d="m6 9 6 6 6-6" />,
   };
 
@@ -28,13 +29,41 @@ function HeaderIcon({ name, size = 18 }: { name: HeaderIconName; size?: number }
   );
 }
 
+function MessagesIconLink({ unreadCount }: { unreadCount: number }) {
+  const { pathname } = useLocation();
+  const isActive = pathname.startsWith("/messages");
+
+  return (
+    <Link
+      aria-current={isActive ? "page" : undefined}
+      aria-label={`Messages${unreadCount > 0 ? `, ${unreadCount} unread` : ""}`}
+      className={`relative inline-flex size-9 items-center justify-center rounded-full transition focus-visible:outline-[3px] focus-visible:outline-[#67c9c1] focus-visible:outline-offset-[3px] ${isActive || unreadCount > 0 ? "bg-[#e6f4f0] text-[#087879]" : "text-[#65787a] hover:bg-[#f1f6f5] hover:text-[#087879]"}`}
+      to="/messages"
+      title="Messages"
+    >
+      <svg aria-hidden="true" className="size-[18px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+        <rect x="3" y="5" width="18" height="14" rx="2" />
+        <path d="m3 7 9 6 9-6" />
+      </svg>
+      {unreadCount > 0 && (
+        <span aria-hidden="true" className="absolute top-0 right-0 grid min-h-4 min-w-4 place-items-center rounded-full bg-[#d94a3d] px-1 text-[9px] font-bold leading-none text-white">
+          {unreadCount > 9 ? "9+" : unreadCount}
+        </span>
+      )}
+    </Link>
+  );
+}
+
 export default function Header() {
   const { pathname } = useLocation();
   const navigate = useNavigate();
-  const { logout } = useAuth();
-  const [openDropdown, setOpenDropdown] = useState<
-    "notifications" | "account" | null
-  >(null);
+  const { logout, user } = useAuth();
+  const messagingActor = useMemo(
+    () => getApplicantMessagingActor(user),
+    [user],
+  );
+  const { unreadCount } = useUnreadCount(messagingActor);
+  const [openDropdown, setOpenDropdown] = useState<"account" | null>(null);
   const [logoutError, setLogoutError] = useState<string | null>(null);
   const dropdownAreaRef = useRef<HTMLDivElement>(null);
 
@@ -98,56 +127,7 @@ export default function Header() {
         className="flex items-center justify-self-end gap-5 max-[680px]:gap-2.5"
         ref={dropdownAreaRef}
       >
-        <div className="relative">
-          <button
-            aria-expanded={openDropdown === "notifications"}
-            aria-haspopup="dialog"
-            className="relative inline-flex size-9 items-center justify-center text-[#65787a] [-webkit-tap-highlight-color:transparent] focus-visible:outline-[3px] focus-visible:outline-[#67c9c1] focus-visible:outline-offset-[3px]"
-            onClick={() =>
-              setOpenDropdown((current) =>
-                current === "notifications" ? null : "notifications",
-              )
-            }
-            type="button"
-          >
-            <span className="sr-only">Notifications</span>
-            <HeaderIcon name="bell" />
-          </button>
-          {openDropdown === "notifications" && (
-            <section
-              aria-label="Notifications"
-              className="absolute top-full right-0 z-50 mt-2 w-80 max-w-[calc(100vw-2rem)] rounded-xl border border-[#e5eeec] bg-white p-4 shadow-[0_12px_30px_rgba(27,54,52,0.16)]"
-              role="dialog"
-            >
-              <div className="flex items-center justify-between gap-3">
-                <h2 className="text-[12px] font-bold text-[#344749]">
-                  Notifications
-                </h2>
-                <button
-                  aria-label="Close notifications"
-                  className="rounded px-1 text-[18px] leading-none text-[#829092] hover:bg-[#f1f6f5] focus-visible:outline-[3px] focus-visible:outline-[#67c9c1]"
-                  onClick={() => setOpenDropdown(null)}
-                  type="button"
-                >
-                  ×
-                </button>
-              </div>
-              <p className="mt-3 text-[10px] font-semibold text-[#526365]">
-                You’re all caught up
-              </p>
-              <p className="mt-1 text-[9px] leading-4 text-[#829092]">
-                Application updates and opportunity alerts will appear here.
-              </p>
-              <Link
-                className="mt-3 inline-flex text-[9px] font-semibold text-[#078b8d] hover:underline focus-visible:outline-[3px] focus-visible:outline-[#67c9c1]"
-                onClick={() => setOpenDropdown(null)}
-                to="/applications"
-              >
-                View applications
-              </Link>
-            </section>
-          )}
-        </div>
+        <MessagesIconLink unreadCount={unreadCount} />
         <div className="relative">
           <button
             aria-expanded={openDropdown === "account"}

@@ -3,6 +3,7 @@ import type {
   EmployerRegistrationInput,
   EmployerStatus,
 } from "@/features/employer-registration/types";
+import { hasRequiredEmployerVerificationDocuments } from "@/features/employer-verification/api";
 
 const storageKey = "careerconnect.employer-registration";
 const listeners = new Set<() => void>();
@@ -132,6 +133,12 @@ export const employerRegistrationApi = {
   async setStatus(status: EmployerStatus, rejectionReason?: string) {
     await simulateDelay();
     if (!employerSnapshot) throw new Error("No employer registration exists.");
+    if (
+      (status === "pending_review" || status === "approved") &&
+      !hasRequiredEmployerVerificationDocuments(employerSnapshot.id)
+    ) {
+      throw new Error("All required company and employer ID documents must be submitted first.");
+    }
 
     const employer: EmployerProfile = {
       ...employerSnapshot,
@@ -147,11 +154,42 @@ export const employerRegistrationApi = {
       throw new Error("Employer status controls are available only in development.");
     }
     if (!employerSnapshot) throw new Error("No employer registration exists.");
+    if (
+      status === "approved" &&
+      employerSnapshot.id !== "maya-philippines-demo" &&
+      !hasRequiredEmployerVerificationDocuments(employerSnapshot.id)
+    ) {
+      throw new Error("Upload all required verification documents before approval.");
+    }
 
     const employer: EmployerProfile = {
       ...employerSnapshot,
       status,
       ...(status === "rejected" ? { rejectionReason } : { rejectionReason: undefined }),
+    };
+    publish(employer);
+    return employer;
+  },
+
+  createMayaDemoForDevelopment() {
+    if (!import.meta.env.DEV) {
+      throw new Error("The Maya Philippines demo account is available only in development.");
+    }
+    if (employerSnapshot) {
+      throw new Error("An employer registration already exists.");
+    }
+
+    const employer: EmployerProfile = {
+      id: "maya-philippines-demo",
+      firstName: "Maya",
+      lastName: "Philippines",
+      workEmail: "employer@mayaphilippines.com",
+      companyName: "Maya Philippines",
+      website: "https://www.maya.ph",
+      companySize: "1000+",
+      industry: "Financial Services",
+      companyRole: "Talent Acquisition",
+      status: "approved",
     };
     publish(employer);
     return employer;

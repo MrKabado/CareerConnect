@@ -1,3 +1,5 @@
+import type { InterviewDetails } from "@/features/employer-applicants/types";
+
 export type ApplicationStatus =
   | "Applied"
   | "Under Review"
@@ -8,6 +10,15 @@ export type ApplicationStatus =
 
 export type ApplicationTrack = "Job" | "OJT";
 
+export type SubmittedApplicationDocument = {
+  id: "resume" | "application-letter" | "cover-letter";
+  title: string;
+  fileName: string;
+  mimeType: string;
+  size: number;
+  dataUrl: string;
+};
+
 export type Application = {
   id: number;
   jobListingId?: string;
@@ -17,8 +28,18 @@ export type Application = {
   appliedAt: string;
   status: ApplicationStatus;
   track: ApplicationTrack;
+  interviewSchedule?: Pick<InterviewDetails, "date" | "time" | "timezone">;
   resumeFileName?: string;
   applicationLetterFileName?: string;
+  coverLetterFileName?: string;
+  applicantName?: string;
+  applicantEmail?: string;
+  applicantLocation?: string;
+  applicantEducation?: string;
+  applicantExperience?: string;
+  applicantSkills?: string[];
+  applicantSummary?: string;
+  documents?: SubmittedApplicationDocument[];
 };
 
 export const applications: Application[] = [
@@ -30,6 +51,11 @@ export const applications: Application[] = [
     appliedAt: "Jun 18, 2026",
     status: "Interview Scheduled",
     track: "Job",
+    interviewSchedule: {
+      date: "2026-11-09",
+      time: "10:00",
+      timezone: "Asia/Manila",
+    },
   },
   {
     id: 2,
@@ -120,6 +146,31 @@ export const applicationStore = {
   subscribe(listener: () => void) {
     listeners.add(listener);
     return () => listeners.delete(listener);
+  },
+
+  scheduleInterview(applicationId: number, interviewDetails: InterviewDetails) {
+    const applicationExists = applicationSnapshot.some(
+      (application) => application.id === applicationId,
+    );
+    if (!applicationExists) return false;
+
+    const nextSnapshot = applicationSnapshot.map((application) =>
+      application.id === applicationId
+        ? {
+            ...application,
+            status: "Interview Scheduled" as const,
+            interviewSchedule: {
+              date: interviewDetails.date,
+              time: interviewDetails.time,
+              timezone: interviewDetails.timezone,
+            },
+          }
+        : application,
+    );
+    localStorage.setItem(storageKey, JSON.stringify(nextSnapshot));
+    applicationSnapshot = nextSnapshot;
+    listeners.forEach((listener) => listener());
+    return true;
   },
 
   hasAppliedTo(jobListingId: string) {

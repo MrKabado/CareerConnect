@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { Navigate } from "react-router";
 import {
   employerRegistrationApi,
@@ -9,6 +9,7 @@ import type {
   EmployerStatus,
 } from "@/features/employer-registration/types";
 import { useEmployerStatus } from "@/features/employer-registration/useEmployerStatus";
+import { useCompanyVerification } from "@/features/company-verification/useCompanyVerification";
 
 function canAccess(
   status: EmployerStatus | null,
@@ -22,57 +23,7 @@ function canAccess(
 }
 
 function EmployerStatusDevTools() {
-  const { employer } = useEmployerStatus();
-  const [error, setError] = useState<string | null>(null);
-
-  if (!import.meta.env.DEV || !employer) return null;
-
-  function setStatus(status: "approved" | "rejected") {
-    try {
-      employerRegistrationApi.setStatusForDevelopment(
-        status,
-        status === "rejected"
-          ? "The uploaded company documents could not be verified. Please review and resubmit."
-          : undefined,
-      );
-      setError(null);
-    } catch (statusError) {
-      setError(
-        statusError instanceof Error
-          ? statusError.message
-          : "Unable to change employer status.",
-      );
-    }
-  }
-
-  return (
-    <aside className="fixed right-4 bottom-4 z-50 max-w-[calc(100vw-2rem)] rounded-xl border border-[#d8e6e3] bg-white p-3 shadow-lg">
-      <p className="text-[9px] font-semibold text-[#526365]">
-        Dev status: {employer.status}
-      </p>
-      <div className="mt-2 flex gap-2">
-        <button
-          className="rounded-md bg-[#e6f4ea] px-2.5 py-1.5 text-[9px] font-semibold text-[#287a45]"
-          onClick={() => setStatus("approved")}
-          type="button"
-        >
-          Set approved
-        </button>
-        <button
-          className="rounded-md bg-[#fff4df] px-2.5 py-1.5 text-[9px] font-semibold text-[#9b7026]"
-          onClick={() => setStatus("rejected")}
-          type="button"
-        >
-          Set rejected
-        </button>
-      </div>
-      {error && (
-        <p className="mt-1 text-[9px] text-[#a2534c]" role="alert">
-          {error}
-        </p>
-      )}
-    </aside>
-  );
+  return null;
 }
 
 export default function RequireEmployerStatus({
@@ -82,7 +33,61 @@ export default function RequireEmployerStatus({
   access: EmployerRouteAccess;
   children: ReactNode;
 }) {
-  const { status } = useEmployerStatus();
+  const { employer, status } = useEmployerStatus();
+  const verification = useCompanyVerification();
+  const [demoError, setDemoError] = useState<string | null>(null);
+  const isMayaDemoSetup = import.meta.env.DEV && access === "dashboard" && !employer;
+
+  useEffect(() => {
+    if (!isMayaDemoSetup) return;
+
+    try {
+      employerRegistrationApi.createMayaDemoForDevelopment();
+    } catch (error) {
+      window.setTimeout(() => {
+        setDemoError(
+          error instanceof Error
+            ? error.message
+            : "Unable to set up the Maya Philippines demo account.",
+        );
+      }, 0);
+    }
+  }, [isMayaDemoSetup]);
+
+  if (isMayaDemoSetup) {
+    return (
+      <main className="flex min-h-screen items-center justify-center bg-[#edf3f2] px-4">
+        <div className="max-w-sm rounded-2xl border border-[#d8e6e3] bg-white p-6 text-center shadow-lg">
+          <h1 className="text-lg font-bold text-[#243a3c]">
+            {demoError ? "Demo account setup failed" : "Setting up Maya Philippines"}
+          </h1>
+          <p className="mt-2 text-sm text-[#647578]">
+            {demoError ??
+              "Preparing an approved employer account for the development dashboard."}
+          </p>
+        </div>
+      </main>
+    );
+  }
+
+  if (access === "dashboard" && employer) {
+    if (verification.dashboardReady) {
+      return (
+        <>
+          <EmployerStatusDevTools />
+          {children}
+        </>
+      );
+    }
+
+    return (
+      <Navigate
+        replace
+        to={verification.firstIncompleteRequiredStage?.route ?? "/employer/verification/email"}
+        state={{ employerStatusRedirect: true }}
+      />
+    );
+  }
 
   if (canAccess(status, access)) {
     return (

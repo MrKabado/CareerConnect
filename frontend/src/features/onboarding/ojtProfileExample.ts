@@ -10,6 +10,6 @@ export const ojtProfileExample = {
   allowancePreference: "Paid only",
   preferredStartDate: "2026-07-15",
   educationPeriod: "2020 - 2024",
-  resumeName: "Jamie_Dela_Cruz_Resume.pdf",
-  resumeDetails: "Updated June 12, 2026 | 1.2 MB",
+  resumeName: "Jamie_Dela_Cruz_Resume.txt",
+  resumeDetails: "Sample profile document",
 };

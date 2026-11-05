@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 768 768" role="img" aria-labelledby="title">
+  <title id="title">Maya</title>
+  <defs>
+    <radialGradient id="background" cx="52%" cy="46%" r="72%">
+      <stop offset="0" stop-color="#171717" />
+      <stop offset="1" stop-color="#030303" />
+    </radialGradient>
+    <linearGradient id="letter" x1="0" x2="0.16" y1="0" y2="1">
+      <stop offset="0" stop-color="#fff" />
+      <stop offset="0.52" stop-color="#eee" />
+      <stop offset="1" stop-color="#c9c9c9" />
+    </linearGradient>
+    <filter id="soft-shadow" height="150%" width="150%" x="-25%" y="-25%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="3" />
+      <feOffset dy="3" />
+      <feComponentTransfer>
+        <feFuncA slope="0.34" type="linear" />
+      </feComponentTransfer>
+      <feMerge>
+        <feMergeNode />
+        <feMergeNode in="SourceGraphic" />
+      </feMerge>
+    </filter>
+  </defs>
+  <rect width="768" height="768" fill="url(#background)" />
+  <g fill="none" filter="url(#soft-shadow)" stroke="url(#letter)" stroke-linecap="round" stroke-linejoin="round" stroke-width="28">
+    <path d="M124 438V381c0-27 19-43 41-43s41 16 41 43v57m0-57c0-27 19-43 41-43s41 16 41 43v57" />
+    <path d="M416 390c0-30-19-52-48-52s-49 22-49 52 20 52 49 52 48-22 48-52Zm0-52v100" />
+    <path d="m466 350 35 73c6 12 20 12 26 0l35-73m-61 73 18 40c7 16-3 31-23 36l-17 4" />
+    <path d="M660 390c0-30-19-52-48-52s-49 22-49 52 20 52 49 52 48-22 48-52Zm0-52v100" />
+  </g>
+</svg>
