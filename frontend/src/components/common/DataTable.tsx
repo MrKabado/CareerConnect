@@ -28,16 +28,16 @@ export default function DataTable<T>({
   emptyMessage = "No results found.",
 }: DataTableProps<T>) {
   return (
-    <div className="overflow-hidden rounded-2xl border border-line bg-white shadow-sm">
+    <div className="overflow-hidden rounded-[16px] border border-line bg-white shadow-[0_8px_30px_rgba(29,49,51,.04)]">
       <div className="overflow-x-auto">
         <table className="w-full min-w-[640px] text-left text-sm">
           <thead>
-            <tr className="border-b border-line text-[11px] uppercase tracking-wider text-muted">
+            <tr className="border-b border-line bg-[#fafcfc] text-[10px] uppercase tracking-[.08em] text-muted">
               {columns.map((c) => (
                 <th
                   key={c.key}
                   scope="col"
-                  className={`px-5 py-3 font-medium ${c.headerClassName ?? ""}`}
+                  className={`px-5 py-4 font-semibold ${c.headerClassName ?? ""}`}
                 >
                   {c.header}
                 </th>

@@ -15,7 +15,7 @@ export default function SearchBar({
 }: SearchBarProps) {
   return (
     <label
-      className={`flex h-10 items-center gap-2 rounded-xl border border-line bg-white px-3 text-muted focus-within:border-brand-600 ${className}`}
+      className={`flex h-11 items-center gap-2.5 rounded-[10px] border border-line bg-white px-3.5 text-muted shadow-sm focus-within:border-brand-600 focus-within:ring-3 focus-within:ring-brand-50/80 ${className}`}
     >
       <Search size={16} aria-hidden="true" />
       <input

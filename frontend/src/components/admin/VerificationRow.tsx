@@ -12,12 +12,12 @@ export default function VerificationRow({
   onPreview,
 }: VerificationRowProps) {
   return (
-    <Card className="grid min-h-[106px] items-center gap-5 rounded-xl px-5 py-5 shadow-[0_1px_2px_rgba(38,58,59,.04)] md:grid-cols-[minmax(240px,1fr)_minmax(290px,.72fr)_auto] max-[680px]:gap-4">
+    <Card className="grid min-h-[106px] items-center gap-5 rounded-[14px] px-5 py-5 transition-all hover:border-brand-100 hover:-translate-y-px md:grid-cols-[minmax(240px,1fr)_minmax(290px,.72fr)_auto] max-[680px]:gap-4">
       <div className="flex items-center gap-3.5">
         <Avatar initials={item.initials} shape="square" />
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
-            <h2 className="text-[13px] font-semibold">{item.company}</h2>
+            <h2 className="text-[15px] font-semibold text-ink">{item.company}</h2>
             <StatusBadge status={item.status} />
           </div>
           <p className="mt-1 text-[10px] text-muted">
@@ -52,7 +52,7 @@ export default function VerificationRow({
           onClick={() => onPreview(item.id, item.documents[0].id)}
           className="h-8 border-transparent bg-[#eef7f6] px-3 text-[10px] text-brand-700 hover:bg-[#e2f2ef] hover:text-brand-700"
         >
-          Reopen review
+          <p className="text-[#028090] font-semibold">Reopen review</p>
         </Button>
       </div>
     </Card>

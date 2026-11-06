@@ -47,7 +47,7 @@ export default function VerificationPage() {
         title="Employer verification"
         subtitle="Review submitted business documents before employers can publish jobs."
         actions={
-          <span className="rounded-full bg-amber-50 px-3 py-1 text-[11px] font-medium text-amber-700">
+          <span className="inline-flex rounded-full border border-amber-100 bg-amber-50 px-3.5 py-2 text-[12px] font-semibold text-amber-700">
             {pendingCount} pending review
           </span>
         }

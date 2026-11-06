@@ -19,7 +19,7 @@ export default function Select({
   ariaLabel,
 }: SelectProps) {
   return (
-    <label className="relative flex h-10 items-center rounded-xl border border-line bg-white focus-within:border-brand-600">
+    <label className="relative flex h-11 items-center rounded-[10px] border border-line bg-white shadow-sm focus-within:border-brand-600 focus-within:ring-3 focus-within:ring-brand-50/80">
       <select
         aria-label={ariaLabel}
         value={value}

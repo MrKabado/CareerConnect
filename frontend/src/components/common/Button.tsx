@@ -8,8 +8,8 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 }
 
 const VARIANTS: Record<Variant, string> = {
-  primary: "bg-brand-600 text-white hover:bg-brand-700",
-  outline: "border border-line bg-white text-ink hover:bg-canvas",
+  primary: "bg-brand-600 text-white shadow-[0_2px_8px_rgba(7,139,141,.18)] hover:bg-brand-700 hover:shadow-[0_4px_12px_rgba(7,139,141,.22)]",
+  outline: "border border-line bg-white text-ink shadow-sm hover:border-[#cad8d7] hover:bg-[#fafcfc]",
   danger: "border border-red-200 bg-white text-red-700 hover:bg-red-50",
 };
 
@@ -24,7 +24,7 @@ export default function Button({
   return (
     <button
       type={type}
-      className={`inline-flex h-9 items-center justify-center gap-1.5 rounded-lg px-4 text-[13px] font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-45 ${VARIANTS[variant]} ${className}`}
+      className={`inline-flex h-10 items-center justify-center gap-2 rounded-[10px] px-4 text-[13px] font-semibold transition-all disabled:cursor-not-allowed disabled:opacity-45 focus-visible:outline-2 focus-visible:outline-offset-2 ${VARIANTS[variant]} ${className}`}
       {...rest}
     >
       {icon}

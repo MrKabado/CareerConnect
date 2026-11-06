@@ -1,16 +1,28 @@
-import { BarChart3, BriefcaseBusiness, Grid2X2, Menu, Users, X } from "lucide-react";
+import { BriefcaseBusiness, Grid2X2, Menu, Users, X } from "lucide-react";
 import { useState } from "react";
 import { Link, useLocation } from "react-router";
 import { useVerifications } from "../hooks/useVerification";
 
 const navItems = [
-  { label: "Reports", to: "/reports", icon: BarChart3 },
+  { label: "Reports", to: "/reports", icon: null },
   { label: "Verifications", to: "/verifications", icon: BriefcaseBusiness, badge: true },
   { label: "Categories", to: "/categories", icon: Grid2X2 },
   { label: "Users", to: "/users", icon: Users },
 ] as const;
 
 type HeaderIconName = "bell" | "chevron";
+
+function ReportIcon({ className = "size-[15px]" }: { className?: string }) {
+  return (
+    <img
+      src="/report-icon.png"
+      alt=""
+      aria-hidden="true"
+      className={`${className} object-contain opacity-75 transition-opacity group-hover:opacity-100`}
+      draggable={false}
+    />
+  );
+}
 
 function HeaderIcon({ name, size = 18 }: { name: HeaderIconName; size?: number }) {
   const paths: Record<HeaderIconName, React.ReactNode> = {
@@ -32,7 +44,7 @@ export default function Header() {
   const isActive = (to: string) => pathname === to || (to === "/reports" && pathname === "/");
 
   return (
-    <header className="relative z-40 grid h-[72px] grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center border-b border-[#edf1f1] bg-white px-[max(40px,calc((100vw-1136px)/2))] max-[920px]:h-[64px] max-[920px]:px-6 max-[680px]:h-[60px] max-[680px]:grid-cols-[1fr_auto] max-[680px]:px-4">
+    <header className="sticky top-0 z-40 grid h-[72px] grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center border-b border-[#e9efee] bg-white/95 px-[max(40px,calc((100vw-1136px)/2))] shadow-[0_1px_0_rgba(29,49,51,.02)] backdrop-blur-xl max-[920px]:h-[64px] max-[920px]:px-6 max-[680px]:h-[60px] max-[680px]:grid-cols-[1fr_auto] max-[680px]:px-4">
       <Link className="inline-flex items-center justify-self-start gap-2.5 whitespace-nowrap text-[17px] font-bold tracking-[-0.55px] text-[#263a3c] max-[680px]:gap-2 max-[680px]:text-base focus-visible:outline-[3px] focus-visible:outline-[#67c9c1] focus-visible:outline-offset-[3px]" to="/reports" aria-label="CareerConnect admin home">
         <span className="grid size-7.75 place-items-center rounded-[10px] bg-[#078b8d] text-[19px] font-bold tracking-[-1px] text-white max-[680px]:size-7 max-[680px]:rounded-lg max-[680px]:text-[17px]">C</span>
         <span>Career<span className="text-[#078b8d]">Connect</span></span>
@@ -41,13 +53,17 @@ export default function Header() {
       <nav className="flex h-full items-stretch justify-self-center gap-4 max-[1100px]:gap-2 max-[680px]:hidden" aria-label="Admin navigation">
         {navItems.map((item) => (
           <Link
-            className={`${isActive(item.to)
+            className={`group ${isActive(item.to)
               ? "text-[#087879] after:absolute after:bottom-0 after:left-2.5 after:right-2.5 after:h-[2px] after:bg-[#078b8d]"
-              : "text-[#687b7e] hover:text-[#087879]"} relative inline-flex h-full items-center gap-1.5 whitespace-nowrap px-2.5 text-[11px] font-medium focus-visible:outline-[3px] focus-visible:outline-[#67c9c1] focus-visible:outline-offset-[-3px]`}
+              : "text-[#687b7e] hover:text-[#087879]"} relative inline-flex h-full items-center gap-1.5 whitespace-nowrap px-2.5 text-[12px] font-semibold focus-visible:outline-[3px] focus-visible:outline-[#67c9c1] focus-visible:outline-offset-[-3px]`}
             to={item.to}
             key={item.label}
           >
-            <item.icon size={13} strokeWidth={1.8} />
+            {item.icon ? <item.icon size={13} strokeWidth={1.8} /> : (
+              <span className="grid size-[18px] place-items-center rounded-[5px]">
+                <ReportIcon />
+              </span>
+            )}
             {item.label}
             {"badge" in item && pendingCount > 0 && <span className="grid size-[18px] shrink-0 place-items-center rounded-full bg-[#e9a46f] text-[10px] font-bold leading-none text-white">{pendingCount}</span>}
           </Link>
@@ -81,7 +97,7 @@ export default function Header() {
               onClick={() => setMenuOpen(false)}
               className={`${isActive(item.to) ? "bg-[#eef7f6] text-[#087879]" : "text-[#687b7e]"} flex items-center gap-3 rounded-lg px-3 py-3 text-sm font-medium`}
             >
-              <item.icon size={17} />
+              {item.icon ? <item.icon size={17} /> : <ReportIcon className="size-[18px]" />}
               {item.label}
             </Link>
           ))}

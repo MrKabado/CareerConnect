@@ -1,4 +1,5 @@
 import { downloadCsv } from "../../utils/csv";
+import { Link } from "react-router";
 
 type IconName = "users" | "building" | "briefcase" | "applications" | "check" | "download" | "clock" | "bell" | "chevron";
 
@@ -102,7 +103,11 @@ export default function HomeAdmin() {
           <div className="grid gap-3 content-start">
             <article className="h-[98px] rounded-md border border-[#edf1f1] bg-white">
               <div className="flex h-[38px] items-center justify-between border-b border-[#edf1f1] px-4"><h2 className="text-[12px] font-bold">Employer notifications</h2><span className="grid size-6 place-items-center rounded-full bg-[#fffaf2] text-[#d8a54b]"><Icon name="clock" className="size-3.5" /></span></div>
-              <div className="px-3 pt-3"><button className="h-[30px] w-full rounded-md bg-[#078b8d] text-[10px] font-bold text-white">Review queue</button></div>
+              <div className="px-3 pt-3">
+                <Link to="/verifications" className="inline-flex h-[30px] w-full items-center justify-center rounded-md bg-[#078b8d] text-[10px] font-bold text-white transition-colors hover:bg-[#067476] focus-visible:outline-[3px] focus-visible:outline-[#67c9c1] focus-visible:outline-offset-2">
+                  Review queue
+                </Link>
+              </div>
             </article>
 
             <article className="h-[186px] rounded-md border border-[#edf1f1] bg-white">
