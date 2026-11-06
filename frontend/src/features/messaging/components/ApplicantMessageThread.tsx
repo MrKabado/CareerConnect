@@ -1,4 +1,5 @@
 import type { FormEvent, RefObject } from "react";
+import { Skeleton } from "@/components/ui/skeleton";
 import { MessageBubble } from "@/features/messaging/components/MessageBubble";
 import type { Conversation, Message, MessagingActor } from "@/features/messaging/types";
 
@@ -93,7 +94,14 @@ export function ApplicantMessageThread({
             {error}
           </p>
         )}
-        {loading && <p className="text-center text-xs text-[#829092]">Loading messages…</p>}
+        {loading && (
+          <div aria-busy="true" aria-live="polite" className="space-y-3">
+            <Skeleton className="ml-auto h-12 w-2/3 rounded-2xl rounded-br-md" />
+            <Skeleton className="h-16 w-4/5 rounded-2xl rounded-bl-md" />
+            <Skeleton className="ml-auto h-14 w-1/2 rounded-2xl rounded-br-md" />
+            <Skeleton className="h-20 w-3/4 rounded-2xl rounded-bl-md" />
+          </div>
+        )}
         {!loading && !error && messages.length === 0 && (
           <p className="text-center text-xs text-[#829092]">
             No messages in this conversation yet.

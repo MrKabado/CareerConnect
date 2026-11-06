@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
 import ErrorBoundary from "@/components/common/ErrorBoundary";
+import { Skeleton } from "@/components/ui/skeleton";
+import ApplicantDetailSkeleton from "@/features/employer-applicants/components/ApplicantDetailSkeleton";
 import type { Applicant, ApplicantDocument } from "@/features/employer-applicants/types";
 import {
   downloadApplicantDocument,
@@ -148,9 +150,18 @@ function GitHubPortfolioPreview({ url, username }: { url: string; username: stri
     <div className="min-h-0 flex-1 overflow-y-auto bg-[#f6f8fa] p-4 sm:p-7">
       <article className="mx-auto min-h-full w-full max-w-5xl overflow-hidden rounded-xl border border-[#d0d7de] bg-white shadow-sm">
         {isLoading ? (
-          <p className="p-8 text-sm text-[#57606a]" role="status">
-            Loading public GitHub profile…
-          </p>
+          <div aria-busy="true" className="space-y-4 p-8" role="status">
+            <div className="flex items-center gap-4">
+              <Skeleton className="size-16 rounded-full" />
+              <div className="flex-1 space-y-2">
+                <Skeleton className="h-4 w-40 rounded-full" />
+                <Skeleton className="h-4 w-32 rounded-full" />
+              </div>
+            </div>
+            <Skeleton className="h-24 w-full rounded-xl" />
+            <Skeleton className="h-24 w-full rounded-xl" />
+            <Skeleton className="h-24 w-full rounded-xl" />
+          </div>
         ) : error ? (
           <div className="p-8" role="alert">
             <p className="text-sm text-[#cf222e]">{error}</p>
@@ -419,7 +430,7 @@ export function ApplicantSidebar({
 }
 
 export function ApplicantLoadingState() {
-  return <p className="mt-8 text-sm text-[#667b7c]" role="status">Loading applicant details...</p>;
+  return <ApplicantDetailSkeleton />;
 }
 
 export function ApplicantNotFoundState() {

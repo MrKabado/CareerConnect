@@ -39,7 +39,7 @@ export default function CompanyRatingPanel({
     let active = true;
 
     getCompanyRatingSummary(companySlug, token ?? undefined)
-      .then((result) => {
+      .then((result: CompanyRatingSummary) => {
         if (!active) return;
         setSummary(result);
         setRating(result.user_rating?.rating ?? 0);

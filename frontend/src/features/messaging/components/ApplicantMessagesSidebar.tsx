@@ -1,3 +1,4 @@
+import { Skeleton } from "@/components/ui/skeleton";
 import { formatMessageTimestamp } from "@/features/messaging/formatMessageTimestamp";
 import type { Conversation, MessagingActor } from "@/features/messaging/types";
 
@@ -54,7 +55,11 @@ export function ApplicantMessagesSidebar({
           </p>
         )}
         {!conversationsError && conversationsLoading && (
-          <p className="p-4 text-sm text-[#687b7e]">Loading conversations…</p>
+          <div className="space-y-3 p-3" aria-busy="true" aria-live="polite">
+            {Array.from({ length: 5 }).map((_, index) => (
+              <Skeleton key={index} className="h-18 w-full rounded-xl" />
+            ))}
+          </div>
         )}
         {!conversationsError && !conversationsLoading && filteredConversations.length === 0 && (
           <div className="px-5 py-10 text-center">

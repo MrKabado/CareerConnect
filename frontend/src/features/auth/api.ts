@@ -1,3 +1,7 @@
+import { apiRequest } from "@/lib/axios";
+
+export { apiRequest, ApiError } from "@/lib/axios";
+
 export type AuthUser = {
   id: number;
   name: string;
@@ -42,84 +46,18 @@ type EmailVerificationResponse = {
   user: AuthUser;
 };
 
-export class ApiError extends Error {
-  readonly status: number;
-
-  constructor(
-    message: string,
-    status: number,
-  ) {
-    super(message);
-    this.name = "ApiError";
-    this.status = status;
-  }
-}
-
-const apiBaseUrl = (import.meta.env.VITE_API_URL || "http://localhost:8000/api")
-  .replace(/\/+$/, "");
-
-export async function apiRequest<T>(
-  path: string,
-  options: RequestInit = {},
-  token?: string,
-): Promise<T> {
-  const headers = new Headers(options.headers);
-  headers.set("Accept", "application/json");
-
-  if (options.body && !headers.has("Content-Type")) {
-    headers.set("Content-Type", "application/json");
-  }
-
-  if (token) {
-    headers.set("Authorization", `Bearer ${token}`);
-  }
-
-  const response = await fetch(`${apiBaseUrl}${path}`, {
-    ...options,
-    headers,
-  });
-  const responseText = await response.text();
-  let responseBody: unknown;
-
-  if (responseText) {
-    try {
-      responseBody = JSON.parse(responseText);
-    } catch {
-      if (!response.ok) {
-        throw new ApiError(responseText, response.status);
-      }
-
-      throw new Error("The server returned an invalid JSON response.");
-    }
-  }
-
-  if (!response.ok) {
-    const message =
-      typeof responseBody === "object" &&
-      responseBody !== null &&
-      "message" in responseBody &&
-      typeof responseBody.message === "string"
-        ? responseBody.message
-        : `Request failed with status ${response.status}.`;
-
-    throw new ApiError(message, response.status);
-  }
-
-  return responseBody as T;
-}
-
 export const authApi = {
   register(details: RegistrationDetails) {
     return apiRequest<RegistrationResponse>("/register", {
       method: "POST",
-      body: JSON.stringify(details),
+      data: details,
     });
   },
 
   login(credentials: LoginCredentials) {
     return apiRequest<LoginResponse>("/login", {
       method: "POST",
-      body: JSON.stringify(credentials),
+      data: credentials,
     });
   },
 
@@ -130,14 +68,14 @@ export const authApi = {
   requestEmailVerificationCode(email: string) {
     return apiRequest<{ message: string }>("/otp/request", {
       method: "POST",
-      body: JSON.stringify({ email, purpose: "email_verification" }),
+      data: { email, purpose: "email_verification" },
     });
   },
 
   verifyEmail(email: string, code: string) {
     return apiRequest<EmailVerificationResponse>("/otp/verify", {
       method: "POST",
-      body: JSON.stringify({ email, code }),
+      data: { email, code },
     });
   },
 
@@ -152,7 +90,7 @@ export const authApi = {
   requestPasswordReset(email: string) {
     return apiRequest<{ message: string }>("/forgot-password", {
       method: "POST",
-      body: JSON.stringify({ email }),
+      data: { email },
     });
   },
 
@@ -164,7 +102,7 @@ export const authApi = {
   }) {
     return apiRequest<{ message: string }>("/reset-password", {
       method: "POST",
-      body: JSON.stringify(details),
+      data: details,
     });
   },
 };

@@ -1,6 +1,7 @@
 import { Link } from "react-router";
 import EmployerWorkspaceLayout from "@/components/common/employer/EmployerWorkspaceLayout";
 import EmployerOpportunityTypeBadge from "@/components/common/employer/EmployerOpportunityTypeBadge";
+import ApplicantPipelineSkeleton from "@/features/employer-applicants/components/ApplicantPipelineSkeleton";
 import ApplicantStatusIcon from "@/features/employer-applicants/components/ApplicantStatusIcon";
 import { applicantStatusConfig } from "@/features/employer-applicants/statuses";
 import type { Applicant, ApplicantStatus } from "@/features/employer-applicants/types";
@@ -53,6 +54,14 @@ function ApplicantRow({ applicant }: { applicant: Applicant }) {
 export default function ApplicantPipelinePageContent() {
   const { applicants, isLoading, error, jobTypeFilter, setJobTypeFilter, statusFilter, setStatusFilter, search, setSearch, visibleApplicants, countByStatus, applicantStatuses } = useApplicantPipeline();
 
+  if (isLoading) {
+    return (
+      <EmployerWorkspaceLayout>
+        <ApplicantPipelineSkeleton />
+      </EmployerWorkspaceLayout>
+    );
+  }
+
   return (
     <EmployerWorkspaceLayout>
       <main className="mx-auto w-full max-w-284 flex-1 px-10 py-6 max-[920px]:px-6 max-[680px]:px-4 max-[680px]:py-5">
@@ -71,7 +80,7 @@ export default function ApplicantPipelinePageContent() {
           <div className="flex flex-col gap-3 rounded-t-[22px] border-b border-[#e7efee] px-4 py-4 lg:flex-row lg:items-center lg:justify-between">
             <div>
               <h2 className="text-base font-semibold text-[#1d3034]">Candidate pipeline</h2>
-              <p className="mt-1 text-xs text-[#738385]" aria-live="polite">{isLoading ? "Loading applicants..." : `${visibleApplicants.length} applicants shown`}</p>
+              <p className="mt-1 text-xs text-[#738385]" aria-live="polite">{`${visibleApplicants.length} applicants shown`}</p>
             </div>
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
               <label className="sr-only" htmlFor="applicant-search">Search applicants</label>
@@ -85,7 +94,7 @@ export default function ApplicantPipelinePageContent() {
           </div>
           <div className="flex flex-wrap gap-1 border-b border-[#e7efee] px-4 py-3">{jobTypeOptions.map((option) => <button key={option} type="button" onClick={() => setJobTypeFilter(option)} aria-pressed={jobTypeFilter === option} className={`rounded-md px-3 py-1.5 text-xs font-medium transition ${jobTypeFilter === option ? "bg-[#0e8e9b] text-white" : "text-[#587174] hover:bg-[#f1f8f7]"}`}>{option}</button>)}</div>
           {error ? <p className="px-4 py-4 text-sm text-[#b85054]" role="alert">{error}</p> : null}
-          {!isLoading && !error && visibleApplicants.length === 0 ? <p className="px-4 py-10 text-center text-sm text-[#718586]">No applicants match these filters.</p> : null}
+          {!error && visibleApplicants.length === 0 ? <p className="px-4 py-10 text-center text-sm text-[#718586]">No applicants match these filters.</p> : null}
           <div className="divide-y divide-[#e7efee] rounded-b-[22px]">{visibleApplicants.map((applicant) => <ApplicantRow key={applicant.id} applicant={applicant} />)}</div>
         </section>
       </main>

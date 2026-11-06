@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "@tailwindcss/vite": "^4.3.3",
+    "axios": "^1.21.0",
     "cities.json": "^1.1.65",
     "clsx": "^2.1.1",
     "i18n-iso-countries": "^7.14.0",

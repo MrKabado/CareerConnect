@@ -1,3 +1,4 @@
+import { Skeleton, SkeletonRegion } from "@/components/ui/skeleton";
 import { formatMessageTimestamp } from "@/features/messaging/formatMessageTimestamp";
 import type { Conversation } from "@/features/messaging/types";
 import type { ConversationFilter } from "@/features/messaging/hooks/useEmployerMessagesPage";
@@ -81,7 +82,19 @@ export function EmployerMessagesSidebar({
         )}
       </div>
       {conversationsError && <p className="p-4 text-sm text-[#a2534c]" role="alert">{conversationsError}</p>}
-      {!conversationsError && loading && <p className="p-4 text-sm text-[#687b7e]">Loading conversations…</p>}
+      {!conversationsError && loading && (
+        <SkeletonRegion className="space-y-3 p-3" label="Loading conversations">
+          {Array.from({ length: 4 }).map((_, index) => (
+            <div className="flex items-center gap-3 rounded-xl border border-[#edf1f1] bg-white p-3" key={index}>
+              <Skeleton className="h-10 w-10" shape="circle" />
+              <div className="flex-1 space-y-2">
+                <Skeleton className="h-3 w-[60%]" shape="line" />
+                <Skeleton className="h-2.5 w-[80%]" shape="line" />
+              </div>
+            </div>
+          ))}
+        </SkeletonRegion>
+      )}
       <ul className="min-h-0 flex-1 overflow-y-auto">
         {!loading && !conversationsError && conversations.length === 0 && (
           <li className="px-5 py-10 text-center text-sm text-[#829092]">

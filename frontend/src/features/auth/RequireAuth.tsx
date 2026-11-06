@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { Navigate, useLocation } from "react-router";
+import { PageSkeleton } from "@/components/ui/skeleton";
 import { useAuth } from "@/features/auth/useAuth";
 
 export default function RequireAuth({ children }: { children: ReactNode }) {
@@ -8,8 +9,8 @@ export default function RequireAuth({ children }: { children: ReactNode }) {
 
   if (status === "loading") {
     return (
-      <main className="grid min-h-dvh place-items-center text-sm text-[#526365]">
-        Loading your account…
+      <main className="min-h-dvh bg-[#f5f8f8]">
+        <PageSkeleton className="min-h-dvh" label="Loading your account" />
       </main>
     );
   }

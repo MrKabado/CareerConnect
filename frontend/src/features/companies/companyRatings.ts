@@ -1,4 +1,4 @@
-import { apiRequest } from "@/features/auth/api";
+import { apiRequest } from "@/lib/axios";
 
 export type CompanyRating = {
   rating: number;
@@ -32,7 +32,7 @@ export function saveCompanyRating(
     `/companies/${encodeURIComponent(companySlug)}/ratings`,
     {
       method: "PUT",
-      body: JSON.stringify({ rating, review: review.trim() || null }),
+      data: { rating, review: review.trim() || null },
     },
     token,
   );

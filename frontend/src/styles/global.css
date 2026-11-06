@@ -1,1 +1,47 @@
 @import "tailwindcss";
+
+:root {
+  --color-skeleton-soft: #edf3f2;
+  --color-skeleton-strong: #dfe9e7;
+  --color-surface-white: #ffffff;
+  --color-surface-subtle: #f7fbfa;
+  --color-text-muted: #829091;
+  --color-text-strong: #263a3c;
+}
+
+@keyframes skeleton-shimmer {
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+.skeleton-base {
+  background-color: var(--color-skeleton-soft);
+  box-shadow: inset 0 0 0 1px rgba(34, 66, 65, 0.02);
+}
+
+.skeleton-shimmer {
+  position: relative;
+  overflow: hidden;
+}
+
+.skeleton-shimmer::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.72) 50%,
+    transparent 100%
+  );
+  animation: skeleton-shimmer 1.5s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skeleton-shimmer::after {
+    animation: none;
+    background: transparent;
+  }
+}

@@ -1,4 +1,5 @@
 import type { FormEvent } from "react";
+import { Skeleton, SkeletonRegion, SkeletonText } from "@/components/ui/skeleton";
 import { formatCenteredMessageTime, formatMessageTimestamp } from "@/features/messaging/formatMessageTimestamp";
 import type { Conversation, Message, MessagingActor } from "@/features/messaging/types";
 
@@ -41,6 +42,28 @@ export function EmployerMessageThread({
     );
   }
 
+  if (loading) {
+    return (
+      <SkeletonRegion className="flex min-h-0 flex-col" label="Loading conversation">
+        <header className="flex items-center gap-3 border-b border-[#edf1f1] px-5 py-4">
+          <Skeleton className="h-10 w-10" shape="circle" />
+          <div className="flex-1 space-y-2">
+            <Skeleton className="h-3 w-52" shape="line" />
+            <Skeleton className="h-2.5 w-40" shape="line" />
+          </div>
+        </header>
+
+        <div className="flex-1 space-y-4 overflow-y-auto bg-[#fbfdfc] px-5 py-5">
+          <SkeletonText lines={5} />
+        </div>
+
+        <div className="border-t border-[#edf1f1] p-4">
+          <Skeleton className="h-12 w-full" shape="rect" />
+        </div>
+      </SkeletonRegion>
+    );
+  }
+
   return (
     <section aria-label={`Conversation with ${conversation.applicantName}`} className="flex min-h-0 flex-col">
       <header className="flex items-center gap-3 border-b border-[#edf1f1] px-5 py-4">
@@ -75,8 +98,7 @@ export function EmployerMessageThread({
       </div>
       <div className="flex-1 space-y-4 overflow-y-auto bg-[#fbfdfc] px-5 py-5">
         {error && <p className="rounded-lg bg-[#fff4f2] p-3 text-sm text-[#a2534c]" role="alert">{error}</p>}
-        {loading && <p className="text-center text-xs text-[#829092]">Loading messages…</p>}
-        {!loading && !error &&
+        {!error &&
           messages.map((message) => (
             <div className="space-y-1.5" key={message.id}>
               <time className="block text-center text-[11px] text-[#829092]" dateTime={message.createdAt}>

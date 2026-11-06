@@ -1,5 +1,6 @@
 import { useMemo, useRef, useState, useSyncExternalStore } from "react";
 import isoCountries from "i18n-iso-countries";
+import { Skeleton } from "@/components/ui/skeleton";
 import englishCountryNames from "i18n-iso-countries/langs/en.json";
 import { useNavigate } from "react-router";
 import { applicationStore } from "@/features/applications/applicationData";
@@ -396,7 +397,7 @@ export default function MainBody({
                 !selectedCountryCode
                   ? "Choose a country first"
                   : isLoadingCities
-                    ? "Loading city list..."
+                    ? "Searching cities"
                     : "Search for a city"
               }
               role="combobox"
@@ -451,9 +452,10 @@ export default function MainBody({
               role="listbox"
             >
               {isLoadingCities ? (
-                <p className="px-3 py-2 text-[10px] text-[#849394]">
-                  Loading cities...
-                </p>
+                <div aria-busy="true" aria-live="polite" className="space-y-2 px-3 py-2">
+                  <Skeleton className="h-3 w-20 rounded-full" />
+                  <Skeleton className="h-3 w-28 rounded-full" />
+                </div>
               ) : !citySearch.trim() ? (
                 <p className="px-3 py-2 text-[10px] leading-4 text-[#849394]">
                   Search {cityList.length.toLocaleString()} cities in{" "}
