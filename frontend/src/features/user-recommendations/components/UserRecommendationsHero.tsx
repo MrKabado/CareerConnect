@@ -1,7 +1,4 @@
-import {
-  EmailVerificationNotice,
-  MatchingExplainer,
-} from "@/components/common/user/recommendationComponents";
+import { EmailVerificationNotice } from "@/components/common/user/recommendationComponents";
 
 type UserRecommendationsHeroProps = {
   firstName: string;
@@ -44,10 +41,6 @@ export default function UserRecommendationsHero({
           </section>
         </div>
       </section>
-
-      <div className="mt-4">
-        <MatchingExplainer />
-      </div>
     </>
   );
 }

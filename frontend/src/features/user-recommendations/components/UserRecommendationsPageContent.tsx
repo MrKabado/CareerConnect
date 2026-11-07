@@ -1,5 +1,6 @@
 import Footer from "@/components/common/user/userFooter";
 import Header from "@/components/common/user/userHeader";
+import { MatchingExplainer } from "@/components/common/user/recommendationComponents";
 import type { ScoredOjtOpportunity } from "@/features/jobs/ojtMatching";
 import type { RecommendationSort } from "@/features/user-recommendations/hooks/useUserRecommendations";
 import RecommendationsResultsList from "./RecommendationsResultsList";
@@ -97,6 +98,10 @@ export default function UserRecommendationsPageContent({
               visibleRecommendations={visibleRecommendations}
             />
           </section>
+
+          <div className="mt-6">
+            <MatchingExplainer />
+          </div>
         </div>
       </main>
       <Footer />

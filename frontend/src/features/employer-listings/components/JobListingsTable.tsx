@@ -13,7 +13,9 @@ export default function JobListingsBoard({ listings, selectedId, setSelectedId }
   const selectedListing = listings.find((listing) => listing.id === selectedId) ?? null;
 
   return (
-    <section className="grid gap-4 xl:grid-cols-[minmax(0,1.4fr)_minmax(260px,0.8fr)]">
+    <section
+      className={`grid gap-4 ${selectedListing ? "xl:grid-cols-[minmax(0,1.4fr)_minmax(260px,0.8fr)]" : ""}`}
+    >
       <div className="overflow-hidden rounded-[20px] border border-[#e5eeeb] bg-white shadow-[0_10px_20px_rgba(20,47,47,0.02)]">
         <div className="divide-y divide-[#e7efee] rounded-b-[22px]">
           {listings.map((listing) => (
