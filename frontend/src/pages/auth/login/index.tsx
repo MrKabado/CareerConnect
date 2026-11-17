@@ -27,7 +27,9 @@ export default function LoginPage() {
         },
         formData.has("remember"),
       );
-      if (authenticatedUser.role === "employer") {
+      if (authenticatedUser.role === "admin") {
+        navigate("/admin", { replace: true });
+      } else if (authenticatedUser.role === "employer") {
         navigate(
           getEmployerStatusPath(
             employerRegistrationApi.getSnapshot()?.status,

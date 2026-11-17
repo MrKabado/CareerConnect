@@ -6,7 +6,7 @@ export type AuthUser = {
   id: number;
   name: string;
   email: string;
-  role: "applicant" | "employer";
+  role: "admin" | "applicant" | "employer";
   account_status: string;
   email_verified_at: string | null;
 };

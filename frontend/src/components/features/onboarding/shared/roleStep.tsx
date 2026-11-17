@@ -1,5 +1,6 @@
 import type { OnboardingAnswers } from "@/features/onboarding/store";
 import type { OnboardingErrors } from "@/features/onboarding/schemas";
+import { Link } from "react-router";
 
 type RoleStepProps = {
   answers: OnboardingAnswers;
@@ -140,12 +141,12 @@ export default function RoleStep({ answers, errors, onChange }: RoleStepProps) {
       )}
       <p className="mt-7 text-center text-xs text-[#7b898b]">
         Hiring instead?{" "}
-        <a
+        <Link
           className="ml-2 font-semibold text-[#078b8d] hover:text-[#066f72] focus-visible:rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#078b8d]"
-          href="/signup?role=employer"
+          to="/employer/register"
         >
           Register as an employer
-        </a>
+        </Link>
       </p>
     </div>
   );

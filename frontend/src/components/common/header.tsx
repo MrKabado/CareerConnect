@@ -4,13 +4,13 @@ import { Link, useLocation } from "react-router";
 import { useVerifications } from "../hooks/useVerification";
 
 const navItems = [
-  { label: "Reports", to: "/reports", icon: null },
-  { label: "Verifications", to: "/verifications", icon: BriefcaseBusiness, badge: true },
-  { label: "Categories", to: "/categories", icon: Grid2X2 },
-  { label: "Users", to: "/users", icon: Users },
+  { label: "Reports", to: "/admin", icon: null },
+  { label: "Verifications", to: "/admin/verifications", icon: BriefcaseBusiness, badge: true },
+  { label: "Categories", to: "/admin/categories", icon: Grid2X2 },
+  { label: "Users", to: "/admin/users", icon: Users },
 ] as const;
 
-type HeaderIconName = "bell" | "chevron";
+type HeaderIconName = "bell";
 
 function ReportIcon({ className = "size-[15px]" }: { className?: string }) {
   return (
@@ -27,7 +27,6 @@ function ReportIcon({ className = "size-[15px]" }: { className?: string }) {
 function HeaderIcon({ name, size = 18 }: { name: HeaderIconName; size?: number }) {
   const paths: Record<HeaderIconName, React.ReactNode> = {
     bell: <><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9m-8 12a2 2 0 0 0 4 0" /></>,
-    chevron: <path d="m6 9 6 6 6-6" />,
   };
 
   return (
@@ -41,11 +40,13 @@ export default function Header() {
   const { pathname } = useLocation();
   const [menuOpen, setMenuOpen] = useState(false);
   const { pendingCount } = useVerifications();
-  const isActive = (to: string) => pathname === to || (to === "/reports" && pathname === "/");
+  const isActive = (to: string) =>
+    pathname === to ||
+    (to === "/admin" && pathname === "/admin/reports");
 
   return (
     <header className="sticky top-0 z-40 grid h-[72px] grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center border-b border-[#e9efee] bg-white/95 px-[max(40px,calc((100vw-1136px)/2))] shadow-[0_1px_0_rgba(29,49,51,.02)] backdrop-blur-xl max-[920px]:h-[64px] max-[920px]:px-6 max-[680px]:h-[60px] max-[680px]:grid-cols-[1fr_auto] max-[680px]:px-4">
-      <Link className="inline-flex items-center justify-self-start gap-2.5 whitespace-nowrap text-[17px] font-bold tracking-[-0.55px] text-[#263a3c] max-[680px]:gap-2 max-[680px]:text-base focus-visible:outline-[3px] focus-visible:outline-[#67c9c1] focus-visible:outline-offset-[3px]" to="/reports" aria-label="CareerConnect admin home">
+      <Link className="inline-flex items-center justify-self-start gap-2.5 whitespace-nowrap text-[17px] font-bold tracking-[-0.55px] text-[#263a3c] max-[680px]:gap-2 max-[680px]:text-base focus-visible:outline-[3px] focus-visible:outline-[#67c9c1] focus-visible:outline-offset-[3px]" to="/admin" aria-label="CareerConnect admin home">
         <span className="grid size-7.75 place-items-center rounded-[10px] bg-[#078b8d] text-[19px] font-bold tracking-[-1px] text-white max-[680px]:size-7 max-[680px]:rounded-lg max-[680px]:text-[17px]">C</span>
         <span>Career<span className="text-[#078b8d]">Connect</span></span>
         <span className="ml-1 rounded-md bg-[#eef7f6] px-2 py-1 text-[10px] font-semibold text-[#078b8d] max-[680px]:hidden">Admin</span>
@@ -70,14 +71,14 @@ export default function Header() {
         ))}
       </nav>
       <div className="flex items-center justify-self-end gap-5 max-[680px]:gap-2.5">
-        <button className="relative inline-flex size-9 items-center justify-center text-[#65787a] [-webkit-tap-highlight-color:transparent] focus-visible:outline-[3px] focus-visible:outline-[#67c9c1] focus-visible:outline-offset-[3px]" aria-label="Notifications">
+        <Link className="relative inline-flex size-9 items-center justify-center text-[#65787a] [-webkit-tap-highlight-color:transparent] focus-visible:outline-[3px] focus-visible:outline-[#67c9c1] focus-visible:outline-offset-[3px]" aria-label={`Notifications${pendingCount > 0 ? `, ${pendingCount} pending verifications` : ""}`} to="/admin/verifications" title="Review pending verifications">
           <HeaderIcon name="bell" />
-          <span className="absolute top-1.75 right-1.75 size-1.75 rounded-full border-[1.5px] border-white bg-[#ef9c63]" />
-        </button>
-        <button className="inline-flex items-center gap-2 text-[#65787a] max-[680px]:hidden [-webkit-tap-highlight-color:transparent] focus-visible:outline-[3px] focus-visible:outline-[#67c9c1] focus-visible:outline-offset-[3px]" aria-label="Open profile menu">
+          {pendingCount > 0 && <span className="absolute -top-0.5 -right-0.5 grid min-h-4 min-w-4 place-items-center rounded-full border border-white bg-[#d94a3d] px-1 text-[9px] font-bold text-white">{pendingCount > 9 ? "9+" : pendingCount}</span>}
+        </Link>
+        <div className="inline-flex items-center gap-2 text-[#65787a] max-[680px]:hidden" aria-label="Administrator account">
           <span className="grid size-8 place-items-center rounded-full bg-[#d8ede7] text-[10px] font-bold text-[#36706c]">JM</span>
-          <HeaderIcon name="chevron" size={14} />
-        </button>
+          <span className="text-xs font-medium">Admin</span>
+        </div>
         <button
           type="button"
           onClick={() => setMenuOpen((open) => !open)}

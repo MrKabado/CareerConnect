@@ -1,3 +1,4 @@
+import { Menu, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router";
 import { useAuth } from "@/features/auth/useAuth";
@@ -10,6 +11,7 @@ import { useUnreadCount } from "@/features/messaging/hooks";
 
 const navItems = [
   { label: "Job Search", to: "/job-search", icon: jobSearchNavIcon },
+  { label: "OJT Search", to: "/ojt-search", icon: jobSearchNavIcon },
   { label: "Recommendations", to: "/recommendations", icon: recommendationsNavIcon },
   { label: "My Applications", to: "/applications", icon: applicationsNavIcon },
   { label: "Profile", to: "/profile", icon: profileNavIcon },
@@ -64,8 +66,13 @@ export default function Header() {
   );
   const { unreadCount } = useUnreadCount(messagingActor);
   const [openDropdown, setOpenDropdown] = useState<"account" | null>(null);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [logoutError, setLogoutError] = useState<string | null>(null);
   const dropdownAreaRef = useRef<HTMLDivElement>(null);
+  const isNavItemActive = (to: string) =>
+    pathname === to ||
+    (to === "/job-search" &&
+      (pathname === "/" || pathname.startsWith("/apply/")));
 
   useEffect(() => {
     if (!openDropdown) return;
@@ -104,7 +111,7 @@ export default function Header() {
   }
 
   return (
-    <header className="grid h-18 grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center border-b border-[#edf1f1] bg-white px-[max(40px,calc((100vw-1136px)/2))] max-[920px]:h-16.5 max-[920px]:px-6 max-[680px]:h-15 max-[680px]:grid-cols-[1fr_auto] max-[680px]:px-4.25">
+    <header className="relative grid h-18 grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center border-b border-[#edf1f1] bg-white px-[max(40px,calc((100vw-1136px)/2))] max-[920px]:h-16.5 max-[920px]:px-6 max-[680px]:h-15 max-[680px]:grid-cols-[1fr_auto] max-[680px]:px-4.25">
       <Link className="inline-flex items-center justify-self-start gap-2.5 whitespace-nowrap text-[18px] font-bold tracking-[-0.55px] text-[#263a3c] max-[680px]:gap-2 max-[680px]:text-base focus-visible:outline-[3px] focus-visible:outline-[#67c9c1] focus-visible:outline-offset-[3px]" to="/job-search" aria-label="CareerConnect home">
         <span className="grid size-7.75 place-items-center rounded-[10px] bg-[#078b8d] text-[19px] font-bold tracking-[-1px] text-white max-[680px]:size-7 max-[680px]:rounded-lg max-[680px]:text-[17px]">C</span>
         <span>Career<span className="text-[#078b8d]">Connect</span></span>
@@ -112,7 +119,8 @@ export default function Header() {
       <nav className="flex h-full items-stretch justify-self-center gap-8.5 max-[1300px]:gap-6 max-[920px]:gap-4.5 min-[681px]:max-[760px]:[&>*:nth-child(3)]:hidden max-[920px]:[&>*:nth-child(2)]:hidden max-[680px]:hidden" aria-label="Main navigation">
         {navItems.map((item) => (
           <Link
-            className={`${(pathname === item.to || (item.label === "Job Search" && (pathname === "/" || pathname === "/ojt-search" || pathname.startsWith("/apply/"))))
+            aria-current={isNavItemActive(item.to) ? "page" : undefined}
+            className={`${isNavItemActive(item.to)
               ? "relative text-[#087879] after:absolute after:right-0 after:bottom-0 after:left-0 after:h-0.5 after:bg-[#078b8d] after:content-['']"
               : "text-[#687b7e] hover:text-[#087879]"} flex items-center gap-1.25 whitespace-nowrap text-[13px] font-medium max-[920px]:text-[11px] focus-visible:outline-[3px] focus-visible:outline-[#67c9c1] focus-visible:outline-offset-[3px]`}
             to={item.to}
@@ -128,6 +136,15 @@ export default function Header() {
         ref={dropdownAreaRef}
       >
         <MessagesIconLink unreadCount={unreadCount} />
+        <button
+          aria-expanded={mobileMenuOpen}
+          aria-label={mobileMenuOpen ? "Close navigation" : "Open navigation"}
+          className="hidden size-9 place-items-center rounded-lg text-[#65787a] hover:bg-[#f1f6f5] focus-visible:outline-[3px] focus-visible:outline-[#67c9c1] focus-visible:outline-offset-[3px] max-[680px]:grid"
+          onClick={() => setMobileMenuOpen((open) => !open)}
+          type="button"
+        >
+          {mobileMenuOpen ? <X size={20} /> : <Menu size={20} />}
+        </button>
         <div className="relative">
           <button
             aria-expanded={openDropdown === "account"}
@@ -169,6 +186,40 @@ export default function Header() {
           )}
         </div>
       </div>
+      {mobileMenuOpen && (
+        <nav
+          aria-label="Mobile main navigation"
+          className="absolute inset-x-0 top-full z-40 border-b border-[#edf1f1] bg-white px-4 py-3 shadow-lg min-[681px]:hidden"
+        >
+          {navItems.map((item) => (
+            <Link
+              aria-current={isNavItemActive(item.to) ? "page" : undefined}
+              className={`flex items-center gap-3 rounded-lg px-3 py-3 text-sm font-medium ${
+                isNavItemActive(item.to)
+                  ? "bg-[#eef7f6] text-[#087879]"
+                  : "text-[#687b7e] hover:bg-[#f5f8f8]"
+              }`}
+              key={item.label}
+              onClick={() => setMobileMenuOpen(false)}
+              to={item.to}
+            >
+              <img className="size-4 object-contain" src={item.icon} alt="" />
+              {item.label}
+            </Link>
+          ))}
+          <Link
+            className={`flex items-center gap-3 rounded-lg px-3 py-3 text-sm font-medium ${
+              pathname.startsWith("/messages")
+                ? "bg-[#eef7f6] text-[#087879]"
+                : "text-[#687b7e] hover:bg-[#f5f8f8]"
+            }`}
+            onClick={() => setMobileMenuOpen(false)}
+            to="/messages"
+          >
+            Messages
+          </Link>
+        </nav>
+      )}
     </header>
   );
 }

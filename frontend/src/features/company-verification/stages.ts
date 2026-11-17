@@ -54,7 +54,7 @@ export const companyVerificationStageDefinitions = [
     weight: 10,
     status: "not_started",
     hint: "Verify your work email to continue.",
-    route: "/employer/verification/email",
+    route: "/employer/verify-email",
   },
   {
     id: "company_information",
@@ -72,7 +72,7 @@ export const companyVerificationStageDefinitions = [
     weight: 25,
     status: "not_started",
     hint: "Upload proof of business existence and the registering person's government ID.",
-    route: "/employer/verification/documents",
+    route: "/employer/verification",
   },
   {
     id: "verification_review",
@@ -81,7 +81,7 @@ export const companyVerificationStageDefinitions = [
     weight: 20,
     status: "not_started",
     hint: "Submit your details and documents to begin review.",
-    route: "/employer/verification/review",
+    route: "/employer/under-review",
   },
   {
     id: "hiring_setup",

@@ -742,13 +742,20 @@ export function getMessagingActor(user: {
   };
 }
 
-export function getApplicantMessagingActor(user: {
+type AuthenticatedMessagingUser = {
   id: number;
   name: string;
   email: string;
-  role: "applicant" | "employer";
-} | null): MessagingActor | null {
-  if (user?.role === "applicant") return getMessagingActor(user);
+} & (
+  | { role: "admin" }
+  | { role: "applicant" }
+  | { role: "employer" }
+);
+
+export function getApplicantMessagingActor(
+  user: AuthenticatedMessagingUser | null,
+): MessagingActor | null {
+  if (user && user.role === "applicant") return getMessagingActor(user);
   if (user || !import.meta.env.DEV) return null;
 
   return {
@@ -759,13 +766,10 @@ export function getApplicantMessagingActor(user: {
   };
 }
 
-export function getEmployerMessagingActor(user: {
-  id: number;
-  name: string;
-  email: string;
-  role: "applicant" | "employer";
-} | null): MessagingActor | null {
-  if (user?.role === "employer") return getMessagingActor(user);
+export function getEmployerMessagingActor(
+  user: AuthenticatedMessagingUser | null,
+): MessagingActor | null {
+  if (user && user.role === "employer") return getMessagingActor(user);
   if (user) return null;
 
   const employer = employerRegistrationApi.getSnapshot();

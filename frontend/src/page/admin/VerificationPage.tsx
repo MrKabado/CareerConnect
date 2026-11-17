@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { useOutletContext } from "react-router-dom";
+import { useOutletContext } from "react-router";
 import VerificationRow from "../../components/admin/VerificationRow";
 import DocumentPreviewModal from "../../components/admin/modals/DocumentPreviewModal";
 import { PageHeader, SearchBar, Select } from "../../components/common";

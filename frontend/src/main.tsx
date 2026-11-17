@@ -2,13 +2,20 @@ import "@/styles/global.css";
 
 import { Suspense } from "react";
 import { createRoot } from "react-dom/client";
-import { BrowserRouter, Routes, Route } from "react-router";
+import { BrowserRouter, Navigate, Route, Routes } from "react-router";
 import { PageSkeleton } from "@/components/ui/skeleton";
+import AdminLayout from "@/layouts/adminlayout";
 import GuestLayout from "@/layouts/guestLayout";
 import OnboardingLayout from "@/layouts/onboardingLayout";
 import { AuthProvider } from "@/features/auth/AuthProvider";
+import RequireAuth from "@/features/auth/RequireAuth";
+import RequireRole from "@/features/auth/RequireRole";
 import RequireEmployerStatus from "@/features/employer-registration/RequireEmployerStatus";
 import EmployerRoutePlaceholder from "@/features/employer-registration/components/EmployerRoutePlaceholder";
+import CategoriesPage from "@/page/admin/CategoryCard";
+import ReportsPage from "@/page/admin/ReportsPage";
+import UsersPage from "@/page/admin/StatCard";
+import VerificationPage from "@/page/admin/VerificationPage";
 import {
   ApplicationsPage,
   ApplicantMessagesPage,
@@ -16,6 +23,7 @@ import {
   EmployerApplicantsPage,
   EmployerApplicantDetailPage,
   EmployerCompanyProfilePage,
+  EmployerCompanyInformationPage,
   EmployerHiringSetupPage,
   EmployerJobListingPage,
   EmployerJobListingReviewPage,
@@ -35,6 +43,7 @@ import {
   RecommendationsPage,
   VerifyEmailPage,
 } from "@/pages/lazyPages";
+import NotFoundPage from "@/pages/NotFoundPage";
 
 createRoot(document.getElementById("root")!).render(
   <BrowserRouter>
@@ -79,6 +88,26 @@ createRoot(document.getElementById("root")!).render(
                 <EmployerVerificationPage />
               </RequireEmployerStatus>
             }
+          />
+          <Route
+            path="/employer/verification/company-info"
+            element={
+              <RequireEmployerStatus access="verification">
+                <EmployerCompanyInformationPage />
+              </RequireEmployerStatus>
+            }
+          />
+          <Route
+            path="/employer/verification/email"
+            element={<Navigate to="/employer/verify-email" replace />}
+          />
+          <Route
+            path="/employer/verification/documents"
+            element={<Navigate to="/employer/verification" replace />}
+          />
+          <Route
+            path="/employer/verification/review"
+            element={<Navigate to="/employer/under-review" replace />}
           />
           <Route
             path="/employer/under-review"
@@ -166,6 +195,33 @@ createRoot(document.getElementById("root")!).render(
           <Route element={<OnboardingLayout />}>
             <Route path="/onboarding" element={<OnboardingPage />} />
           </Route>
+          <Route
+            path="/admin"
+            element={
+              <RequireAuth>
+                <RequireRole role="admin">
+                  <AdminLayout />
+                </RequireRole>
+              </RequireAuth>
+            }
+          >
+            <Route index element={<ReportsPage />} />
+            <Route path="reports" element={<ReportsPage />} />
+            <Route path="verifications" element={<VerificationPage />} />
+            <Route path="categories" element={<CategoriesPage />} />
+            <Route path="users" element={<UsersPage />} />
+          </Route>
+          <Route path="/reports" element={<Navigate to="/admin" replace />} />
+          <Route
+            path="/verifications"
+            element={<Navigate to="/admin/verifications" replace />}
+          />
+          <Route
+            path="/categories"
+            element={<Navigate to="/admin/categories" replace />}
+          />
+          <Route path="/users" element={<Navigate to="/admin/users" replace />} />
+          <Route path="*" element={<NotFoundPage />} />
         </Routes>
       </Suspense>
     </AuthProvider>

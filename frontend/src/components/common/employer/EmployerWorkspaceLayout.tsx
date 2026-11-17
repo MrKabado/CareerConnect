@@ -1,3 +1,4 @@
+import { Menu, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Link, useLocation, useNavigate } from "react-router";
 import Footer from "@/components/common/user/userFooter";
@@ -19,6 +20,7 @@ function EmployerHeader() {
   const messagingActor = useMemo(() => getEmployerMessagingActor(user), [user]);
   const { unreadCount } = useUnreadCount(messagingActor);
   const messagesActive = pathname === "/employer/messages" || pathname.startsWith("/employer/messages/");
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
   const [logoutError, setLogoutError] = useState<string | null>(null);
   const accountAreaRef = useRef<HTMLDivElement>(null);
@@ -57,7 +59,7 @@ function EmployerHeader() {
   }
 
   return (
-    <header className="grid h-18 grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center border-b border-[#edf1f1] bg-white px-[max(40px,calc((100vw-1136px)/2))] max-[920px]:h-16.5 max-[920px]:px-6 max-[680px]:h-15 max-[680px]:grid-cols-[1fr_auto] max-[680px]:px-4">
+    <header className="relative grid h-18 grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center border-b border-[#edf1f1] bg-white px-[max(40px,calc((100vw-1136px)/2))] max-[920px]:h-16.5 max-[920px]:px-6 max-[680px]:h-15 max-[680px]:grid-cols-[1fr_auto] max-[680px]:px-4">
       <Link
         aria-label="CareerConnect employer overview"
         className="inline-flex items-center justify-self-start gap-2.5 whitespace-nowrap text-[18px] font-bold tracking-[-0.55px] text-[#263a3c] focus-visible:outline-[3px] focus-visible:outline-[#67c9c1] focus-visible:outline-offset-[3px] max-[680px]:gap-2 max-[680px]:text-base"
@@ -75,7 +77,7 @@ function EmployerHeader() {
         className="flex h-full items-stretch justify-self-center gap-8.5 max-[1300px]:gap-6 max-[920px]:gap-4.5 max-[680px]:hidden"
       >
         {navigationItems.map(({ label, to }) => {
-          const active = pathname === to;
+          const active = pathname === to || pathname.startsWith(`${to}/`);
           return (
             <Link
               aria-current={active ? "page" : undefined}
@@ -93,6 +95,15 @@ function EmployerHeader() {
         })}
       </nav>
       <div className="relative flex items-center justify-self-end gap-3" ref={accountAreaRef}>
+        <button
+          aria-expanded={mobileMenuOpen}
+          aria-label={mobileMenuOpen ? "Close navigation" : "Open navigation"}
+          className="hidden size-9 place-items-center rounded-lg text-[#65787a] hover:bg-[#f1f6f5] focus-visible:outline-[3px] focus-visible:outline-[#67c9c1] focus-visible:outline-offset-[3px] max-[680px]:grid"
+          onClick={() => setMobileMenuOpen((open) => !open)}
+          type="button"
+        >
+          {mobileMenuOpen ? <X size={20} /> : <Menu size={20} />}
+        </button>
         <Link
           aria-current={messagesActive ? "page" : undefined}
           aria-label={`Messages${unreadCount > 0 ? `, ${unreadCount} unread` : ""}`}
@@ -143,6 +154,43 @@ function EmployerHeader() {
           </div>
         )}
       </div>
+      {mobileMenuOpen && (
+        <nav
+          aria-label="Mobile employer navigation"
+          className="absolute inset-x-0 top-full z-40 border-b border-[#edf1f1] bg-white px-4 py-3 shadow-lg min-[681px]:hidden"
+        >
+          {navigationItems.map(({ label, to }) => {
+            const active = pathname === to || pathname.startsWith(`${to}/`);
+            return (
+              <Link
+                aria-current={active ? "page" : undefined}
+                className={`block rounded-lg px-3 py-3 text-sm font-medium ${
+                  active
+                    ? "bg-[#eef7f6] text-[#087879]"
+                    : "text-[#687b7e] hover:bg-[#f5f8f8]"
+                }`}
+                key={to}
+                onClick={() => setMobileMenuOpen(false)}
+                to={to}
+              >
+                {label}
+              </Link>
+            );
+          })}
+          <Link
+            aria-current={messagesActive ? "page" : undefined}
+            className={`block rounded-lg px-3 py-3 text-sm font-medium ${
+              messagesActive
+                ? "bg-[#eef7f6] text-[#087879]"
+                : "text-[#687b7e] hover:bg-[#f5f8f8]"
+            }`}
+            onClick={() => setMobileMenuOpen(false)}
+            to="/employer/messages"
+          >
+            Messages{unreadCount > 0 ? ` (${unreadCount} unread)` : ""}
+          </Link>
+        </nav>
+      )}
     </header>
   );
 }

@@ -42,3 +42,9 @@ export const EmployerCompanyProfilePage = lazy(
 export const EmployerVerificationPage = lazy(
   () => import("@/pages/employer/verification"),
 );
+export const EmployerCompanyInformationPage = lazy(
+  () =>
+    import(
+      "@/features/employer-verification/components/EmployerCompanyInformationPage"
+    ),
+);

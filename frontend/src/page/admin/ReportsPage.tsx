@@ -1,39 +1,46 @@
 import { Briefcase, Building2, Download, FileText, Users } from "lucide-react";
-import { Link, useOutletContext } from "react-router-dom";
+import { Link, useOutletContext } from "react-router";
 import StatCard from "../../components/admin/StatCard";
-import { Button, Card, PageHeader, Select } from "../../components/common";
+import { Button, Card, PageHeader } from "../../components/common";
 import { topJobs } from "../../data/mock";
 import type { AdminOutletContext } from "../../types";
-import { useState } from "react";
-
-const RANGE_OPTIONS = [
-  { value: "7", label: "Last 7 days" },
-  { value: "30", label: "Last 30 days" },
-  { value: "90", label: "Last 90 days" },
-];
+import { downloadCsv } from "../../utils/csv";
 
 export default function ReportsPage() {
   const { pendingCount } = useOutletContext<AdminOutletContext>();
-  const [range, setRange] = useState("30");
   const maxApplications = Math.max(...topJobs.map((j) => j.applications));
+  const reportStats = [
+    ["Total users", "12,480", "+8.2%"],
+    ["Employers", "942", "+4.1%"],
+    ["Active jobs", "1,864", "+6.7%"],
+    ["Applications", "30,720", "+12.3%"],
+    ["Pending verifications", pendingCount, ""],
+  ] as const;
+
+  function exportReport() {
+    downloadCsv("careerconnect-report.csv", [
+      ["Metric", "Value", "Change"],
+      ...reportStats.map(([label, value, change]) => [label, value, change]),
+      [],
+      ["Most applied jobs", "Company", "Applications"],
+      ...topJobs.map((job) => [job.title, job.company, job.applications]),
+    ]);
+  }
 
   return (
     <section>
       <PageHeader
         title="Reports overview"
-        subtitle="Platform activity and hiring performance at a glance."
+        subtitle="Sample data for reviewing the reports interface; these figures are not live."
         actions={
-          <div className="flex gap-2">
-            <Select
-              ariaLabel="Date range"
-              value={range}
-              onChange={setRange}
-              options={RANGE_OPTIONS}
-            />
-            <Button variant="outline" className="h-10" icon={<Download size={14} />}>
-              Export report
-            </Button>
-          </div>
+          <Button
+            variant="outline"
+            className="h-10"
+            icon={<Download size={14} />}
+            onClick={exportReport}
+          >
+            Export report
+          </Button>
         }
       />
 
