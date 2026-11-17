@@ -751,3 +751,4 @@ function compensation(listing: Listing): string {
 }
 
 export default App
+

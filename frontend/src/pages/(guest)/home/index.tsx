@@ -1,15 +1,8 @@
-import { useState } from "react";
-import Hero from "@/components/common/hero";
-import MainBody from "@/components/common/mainBody";
-
-export default function Homepage() {
-  const [search, setSearch] = useState("");
-  const [location, setLocation] = useState("");
-
+export default function HomePage() {
   return (
-    <>
-      <Hero search={search} onSearchChange={setSearch} location={location} onLocationChange={setLocation} />
-      <MainBody search={search} onSearchChange={setSearch} location={location} onLocationChange={setLocation} />
-    </>
+    <main style={{ padding: "2rem" }}>
+      <h1>CareerConnect</h1>
+      <p>Welcome to the home page.</p>
+    </main>
   );
 }

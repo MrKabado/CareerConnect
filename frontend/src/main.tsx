@@ -170,4 +170,5 @@ createRoot(document.getElementById("root")!).render(
       </Suspense>
     </AuthProvider>
   </BrowserRouter>,
-)
+);
+

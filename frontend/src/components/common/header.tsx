@@ -1,36 +1,108 @@
-import jobSearchNavIcon from "@/assets/Icon (9).svg";
+import { BriefcaseBusiness, Grid2X2, Menu, Users, X } from "lucide-react";
+import { useState } from "react";
+import { Link, useLocation } from "react-router";
+import { useVerifications } from "../hooks/useVerification";
 
 const navItems = [
-  { label: "Job Search", href: "#jobs", icon: jobSearchNavIcon, active: true },
+  { label: "Reports", to: "/reports", icon: null },
+  { label: "Verifications", to: "/verifications", icon: BriefcaseBusiness, badge: true },
+  { label: "Categories", to: "/categories", icon: Grid2X2 },
+  { label: "Users", to: "/users", icon: Users },
 ] as const;
 
-export default function Header() {
+type HeaderIconName = "bell" | "chevron";
+
+function ReportIcon({ className = "size-[15px]" }: { className?: string }) {
   return (
-    <header className="grid h-18 grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center border-b border-[#edf1f1] bg-white px-[max(40px,calc((100vw-1136px)/2))] max-[1300px]:px-10 max-[920px]:h-16.5 max-[920px]:px-6 max-[680px]:h-15 max-[680px]:grid-cols-[1fr_auto] max-[680px]:px-4.25">
-      <a className="inline-flex items-center justify-self-start gap-2.5 whitespace-nowrap text-[18px] font-bold tracking-[-0.55px] text-[#263a3c] max-[680px]:gap-2 max-[680px]:text-base focus-visible:outline-[3px] focus-visible:outline-[#67c9c1] focus-visible:outline-offset-[3px]" href="/" aria-label="CareerConnect home">
+    <img
+      src="/report-icon.png"
+      alt=""
+      aria-hidden="true"
+      className={`${className} object-contain opacity-75 transition-opacity group-hover:opacity-100`}
+      draggable={false}
+    />
+  );
+}
+
+function HeaderIcon({ name, size = 18 }: { name: HeaderIconName; size?: number }) {
+  const paths: Record<HeaderIconName, React.ReactNode> = {
+    bell: <><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9m-8 12a2 2 0 0 0 4 0" /></>,
+    chevron: <path d="m6 9 6 6 6-6" />,
+  };
+
+  return (
+    <svg aria-hidden="true" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+      {paths[name]}
+    </svg>
+  );
+}
+
+export default function Header() {
+  const { pathname } = useLocation();
+  const [menuOpen, setMenuOpen] = useState(false);
+  const { pendingCount } = useVerifications();
+  const isActive = (to: string) => pathname === to || (to === "/reports" && pathname === "/");
+
+  return (
+    <header className="sticky top-0 z-40 grid h-[72px] grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center border-b border-[#e9efee] bg-white/95 px-[max(40px,calc((100vw-1136px)/2))] shadow-[0_1px_0_rgba(29,49,51,.02)] backdrop-blur-xl max-[920px]:h-[64px] max-[920px]:px-6 max-[680px]:h-[60px] max-[680px]:grid-cols-[1fr_auto] max-[680px]:px-4">
+      <Link className="inline-flex items-center justify-self-start gap-2.5 whitespace-nowrap text-[17px] font-bold tracking-[-0.55px] text-[#263a3c] max-[680px]:gap-2 max-[680px]:text-base focus-visible:outline-[3px] focus-visible:outline-[#67c9c1] focus-visible:outline-offset-[3px]" to="/reports" aria-label="CareerConnect admin home">
         <span className="grid size-7.75 place-items-center rounded-[10px] bg-[#078b8d] text-[19px] font-bold tracking-[-1px] text-white max-[680px]:size-7 max-[680px]:rounded-lg max-[680px]:text-[17px]">C</span>
         <span>Career<span className="text-[#078b8d]">Connect</span></span>
-      </a>
-      <nav className="flex h-full items-stretch justify-self-center gap-8.5 max-[1300px]:gap-6 max-[920px]:gap-4.5 min-[681px]:max-[760px]:[&>*:nth-child(3)]:hidden max-[920px]:[&>*:nth-child(2)]:hidden max-[680px]:hidden" aria-label="Main navigation">
+        <span className="ml-1 rounded-md bg-[#eef7f6] px-2 py-1 text-[10px] font-semibold text-[#078b8d] max-[680px]:hidden">Admin</span>
+      </Link>
+      <nav className="flex h-full items-stretch justify-self-center gap-4 max-[1100px]:gap-2 max-[680px]:hidden" aria-label="Admin navigation">
         {navItems.map((item) => (
-          <a
-            className={`${item.active
-              ? "relative text-[#087879] after:absolute after:right-0 after:bottom-0 after:left-0 after:h-0.5 after:bg-[#078b8d] after:content-['']"
-              : "text-[#687b7e] hover:text-[#087879]"} flex items-center gap-1.25 whitespace-nowrap text-[13px] font-medium max-[920px]:text-[11px] focus-visible:outline-[3px] focus-visible:outline-[#67c9c1] focus-visible:outline-offset-[3px]`}
-            href={item.href}
+          <Link
+            className={`group ${isActive(item.to)
+              ? "text-[#087879] after:absolute after:bottom-0 after:left-2.5 after:right-2.5 after:h-[2px] after:bg-[#078b8d]"
+              : "text-[#687b7e] hover:text-[#087879]"} relative inline-flex h-full items-center gap-1.5 whitespace-nowrap px-2.5 text-[12px] font-semibold focus-visible:outline-[3px] focus-visible:outline-[#67c9c1] focus-visible:outline-offset-[-3px]`}
+            to={item.to}
             key={item.label}
           >
-            <img className="size-3 object-contain" src={item.icon} alt="" />
+            {item.icon ? <item.icon size={13} strokeWidth={1.8} /> : (
+              <span className="grid size-[18px] place-items-center rounded-[5px]">
+                <ReportIcon />
+              </span>
+            )}
             {item.label}
-          </a>
+            {"badge" in item && pendingCount > 0 && <span className="grid size-[18px] shrink-0 place-items-center rounded-full bg-[#e9a46f] text-[10px] font-bold leading-none text-white">{pendingCount}</span>}
+          </Link>
         ))}
       </nav>
-      <a
-        className="inline-flex min-h-9 items-center justify-center justify-self-end rounded-lg bg-[#078b8d] px-4 text-xs font-semibold text-white transition-colors hover:bg-[#066f72] focus-visible:outline-[3px] focus-visible:outline-[#67c9c1] focus-visible:outline-offset-[3px]"
-        href="/login"
-      >
-        Log in
-      </a>
+      <div className="flex items-center justify-self-end gap-5 max-[680px]:gap-2.5">
+        <button className="relative inline-flex size-9 items-center justify-center text-[#65787a] [-webkit-tap-highlight-color:transparent] focus-visible:outline-[3px] focus-visible:outline-[#67c9c1] focus-visible:outline-offset-[3px]" aria-label="Notifications">
+          <HeaderIcon name="bell" />
+          <span className="absolute top-1.75 right-1.75 size-1.75 rounded-full border-[1.5px] border-white bg-[#ef9c63]" />
+        </button>
+        <button className="inline-flex items-center gap-2 text-[#65787a] max-[680px]:hidden [-webkit-tap-highlight-color:transparent] focus-visible:outline-[3px] focus-visible:outline-[#67c9c1] focus-visible:outline-offset-[3px]" aria-label="Open profile menu">
+          <span className="grid size-8 place-items-center rounded-full bg-[#d8ede7] text-[10px] font-bold text-[#36706c]">JM</span>
+          <HeaderIcon name="chevron" size={14} />
+        </button>
+        <button
+          type="button"
+          onClick={() => setMenuOpen((open) => !open)}
+          className="hidden size-9 place-items-center rounded-lg text-[#65787a] max-[680px]:grid"
+          aria-label={menuOpen ? "Close navigation" : "Open navigation"}
+          aria-expanded={menuOpen}
+        >
+          {menuOpen ? <X size={20} /> : <Menu size={20} />}
+        </button>
+      </div>
+      {menuOpen && (
+        <nav className="absolute inset-x-0 top-full hidden border-b border-[#edf1f1] bg-white px-4 py-3 shadow-lg max-[680px]:block" aria-label="Mobile admin navigation">
+          {navItems.map((item) => (
+            <Link
+              key={item.label}
+              to={item.to}
+              onClick={() => setMenuOpen(false)}
+              className={`${isActive(item.to) ? "bg-[#eef7f6] text-[#087879]" : "text-[#687b7e]"} flex items-center gap-3 rounded-lg px-3 py-3 text-sm font-medium`}
+            >
+              {item.icon ? <item.icon size={17} /> : <ReportIcon className="size-[18px]" />}
+              {item.label}
+            </Link>
+          ))}
+        </nav>
+      )}
     </header>
   );
 }
