@@ -4,12 +4,16 @@ Laravel 12 JSON API using MySQL and Sanctum bearer tokens. Public registration s
 
 ## Local setup
 
-1. Copy `.env.example` to `.env` and set unique `APP_KEY`, `DB_PASSWORD`, and `DB_ROOT_PASSWORD` values. Keep `.env` out of version control.
-2. Generate the app key with `php artisan key:generate`.
-3. Start the backend and MySQL with `docker compose up --build`.
-4. For local non-Docker development, configure `DB_HOST=127.0.0.1` and run `php artisan migrate`.
-5. To create the initial administrator, set `ADMIN_SEED_NAME`, `ADMIN_SEED_EMAIL`, and a strong `ADMIN_SEED_PASSWORD` in `.env`, then run `php artisan db:seed --class=AdminUserSeeder`.
-6. Set `FRONTEND_URL` in `backend/.env` and `VITE_API_BASE_URL` in `frontend/.env` to the browser-accessible frontend/API origins.
+1. Copy `.env.example` to `.env`, set a unique `DB_PASSWORD` and `DB_ROOT_PASSWORD`, and keep `.env` out of version control.
+2. Generate the application key with `docker compose run --rm backend php artisan key:generate`.
+3. Start MySQL and Laravel from this directory with `docker compose up --build -d`. The backend runs pending migrations on startup.
+4. Seed fictional local demo accounts and records with `docker compose exec -T backend php artisan db:seed --class=LocalDemoSeeder --force`.
+5. In `frontend`, copy `.env.example` to `.env`, confirm `VITE_API_BASE_URL=http://localhost:8000/api`, install dependencies with `npm install`, and start Vite with `npm run dev -- --host 127.0.0.1`.
+6. Open `http://localhost:5173`. Configure `FRONTEND_URL` in `backend/.env` to the browser-accessible frontend origin when it differs from the default.
+
+Required local environment values are `APP_KEY`, `DB_PASSWORD`, and `DB_ROOT_PASSWORD` in `backend/.env`, and `VITE_API_BASE_URL` in `frontend/.env`. `DB_DATABASE` and `DB_USERNAME` have Compose defaults. Use unique local database passwords; do not commit either `.env` file.
+
+To stop Vite, press `Ctrl+C` in its terminal. To stop the Docker services, run `docker compose down` from `backend`. The named `mysql_data` volume and backend `storage` bind mount persist across stop/start and container recreation. **Do not use `docker compose down -v`** unless you intentionally want to delete the local database volume.
 
 ## Local file storage
 
@@ -139,5 +143,7 @@ For future application submission, attach `listing.accepting-applications` along
 ## Tests
 
 ```sh
-php artisan test
+docker compose exec -T backend php artisan test
 ```
+
+The PHPUnit configuration forces the test environment and an in-memory SQLite database, so this command does not use or refresh the local MySQL database.

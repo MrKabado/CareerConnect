@@ -59,7 +59,16 @@ function MessagesIconLink({ unreadCount }: { unreadCount: number }) {
 export default function Header() {
   const { pathname } = useLocation();
   const navigate = useNavigate();
-  const { logout, user } = useAuth();
+  const { logout, status, user } = useAuth();
+  const isApplicant = user?.role === "applicant";
+  const visibleNavItems = isApplicant ? navItems : navItems.slice(0, 2);
+  const userInitials = user?.name
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0].toUpperCase())
+    .join("") || "U";
   const messagingActor = useMemo(
     () => getApplicantMessagingActor(user),
     [user],
@@ -117,7 +126,7 @@ export default function Header() {
         <span>Career<span className="text-[#078b8d]">Connect</span></span>
       </Link>
       <nav className="flex h-full items-stretch justify-self-center gap-8.5 max-[1300px]:gap-6 max-[920px]:gap-4.5 min-[681px]:max-[760px]:[&>*:nth-child(3)]:hidden max-[920px]:[&>*:nth-child(2)]:hidden max-[680px]:hidden" aria-label="Main navigation">
-        {navItems.map((item) => (
+        {visibleNavItems.map((item) => (
           <Link
             aria-current={isNavItemActive(item.to) ? "page" : undefined}
             className={`${isNavItemActive(item.to)
@@ -135,7 +144,7 @@ export default function Header() {
         className="flex items-center justify-self-end gap-5 max-[680px]:gap-2.5"
         ref={dropdownAreaRef}
       >
-        <MessagesIconLink unreadCount={unreadCount} />
+        {isApplicant && <MessagesIconLink unreadCount={unreadCount} />}
         <button
           aria-expanded={mobileMenuOpen}
           aria-label={mobileMenuOpen ? "Close navigation" : "Open navigation"}
@@ -145,53 +154,62 @@ export default function Header() {
         >
           {mobileMenuOpen ? <X size={20} /> : <Menu size={20} />}
         </button>
-        <div className="relative">
-          <button
-            aria-expanded={openDropdown === "account"}
-            aria-haspopup="menu"
-            aria-label="Open profile menu"
-            className="inline-flex items-center gap-2 text-[#65787a] [-webkit-tap-highlight-color:transparent] focus-visible:outline-[3px] focus-visible:outline-[#67c9c1] focus-visible:outline-offset-[3px]"
-            onClick={() =>
-              setOpenDropdown((current) =>
-                current === "account" ? null : "account",
-              )
-            }
-            type="button"
-          >
-            <span className="grid size-8 place-items-center rounded-full bg-[#d8ede7] text-[10px] font-bold text-[#36706c]">
-              JM
-            </span>
-            <HeaderIcon name="chevron" size={14} />
-          </button>
-          {openDropdown === "account" && (
-            <div
-              aria-label="Account menu"
-              className="absolute top-full right-0 z-50 mt-2 w-44 rounded-xl border border-[#e5eeec] bg-white p-1.5 shadow-[0_12px_30px_rgba(27,54,52,0.16)]"
-              role="menu"
+        {user ? (
+          <div className="relative">
+            <button
+              aria-expanded={openDropdown === "account"}
+              aria-haspopup="menu"
+              aria-label="Open profile menu"
+              className="inline-flex items-center gap-2 text-[#65787a] [-webkit-tap-highlight-color:transparent] focus-visible:outline-[3px] focus-visible:outline-[#67c9c1] focus-visible:outline-offset-[3px]"
+              onClick={() =>
+                setOpenDropdown((current) =>
+                  current === "account" ? null : "account",
+                )
+              }
+              type="button"
             >
-              <button
-                className="flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-left text-[10px] font-semibold text-[#a2534c] hover:bg-[#fff5f4] focus-visible:outline-[3px] focus-visible:outline-[#67c9c1] focus-visible:outline-offset-[-2px]"
-                onClick={() => void handleLogout()}
-                role="menuitem"
-                type="button"
+              <span className="grid size-8 place-items-center rounded-full bg-[#d8ede7] text-[10px] font-bold text-[#36706c]">
+                {userInitials}
+              </span>
+              <HeaderIcon name="chevron" size={14} />
+            </button>
+            {openDropdown === "account" && (
+              <div
+                aria-label="Account menu"
+                className="absolute top-full right-0 z-50 mt-2 w-44 rounded-xl border border-[#e5eeec] bg-white p-1.5 shadow-[0_12px_30px_rgba(27,54,52,0.16)]"
+                role="menu"
               >
-                Log out
-              </button>
-              {logoutError && (
-                <p className="px-3 py-2 text-[9px] text-[#a2534c]" role="alert">
-                  {logoutError}
-                </p>
-              )}
-            </div>
-          )}
-        </div>
+                <button
+                  className="flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-left text-[10px] font-semibold text-[#a2534c] hover:bg-[#fff5f4] focus-visible:outline-[3px] focus-visible:outline-[#67c9c1] focus-visible:outline-offset-[-2px]"
+                  onClick={() => void handleLogout()}
+                  role="menuitem"
+                  type="button"
+                >
+                  Log out
+                </button>
+                {logoutError && (
+                  <p className="px-3 py-2 text-[9px] text-[#a2534c]" role="alert">
+                    {logoutError}
+                  </p>
+                )}
+              </div>
+            )}
+          </div>
+        ) : status !== "loading" ? (
+          <Link
+            className="rounded-lg px-3 py-2 text-sm font-semibold text-[#087879] hover:bg-[#f1f6f5] focus-visible:outline-[3px] focus-visible:outline-[#67c9c1] focus-visible:outline-offset-[3px]"
+            to="/login"
+          >
+            Log in
+          </Link>
+        ) : null}
       </div>
       {mobileMenuOpen && (
         <nav
           aria-label="Mobile main navigation"
           className="absolute inset-x-0 top-full z-40 border-b border-[#edf1f1] bg-white px-4 py-3 shadow-lg min-[681px]:hidden"
         >
-          {navItems.map((item) => (
+          {visibleNavItems.map((item) => (
             <Link
               aria-current={isNavItemActive(item.to) ? "page" : undefined}
               className={`flex items-center gap-3 rounded-lg px-3 py-3 text-sm font-medium ${
@@ -207,17 +225,19 @@ export default function Header() {
               {item.label}
             </Link>
           ))}
-          <Link
-            className={`flex items-center gap-3 rounded-lg px-3 py-3 text-sm font-medium ${
-              pathname.startsWith("/messages")
-                ? "bg-[#eef7f6] text-[#087879]"
-                : "text-[#687b7e] hover:bg-[#f5f8f8]"
-            }`}
-            onClick={() => setMobileMenuOpen(false)}
-            to="/messages"
-          >
-            Messages
-          </Link>
+          {isApplicant && (
+            <Link
+              className={`flex items-center gap-3 rounded-lg px-3 py-3 text-sm font-medium ${
+                pathname.startsWith("/messages")
+                  ? "bg-[#eef7f6] text-[#087879]"
+                  : "text-[#687b7e] hover:bg-[#f5f8f8]"
+              }`}
+              onClick={() => setMobileMenuOpen(false)}
+              to="/messages"
+            >
+              Messages
+            </Link>
+          )}
         </nav>
       )}
     </header>
