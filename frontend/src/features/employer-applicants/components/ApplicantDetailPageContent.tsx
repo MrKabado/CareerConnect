@@ -31,6 +31,9 @@ export default function ApplicantDetailPageContent() {
     messagingActor,
     handleContactApplicant,
     handleConversationStarted,
+    documentLoading,
+    documentError,
+    handleDownloadDocument,
   } = useApplicantDetail();
 
   function openDocument(document: ApplicantDocument) {
@@ -53,10 +56,20 @@ export default function ApplicantDetailPageContent() {
           <span aria-hidden="true">←</span> Applicants
         </Link>
 
-        {isLoading || applicantStage.isLoading ? (
+        {isLoading ? (
           <ApplicantLoadingState />
         ) : !applicant ? (
-          <ApplicantNotFoundState />
+          applicantStage.error ? (
+            <section className="mt-8 border-t border-[#e1ebea] py-8" role="alert">
+              <h1 className="text-xl font-semibold text-[#203638]">Unable to load applicant</h1>
+              <p className="mt-2 text-sm text-[#667b7c]">{applicantStage.error}</p>
+              <button type="button" onClick={applicantStage.reload} className="mt-4 rounded-lg bg-[#0e8e9b] px-4 py-2 text-sm font-semibold text-white hover:bg-[#0a727d]">
+                Try again
+              </button>
+            </section>
+          ) : (
+            <ApplicantNotFoundState />
+          )
         ) : (
           <>
             <ApplicantDetailHeader applicant={applicant} status={status ?? applicant.status} />
@@ -70,10 +83,8 @@ export default function ApplicantDetailPageContent() {
                 hiredAt={applicantStage.applicant?.hiredAt}
                 rejectionReason={applicantStage.applicant?.rejectionReason}
                 interviewDetails={applicantStage.applicant?.interviewDetails}
-                offerDetails={applicantStage.applicant?.offerDetails}
                 onAdvance={applicantStage.advance}
                 onReject={applicantStage.reject}
-                onUndoReject={applicantStage.undoReject}
                 onRetry={applicantStage.retry}
               />
             ) : null}
@@ -101,6 +112,9 @@ export default function ApplicantDetailPageContent() {
 
       <ApplicantDocumentPreviewDialog
         selectedDocument={selectedDocument}
+        isDownloading={documentLoading}
+        downloadError={documentError}
+        onDownload={handleDownloadDocument}
         onClose={() => setSelectedDocument(null)}
       />
 

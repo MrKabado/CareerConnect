@@ -1,2 +1,2 @@
-export const maximumFileSize = 10 * 1024 * 1024;
-export const allowedFileName = /\.(pdf|doc|docx)$/i;
+export const maximumFileSize = 5 * 1024 * 1024;
+export const allowedFileName = /\.(pdf|docx)$/i;

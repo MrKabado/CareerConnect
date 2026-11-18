@@ -3,10 +3,13 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\AdminUpdateUserRequest;
+use App\Models\ActivityLog;
 use App\Models\User;
 use App\Services\OtpCodeService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 
 class AdminUserController extends Controller
@@ -37,17 +40,97 @@ class AdminUserController extends Controller
         return response()->json($users);
     }
 
+    public function show(User $user): JsonResponse
+    {
+        return response()->json([
+            'data' => $user->only([
+                'id',
+                'name',
+                'email',
+                'role',
+                'account_status',
+                'email_verified_at',
+                'last_login_at',
+                'created_at',
+            ]),
+        ]);
+    }
+
+    public function update(AdminUpdateUserRequest $request, User $user): JsonResponse
+    {
+        $validated = $request->validated();
+
+        if ($user->is($request->user()) && isset($validated['role']) && $validated['role'] !== $user->role) {
+            return response()->json([
+                'message' => 'You cannot change your own administrator role.',
+                'code' => 'self_role_change_forbidden',
+            ], 422);
+        }
+
+        $emailChanged = isset($validated['email']) && $validated['email'] !== $user->email;
+        $roleChanged = isset($validated['role']) && $validated['role'] !== $user->role;
+
+        DB::transaction(function () use ($request, $user, $validated, $emailChanged, $roleChanged): void {
+            $user->fill($validated);
+            if ($emailChanged) {
+                $user->email_verified_at = null;
+            }
+            $user->save();
+
+            ActivityLog::create([
+                'user_id' => $user->id,
+                'actor_id' => $request->user()->id,
+                'action' => 'admin.user_updated',
+                'subject_type' => User::class,
+                'subject_id' => $user->id,
+                'payload' => [
+                    'updated_fields' => array_keys($validated),
+                    'email_verification_reset' => $emailChanged,
+                    'role_changed' => $roleChanged,
+                ],
+            ]);
+
+            if ($emailChanged || $roleChanged) {
+                $user->tokens()->delete();
+            }
+        });
+
+        return response()->json([
+            'message' => 'User updated.',
+            'data' => $user->refresh()->only([
+                'id',
+                'name',
+                'email',
+                'role',
+                'account_status',
+                'email_verified_at',
+                'last_login_at',
+                'created_at',
+            ]),
+        ]);
+    }
+
     public function updateStatus(Request $request, User $user): JsonResponse
     {
         $validated = $request->validate([
             'account_status' => ['required', Rule::in(['active', 'deactivated'])],
         ]);
 
-        $user->forceFill(['account_status' => $validated['account_status']])->save();
+        DB::transaction(function () use ($request, $user, $validated): void {
+            $user->forceFill(['account_status' => $validated['account_status']])->save();
+            ActivityLog::create([
+                'user_id' => $user->id,
+                'actor_id' => $request->user()->id,
+                'action' => 'admin.user_status_updated',
+                'subject_type' => User::class,
+                'subject_id' => $user->id,
+                'payload' => ['account_status' => $user->account_status],
+            ]);
 
-        if ($user->account_status === 'deactivated') {
-            $user->tokens()->delete();
-        }
+            if ($user->account_status === 'deactivated') {
+                $user->tokens()->delete();
+            }
+        });
 
         return response()->json([
             'message' => 'Account status updated.',

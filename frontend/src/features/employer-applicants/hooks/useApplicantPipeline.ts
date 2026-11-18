@@ -8,7 +8,7 @@ export type JobTypeFilter = (typeof jobTypeOptions)[number];
 export type ApplicantStatusFilter = "All statuses" | ApplicantStatus;
 
 export function useApplicantPipeline() {
-  const { applicants, isLoading, error } = useEmployerApplicants();
+  const { applicants, isLoading, isLoadingMore, error, total, hasMore, retry, loadMore } = useEmployerApplicants();
   const [jobTypeFilter, setJobTypeFilter] = useState<JobTypeFilter>("All applicants");
   const [statusFilter, setStatusFilter] = useState<ApplicantStatusFilter>("All statuses");
   const [search, setSearch] = useState("");
@@ -33,7 +33,12 @@ export function useApplicantPipeline() {
   return {
     applicants,
     isLoading,
+    isLoadingMore,
     error,
+    total,
+    hasMore,
+    retry,
+    loadMore,
     jobTypeFilter,
     setJobTypeFilter,
     statusFilter,

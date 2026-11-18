@@ -9,6 +9,7 @@ type VerificationSubmissionPanelProps = {
   onSubmit: () => void | Promise<void>;
   uploadError: string | null;
   submitError: string | null;
+  disabled: boolean;
 };
 
 export default function VerificationSubmissionPanel({
@@ -19,6 +20,7 @@ export default function VerificationSubmissionPanel({
   onSubmit,
   uploadError,
   submitError,
+  disabled,
 }: VerificationSubmissionPanelProps) {
   return (
     <>
@@ -43,7 +45,7 @@ export default function VerificationSubmissionPanel({
         </span>
         <button
           className="rounded-xl bg-[#0d8fa2] px-5 py-3 text-sm font-semibold text-white transition hover:bg-[#0b7a89] disabled:cursor-not-allowed disabled:opacity-50"
-          disabled={!allDocumentsUploaded || submitting || uploading}
+          disabled={!allDocumentsUploaded || submitting || uploading || disabled}
           onClick={() => void onSubmit()}
           type="button"
         >

@@ -25,6 +25,11 @@ import { useAuth } from "@/features/auth/useAuth";
 import { onboardingStore } from "@/features/onboarding/store";
 import { ojtProfileExample as ojtSeekerExample } from "@/features/onboarding/ojtProfileExample";
 import type { OnboardingStepId } from "@/features/onboarding/config/steps";
+import {
+  applicantFilesApi,
+  downloadApplicantFile,
+  type ApplicantResumeFile,
+} from "@/features/user-profile/backendApi";
 
 const maxResumeSize = 10 * 1024 * 1024;
 const allowedResumeName = /\.(pdf|doc|docx)$/i;
@@ -230,14 +235,18 @@ function formatDate(value: string) {
 }
 
 export default function ProfilePage() {
-  const { user, logout } = useAuth();
+  const { user, token, logout } = useAuth();
   const navigate = useNavigate();
   const [resumeError, setResumeError] = useState<string | null>(null);
   const [coverLetterError, setCoverLetterError] = useState<string | null>(null);
   const [profilePictureError, setProfilePictureError] = useState<string | null>(null);
   const [profilePicture, setProfilePicture] = useState<string | null>(
-    getStoredProfilePicture(),
+    user?.role === "applicant" ? null : getStoredProfilePicture(),
   );
+  const [serverResume, setServerResume] = useState<ApplicantResumeFile | null>(null);
+  const [resumeLoading, setResumeLoading] = useState(user?.role === "applicant" && Boolean(token));
+  const [resumeUploadProgress, setResumeUploadProgress] = useState<number | null>(null);
+  const [photoUploadProgress, setPhotoUploadProgress] = useState<number | null>(null);
   const [sampleResumeRemoved, setSampleResumeRemoved] = useState(false);
   const [sampleCoverLetterRemoved, setSampleCoverLetterRemoved] =
     useState(false);
@@ -257,6 +266,7 @@ export default function ProfilePage() {
     onboardingStore.getSnapshot,
   );
   const answers = onboarding.answers;
+  const isBackendApplicant = user?.role === "applicant" && Boolean(token);
   const isOjtSeeker = answers.goal === "ojt-seeker";
   const useJobSeekerExample = !isOjtSeeker;
   const providedName = (user?.name || answers.name).trim();
@@ -278,11 +288,12 @@ export default function ProfilePage() {
       : useJobSeekerExample
         ? jobSeekerExample.location
         : "Not provided");
-  const resume = answers.resumeFile;
-  const coverLetter = answers.coverLetterFile;
+  const resume = isBackendApplicant ? null : answers.resumeFile;
+  const coverLetter = isBackendApplicant ? null : answers.coverLetterFile;
   const showSampleResume =
-    !resume && !sampleResumeRemoved;
-  const showSampleCoverLetter = !coverLetter && !sampleCoverLetterRemoved;
+    !isBackendApplicant && !resume && !sampleResumeRemoved;
+  const showSampleCoverLetter =
+    !isBackendApplicant && !coverLetter && !sampleCoverLetterRemoved;
   const skills =
     answers.skills.length > 0
       ? answers.skills
@@ -300,7 +311,7 @@ export default function ProfilePage() {
     answers.skills.length > 0,
     answers.preferredLocations.length > 0,
     Boolean(answers.workSetup),
-    Boolean(resume),
+    Boolean(resume || serverResume),
   ];
   const strength =
     useJobSeekerExample || isOjtSeeker
@@ -308,6 +319,50 @@ export default function ProfilePage() {
       : Math.round(
           (profileChecks.filter(Boolean).length / profileChecks.length) * 100,
         );
+
+  useEffect(() => {
+    if (!isBackendApplicant || !token) {
+        return;
+    }
+
+    let active = true;
+    applicantFilesApi
+        .resume(token)
+        .then((currentResume) => {
+          if (active) setServerResume(currentResume);
+        })
+        .catch((requestError: unknown) => {
+          if (active) {
+            setResumeError(
+              requestError instanceof Error
+                ? requestError.message
+                : "Unable to load your resume.",
+            );
+          }
+        })
+        .finally(() => {
+          if (active) setResumeLoading(false);
+        });
+
+    applicantFilesApi
+        .profile(token)
+        .then((response) => {
+          if (active) setProfilePicture(response.data.profile_photo_url);
+        })
+        .catch((requestError: unknown) => {
+          if (active) {
+            setProfilePictureError(
+              requestError instanceof Error
+                ? requestError.message
+                : "Unable to load your profile photo.",
+            );
+          }
+        });
+
+    return () => {
+        active = false;
+    };
+  }, [isBackendApplicant, token]);
 
   function editProfile(step: OnboardingStepId) {
     onboardingStore.setStep(step);
@@ -393,7 +448,7 @@ export default function ProfilePage() {
     onboardingStore.setAnswer("goal", goal);
   }
 
-  function handleDocumentUpload(
+  async function handleDocumentUpload(
     event: ChangeEvent<HTMLInputElement>,
     documentType: "resume" | "cover-letter",
   ) {
@@ -404,21 +459,33 @@ export default function ProfilePage() {
     const hasAllowedType =
       !file.type ||
       file.type === "application/pdf" ||
-      file.type === "application/msword" ||
+      (documentType === "cover-letter" && file.type === "application/msword") ||
       file.type ===
         "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
-    if (!allowedResumeName.test(file.name) || !hasAllowedType) {
+    const allowedName =
+      documentType === "resume" && isBackendApplicant
+        ? /\.(pdf|docx)$/i
+        : allowedResumeName;
+    if (!allowedName.test(file.name) || !hasAllowedType) {
       if (documentType === "resume") {
-        setResumeError("Choose a PDF, DOC, or DOCX file.");
+        setResumeError(
+          isBackendApplicant
+            ? "Choose a PDF or DOCX resume."
+            : "Choose a PDF, DOC, or DOCX file.",
+        );
       } else {
         setCoverLetterError("Choose a PDF, DOC, or DOCX file.");
         onboardingStore.setAnswer("coverLetterFile", null);
       }
       return;
     }
-    if (file.size > maxResumeSize) {
+    if (file.size > (isBackendApplicant ? 5 * 1024 * 1024 : maxResumeSize)) {
       if (documentType === "resume") {
-        setResumeError("Your resume must be 10 MB or smaller.");
+        setResumeError(
+          isBackendApplicant
+            ? "Your resume must be 5 MB or smaller."
+            : "Your resume must be 10 MB or smaller.",
+        );
       } else {
         setCoverLetterError("Your cover letter must be 10 MB or smaller.");
         onboardingStore.setAnswer("coverLetterFile", null);
@@ -429,12 +496,67 @@ export default function ProfilePage() {
     if (documentType === "resume") {
       setResumeError(null);
       setSampleResumeRemoved(false);
-      onboardingStore.setAnswer("resumeFile", file);
-      onboardingStore.setAnswer("resumeSkipped", false);
+      if (isBackendApplicant && token) {
+        setResumeUploadProgress(0);
+        try {
+          setServerResume(
+            await applicantFilesApi.uploadResume(token, file, setResumeUploadProgress),
+          );
+        } catch (requestError) {
+          setResumeError(
+            requestError instanceof Error
+              ? requestError.message
+              : "The resume could not be uploaded.",
+          );
+        } finally {
+          setResumeUploadProgress(null);
+        }
+      } else {
+        onboardingStore.setAnswer("resumeFile", file);
+        onboardingStore.setAnswer("resumeSkipped", false);
+      }
     } else {
       setCoverLetterError(null);
       setSampleCoverLetterRemoved(false);
       onboardingStore.setAnswer("coverLetterFile", file);
+    }
+  }
+
+  async function removeResume() {
+    if (isBackendApplicant && token) {
+      setResumeError(null);
+      try {
+        await applicantFilesApi.deleteResume(token);
+        setServerResume(null);
+      } catch (requestError) {
+        setResumeError(
+          requestError instanceof Error
+            ? requestError.message
+            : "The resume could not be removed.",
+        );
+      }
+      return;
+    }
+
+    onboardingStore.setAnswer("resumeFile", null);
+    setResumeError(null);
+    setSampleResumeRemoved(true);
+  }
+
+  async function downloadServerResume() {
+    if (!token || !serverResume) return;
+    setResumeError(null);
+    try {
+      downloadApplicantFile(
+        await applicantFilesApi.downloadResume(token),
+        serverResume.original_filename,
+      );
+    } catch (requestError) {
+      setResumeError(
+        requestError instanceof Error
+          ? requestError.message
+          : "The resume could not be downloaded.",
+      );
     }
   }
 
@@ -479,7 +601,7 @@ export default function ProfilePage() {
     window.setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
 
-  function handleProfilePictureUpload(event: ChangeEvent<HTMLInputElement>) {
+  async function handleProfilePictureUpload(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
     event.target.value = "";
     if (!file) return;
@@ -495,6 +617,25 @@ export default function ProfilePage() {
     }
     if (file.size > maxProfilePictureSize) {
       setProfilePictureError("Profile pictures must be 2 MB or smaller.");
+      return;
+    }
+
+    if (isBackendApplicant && token) {
+      setPhotoUploadProgress(0);
+      setProfilePictureError(null);
+      try {
+        setProfilePicture(
+          await applicantFilesApi.uploadPhoto(token, file, setPhotoUploadProgress),
+        );
+      } catch (requestError) {
+        setProfilePictureError(
+          requestError instanceof Error
+            ? requestError.message
+            : "The profile photo could not be uploaded.",
+        );
+      } finally {
+        setPhotoUploadProgress(null);
+      }
       return;
     }
 
@@ -518,7 +659,23 @@ export default function ProfilePage() {
     reader.readAsDataURL(file);
   }
 
-  function removeProfilePicture() {
+  async function removeProfilePicture() {
+    if (isBackendApplicant && token) {
+      setProfilePictureError(null);
+      try {
+        await applicantFilesApi.deletePhoto(token);
+        setProfilePicture(null);
+        setIsProfilePictureMenuOpen(false);
+      } catch (requestError) {
+        setProfilePictureError(
+          requestError instanceof Error
+            ? requestError.message
+            : "The profile photo could not be removed.",
+        );
+      }
+      return;
+    }
+
     try {
       localStorage.removeItem(profilePictureStorageKey);
       setProfilePicture(null);
@@ -778,6 +935,11 @@ export default function ProfilePage() {
                   {profilePictureError && (
                     <p className="mt-1 text-[9px] text-[#b34b4b]" role="alert">
                       {profilePictureError}
+                    </p>
+                  )}
+                  {photoUploadProgress !== null && (
+                    <p className="mt-1 text-[9px] text-[#087879]" role="status">
+                      Uploading profile photo… {photoUploadProgress}%
                     </p>
                   )}
                 </div>
@@ -1152,7 +1314,56 @@ export default function ProfilePage() {
               <ProfileTags tags={skills} />
             </ProfilePanel>
             <ProfilePanel icon="resume" title="Documents">
-              {resume || showSampleResume ? (
+              {resumeLoading ? (
+                <p className="rounded-lg bg-[#f2f8f7] p-3 text-[9px] text-[#526365]" role="status">
+                  Loading resume…
+                </p>
+              ) : serverResume ? (
+                <div className="rounded-lg bg-[#f2f8f7] p-2">
+                  <div className="flex items-center gap-2">
+                    <ProfileIconBadge>
+                      <ProfileResumeIcon />
+                    </ProfileIconBadge>
+                    <div className="min-w-0 flex-1">
+                      <span className="block text-[8px] font-semibold text-[#078b8d]">Resume</span>
+                      <span className="block truncate text-[9px] font-semibold text-[#526365]">
+                        {serverResume.original_filename}
+                      </span>
+                      <span className="mt-0.5 block text-[8px] text-[#93a0a1]">
+                        {formatFileSize(serverResume.file_size)}
+                      </span>
+                    </div>
+                    <button
+                      aria-label="Download resume"
+                      className="rounded p-1 text-[#078b8d] hover:bg-white"
+                      onClick={() => void downloadServerResume()}
+                      type="button"
+                    >
+                      ↓
+                    </button>
+                  </div>
+                  <div className="mt-2 flex items-center gap-3">
+                    <label className="cursor-pointer rounded-md border border-[#e0e9e8] px-2 py-1 text-[8px] font-semibold text-[#526365] hover:bg-white">
+                      Replace
+                      <input
+                        accept=".pdf,.docx"
+                        className="sr-only"
+                        disabled={resumeUploadProgress !== null}
+                        onChange={(event) => void handleDocumentUpload(event, "resume")}
+                        type="file"
+                      />
+                    </label>
+                    <button
+                      className="rounded px-1 py-1 text-[8px] font-semibold text-[#a2534c] hover:underline"
+                      disabled={resumeUploadProgress !== null}
+                      onClick={() => void removeResume()}
+                      type="button"
+                    >
+                      Remove
+                    </button>
+                  </div>
+                </div>
+              ) : resume || showSampleResume ? (
                 <>
                   <ProfileDocumentCard
                     details={
@@ -1180,21 +1391,15 @@ export default function ProfilePage() {
                     <label className="cursor-pointer rounded-md border border-[#e0e9e8] px-2 py-1 text-[8px] font-semibold text-[#526365] hover:bg-[#f6faf9]">
                       Replace
                       <input
-                        accept=".pdf,.doc,.docx"
+                        accept={isBackendApplicant ? ".pdf,.docx" : ".pdf,.doc,.docx"}
                         className="sr-only"
-                        onChange={(event) =>
-                          handleDocumentUpload(event, "resume")
-                        }
+                        onChange={(event) => void handleDocumentUpload(event, "resume")}
                         type="file"
                       />
                     </label>
                     <button
                       className="rounded px-1 py-1 text-[8px] font-semibold text-[#078b8d] hover:underline"
-                      onClick={() => {
-                        onboardingStore.setAnswer("resumeFile", null);
-                        setResumeError(null);
-                        setSampleResumeRemoved(true);
-                      }}
+                      onClick={() => void removeResume()}
                       type="button"
                     >
                       Remove
@@ -1207,14 +1412,12 @@ export default function ProfilePage() {
                     <ProfileResumeIcon />
                   </ProfileIconBadge>
                   <span className="text-[9px] font-semibold text-[#526365]">
-                    Upload a PDF, DOC, or DOCX
+                    {isBackendApplicant ? "Upload a PDF or DOCX · up to 5 MB" : "Upload a PDF, DOC, or DOCX"}
                   </span>
                   <input
-                    accept=".pdf,.doc,.docx"
+                    accept={isBackendApplicant ? ".pdf,.docx" : ".pdf,.doc,.docx"}
                     className="sr-only"
-                    onChange={(event) =>
-                      handleDocumentUpload(event, "resume")
-                    }
+                    onChange={(event) => void handleDocumentUpload(event, "resume")}
                     type="file"
                   />
                 </label>
@@ -1224,8 +1427,18 @@ export default function ProfilePage() {
                   {resumeError}
                 </p>
               )}
+              {resumeUploadProgress !== null && (
+                <p className="mt-2 text-[9px] text-[#087879]" role="status">
+                  Uploading resume… {resumeUploadProgress}%
+                </p>
+              )}
 
-              <div className="mt-4 border-t border-[#edf1f1] pt-3">
+              {isBackendApplicant ? (
+                <p className="mt-4 border-t border-[#edf1f1] pt-3 text-[9px] leading-4 text-[#849394]">
+                  Cover-letter uploads are not yet supported by the backend and are not saved.
+                </p>
+              ) : (
+                <div className="mt-4 border-t border-[#edf1f1] pt-3">
                 {coverLetter || showSampleCoverLetter ? (
                   <>
                     <ProfileDocumentCard
@@ -1295,7 +1508,8 @@ export default function ProfilePage() {
                     {coverLetterError}
                   </p>
                 )}
-              </div>
+                </div>
+              )}
 
               {location !== "Not provided" && (
                 <p className="mt-2 flex items-center gap-1 text-[8px] text-[#9aa6a7]">

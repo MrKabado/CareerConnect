@@ -1,12 +1,11 @@
 import { getCompanyProfileSlug } from "@/features/companies/companyProfiles";
 import { useEmployerStatus } from "@/features/employer-registration/useEmployerStatus";
-import { useEmployerVerificationDocuments } from "@/features/employer-verification/useEmployerVerificationDocuments";
 import { useCompanyVerification } from "@/features/company-verification/useCompanyVerification";
 
 const publicDocumentRequirements = [
-  { kind: "business_registration", label: "Proof of business existence" },
-  { kind: "employer_id_primary", label: "Registering person's government ID" },
-] as const;
+  "Business registration",
+  "Business permit or license",
+];
 
 export default function PublicCompanyVerificationSummary({
   companyName,
@@ -15,7 +14,6 @@ export default function PublicCompanyVerificationSummary({
 }) {
   const { employer } = useEmployerStatus();
   const verification = useCompanyVerification();
-  const documents = useEmployerVerificationDocuments(employer?.id ?? "");
   const belongsToEmployer = Boolean(
     employer &&
       getCompanyProfileSlug(employer.companyName) === getCompanyProfileSlug(companyName),
@@ -70,20 +68,13 @@ export default function PublicCompanyVerificationSummary({
         <h3 className="text-[10px] font-semibold text-[#526365]">Verified documents</h3>
         <ul className="mt-2 space-y-2">
           {publicDocumentRequirements.map((requirement) => {
-            const isSubmitted = documents.some(
-              (document) => document.kind === requirement.kind,
-            );
-            const status = reviewStatus === "Approved"
-              ? "Verified"
-              : isSubmitted
-                ? "Submitted"
-                : "Not submitted";
+            const status = reviewStatus === "Approved" ? "Verified" : "Private";
             return (
               <li
                 className="flex items-center justify-between gap-2 text-[9px]"
-                key={requirement.kind}
+                key={requirement}
               >
-                <span className="text-[#607173]">{requirement.label}</span>
+                <span className="text-[#607173]">{requirement}</span>
                 <span
                   className={
                     status === "Verified"

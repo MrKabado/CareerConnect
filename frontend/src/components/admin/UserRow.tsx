@@ -9,11 +9,12 @@ const ROLE_STYLES: Record<UserRole, string> = {
 
 interface UserRowProps {
   user: User;
-  onToggleAccess: (id: string) => void;
+  onToggleAccess: (id: string) => void | Promise<void>;
+  isSaving?: boolean;
 }
 
 /** A <tr>. Cell order must match the columns passed to DataTable. */
-export default function UserRow({ user, onToggleAccess }: UserRowProps) {
+export default function UserRow({ user, onToggleAccess, isSaving = false }: UserRowProps) {
   const isActive = user.status === "Active";
 
   return (
@@ -49,9 +50,10 @@ export default function UserRow({ user, onToggleAccess }: UserRowProps) {
         <Button
           variant={isActive ? "outline" : "primary"}
           className="h-8 px-3 text-xs"
+          disabled={isSaving}
           onClick={() => onToggleAccess(user.id)}
         >
-          {isActive ? "Deactivate" : "Activate"}
+          {isSaving ? "Saving…" : isActive ? "Deactivate" : "Activate"}
         </Button>
       </td>
     </tr>

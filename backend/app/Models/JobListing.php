@@ -61,6 +61,11 @@ class JobListing extends Model
         return $this->hasMany(Application::class);
     }
 
+    public function savedBy(): HasMany
+    {
+        return $this->hasMany(SavedListing::class);
+    }
+
     public function scopePubliclyVisible(Builder $query): Builder
     {
         return $query

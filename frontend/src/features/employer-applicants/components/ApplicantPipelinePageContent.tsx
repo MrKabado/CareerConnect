@@ -42,7 +42,7 @@ function ApplicantRow({ applicant }: { applicant: Applicant }) {
         </div>
       </div>
       <div className="flex flex-wrap items-center gap-3 sm:justify-end">
-        <span className="text-xs text-[#64797b]">{applicant.match}% match</span>
+        {applicant.match !== undefined && <span className="text-xs text-[#64797b]">{applicant.match}% match</span>}
         <StatusPill status={applicant.status} />
         <Link to={`/employer/applicants/${applicant.id}`} className="inline-flex items-center justify-center rounded-lg border border-[#d8e8e6] bg-white px-3 py-2 text-xs font-semibold text-[#0c808d] hover:bg-[#f3fbfc]">Review applicant</Link>
       </div>
@@ -51,7 +51,7 @@ function ApplicantRow({ applicant }: { applicant: Applicant }) {
 }
 
 export default function ApplicantPipelinePageContent() {
-  const { applicants, isLoading, error, jobTypeFilter, setJobTypeFilter, statusFilter, setStatusFilter, search, setSearch, visibleApplicants, countByStatus, applicantStatuses } = useApplicantPipeline();
+  const { applicants, isLoading, isLoadingMore, error, total, hasMore, retry, loadMore, jobTypeFilter, setJobTypeFilter, statusFilter, setStatusFilter, search, setSearch, visibleApplicants, countByStatus, applicantStatuses } = useApplicantPipeline();
 
   if (isLoading) {
     return (
@@ -70,16 +70,16 @@ export default function ApplicantPipelinePageContent() {
             <h1 className="mt-2 text-[25px] font-bold leading-tight text-[#263638] max-[600px]:text-[22px]">Applicants</h1>
             <p className="mt-1 text-[11px] text-[#849293]">Review applicant profiles, submitted documents, and hiring progress.</p>
           </div>
-          <span className="text-xs font-medium text-[#587174]">{applicants.length} applicants</span>
+          <span className="text-xs font-medium text-[#587174]">{applicants.length} of {total} applicants loaded</span>
         </header>
-        <section aria-label="Applicant stage summary" className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <section aria-label="Applicant stage summary for loaded records" className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
           {[{ label: "Awaiting review", value: countByStatus("applied"), tone: "bg-[#eef5ff] text-[#3577d4]" }, { label: "Under review", value: countByStatus("under_review"), tone: "bg-[#edf5ff] text-[#356bcc]" }, { label: "Shortlisted", value: countByStatus("shortlisted"), tone: "bg-[#edf8f2] text-[#1d9d75]" }, { label: "Interview scheduled", value: countByStatus("interview_scheduled"), tone: "bg-[#f8f0ff] text-[#7a5ec8]" }].map(({ label, value, tone }) => <SummaryCard key={label} label={label} value={value} tone={tone} />)}
         </section>
         <section className="mt-6 overflow-hidden rounded-[22px] border border-[#e5eeeb] bg-white shadow-[0_10px_20px_rgba(20,47,47,0.02)]">
           <div className="flex flex-col gap-3 rounded-t-[22px] border-b border-[#e7efee] px-4 py-4 lg:flex-row lg:items-center lg:justify-between">
             <div>
               <h2 className="text-base font-semibold text-[#1d3034]">Candidate pipeline</h2>
-              <p className="mt-1 text-xs text-[#738385]" aria-live="polite">{`${visibleApplicants.length} applicants shown`}</p>
+              <p className="mt-1 text-xs text-[#738385]" aria-live="polite">{`${visibleApplicants.length} shown from ${applicants.length} loaded`}</p>
             </div>
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
               <label className="sr-only" htmlFor="applicant-search">Search applicants</label>
@@ -92,9 +92,10 @@ export default function ApplicantPipelinePageContent() {
             </div>
           </div>
           <div className="flex flex-wrap gap-1 border-b border-[#e7efee] px-4 py-3">{jobTypeOptions.map((option) => <button key={option} type="button" onClick={() => setJobTypeFilter(option)} aria-pressed={jobTypeFilter === option} className={`rounded-md px-3 py-1.5 text-xs font-medium transition ${jobTypeFilter === option ? "bg-[#0e8e9b] text-white" : "text-[#587174] hover:bg-[#f1f8f7]"}`}>{option}</button>)}</div>
-          {error ? <p className="px-4 py-4 text-sm text-[#b85054]" role="alert">{error}</p> : null}
+          {error ? <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-4" role="alert"><p className="text-sm text-[#b85054]">{error}</p><button type="button" onClick={() => void retry()} className="text-sm font-semibold text-[#0c808d] underline underline-offset-2">Try again</button></div> : null}
           {!error && visibleApplicants.length === 0 ? <p className="px-4 py-10 text-center text-sm text-[#718586]">No applicants match these filters.</p> : null}
           <div className="divide-y divide-[#e7efee] rounded-b-[22px]">{visibleApplicants.map((applicant) => <ApplicantRow key={applicant.id} applicant={applicant} />)}</div>
+          {hasMore ? <div className="border-t border-[#e7efee] px-4 py-4 text-center"><button type="button" onClick={() => void loadMore()} disabled={isLoadingMore} className="rounded-lg border border-[#d8e8e6] px-4 py-2 text-sm font-semibold text-[#0c808d] hover:bg-[#f3fbfc] disabled:cursor-wait disabled:opacity-60">{isLoadingMore ? "Loading…" : "Load more applicants"}</button></div> : null}
         </section>
       </main>
     </EmployerWorkspaceLayout>

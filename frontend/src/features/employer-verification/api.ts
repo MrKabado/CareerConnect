@@ -5,8 +5,13 @@ import type {
 import { verificationDocumentRequirements } from "@/features/employer-verification/types";
 
 const STORAGE_KEY = "careerconnect.employer-verification.documents.v1";
-const MAX_FILE_SIZE = 10 * 1024 * 1024;
+const MAX_FILE_SIZE = 5 * 1024 * 1024;
 const allowedMimeTypes = new Set(["application/pdf", "image/jpeg", "image/png"]);
+const allowedExtensions = /\.(pdf|jpe?g|png)$/i;
+const supportedDocumentKinds: readonly string[] = [
+  ...verificationDocumentRequirements.map((requirement) => requirement.kind),
+  "supporting",
+];
 const listeners = new Set<() => void>();
 const inMemoryFiles = new Map<string, File>();
 const EMPTY_DOCUMENTS: EmployerVerificationDocument[] = [];
@@ -19,7 +24,7 @@ function isVerificationDocument(value: unknown): value is EmployerVerificationDo
   return (
     typeof document.id === "string" &&
     typeof document.employerId === "string" &&
-    verificationDocumentRequirements.some((item) => item.kind === document.kind) &&
+    supportedDocumentKinds.includes(document.kind ?? "") &&
     typeof document.fileName === "string" &&
     typeof document.mimeType === "string" &&
     typeof document.size === "number" &&
@@ -42,15 +47,14 @@ function readStore(): VerificationDocumentStore {
       throw new Error("Saved verification document records are invalid.");
     }
 
-    const currentDocuments = value.filter(
-      (document) =>
-        !(
-          typeof document === "object" &&
-          document !== null &&
-          "kind" in document &&
-          document.kind === "employer_id_secondary"
-        ),
-    );
+    const currentDocuments = value.filter((document) => {
+      if (typeof document !== "object" || document === null || !("kind" in document)) {
+        return true;
+      }
+      return !["company_id", "employer_id_primary", "employer_id_secondary"].includes(
+        String(document.kind),
+      );
+    });
     if (!currentDocuments.every(isVerificationDocument)) {
       throw new Error("Saved verification document records are invalid.");
     }
@@ -92,11 +96,11 @@ export function subscribeEmployerVerificationDocuments(
 }
 
 export function validateEmployerVerificationFile(file: File): string | null {
-  if (!allowedMimeTypes.has(file.type)) {
+  if (!allowedMimeTypes.has(file.type) || !allowedExtensions.test(file.name)) {
     return "Choose a PDF, JPG, or PNG file.";
   }
   if (file.size > MAX_FILE_SIZE) {
-    return "Each document must be 10 MB or smaller.";
+    return "Each document must be 5 MB or smaller.";
   }
   if (file.size === 0) {
     return "The selected file is empty. Choose another document.";
@@ -149,7 +153,7 @@ export async function submitEmployerVerificationDocuments(
     (requirement) => !documents.some((document) => document.kind === requirement.kind),
   );
   if (missing.length) {
-    throw new Error("Upload all required company and employer ID documents before submitting for review.");
+    throw new Error("Upload your business registration and business permit documents before submitting for review.");
   }
 }
 

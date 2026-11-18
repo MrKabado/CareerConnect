@@ -1,228 +1,272 @@
-import { applicationStore, type Application } from "@/features/applications/applicationData";
-import { applicantSeedData } from "@/features/employer-applicants/data";
-import { isAllowedApplicantTransition } from "@/features/employer-applicants/statuses";
-import type {
-  Applicant,
-  ApplicantStatus,
-  ApplicantStatusHistoryEntry,
-  ApplicantStatusUpdatePayload,
-} from "@/features/employer-applicants/types";
+import { apiBlob, apiRequest } from "@/lib/axios";
+import type { Applicant, ApplicantStatus, ApplicantStatusHistoryEntry, ApplicantStatusUpdatePayload } from "@/features/employer-applicants/types";
 
-const APPLICANT_STATE_STORAGE_KEY = "careerconnect.employer-applicants.state";
-const NOTIFICATIONS_STORAGE_KEY = "careerconnect.employer-applicants.notifications";
-
-type StoredApplicantState = {
-  status: ApplicantStatus;
-  history: ApplicantStatusHistoryEntry[];
-  interviewDetails?: Applicant["interviewDetails"];
-  offerDetails?: Applicant["offerDetails"];
-  rejectionReason?: string;
-  rejectionMessage?: string;
-  hiredAt?: string;
+type BackendStatus = "pending" | "reviewing" | "shortlisted" | "interview" | "hired" | "rejected";
+type ApplicationRecord = {
+  id: number;
+  status: BackendStatus;
+  cover_letter: string | null;
+  applied_at: string | null;
+  listing: {
+    id: number;
+    title: string;
+    listing_type: "job" | "ojt";
+    location: string;
+    work_setup: string;
+    status: string;
+    company_name: string | null;
+  } | null;
+  applicant: {
+    id: number;
+    name: string;
+    city: string | null;
+    phone: string | null;
+    skills: string[];
+    interests: Array<{ id: number; name: string }>;
+  } | null;
+  resume: { original_filename: string; mime_type: string; file_size: number } | null;
+  status_history: Array<{
+    previous_status: BackendStatus | null;
+    status: BackendStatus;
+    public_reason: string | null;
+    internal_reason?: string | null;
+    created_at: string | null;
+  }>;
 };
 
-const wait = (ms = 300) => new Promise((resolve) => window.setTimeout(resolve, ms));
+type ApplicationResponse = { data: ApplicationRecord };
+type ApplicationListResponse = {
+  data: ApplicationRecord[];
+  meta: { current_page: number; last_page: number; total: number };
+};
+type InterviewRecord = {
+  scheduled_at: string | null;
+  timezone: string;
+  mode: "online" | "onsite";
+  location: string | null;
+  meeting_url: string | null;
+  meeting_instructions: string | null;
+};
 
-function readApplicantStateStore(): Record<string, StoredApplicantState> {
-  try {
-    return JSON.parse(window.localStorage.getItem(APPLICANT_STATE_STORAGE_KEY) ?? "{}");
-  } catch {
-    return {};
+function toFrontendStatus(status: BackendStatus): ApplicantStatus {
+  switch (status) {
+    case "pending": return "applied";
+    case "reviewing": return "under_review";
+    case "shortlisted": return "shortlisted";
+    case "interview": return "interview_scheduled";
+    case "hired": return "hired";
+    case "rejected": return "rejected";
   }
 }
 
-function buildApplicant(applicant: Applicant, state?: StoredApplicantState): Applicant {
-  return {
-    ...applicant,
-    ...state,
-    status: state?.status ?? applicant.status,
-    statusHistory: state?.history ?? [],
-  };
-}
-
-function getInitials(name: string) {
-  return name.trim().split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0].toLocaleUpperCase()).join("");
-}
-
-function formatFileSize(size: number) {
-  return size < 1024 * 1024
-    ? `${Math.max(1, Math.round(size / 1024))} KB`
-    : `${(size / (1024 * 1024)).toFixed(1)} MB`;
-}
-
-function withPortfolioWebsite(applicant: Applicant): Applicant {
-  if (applicant.documents.some((document) => document.fileType === "Link")) {
-    return applicant;
+function toBackendStatus(status: ApplicantStatus): BackendStatus {
+  switch (status) {
+    case "applied": return "pending";
+    case "under_review": return "reviewing";
+    case "shortlisted": return "shortlisted";
+    case "interview_scheduled": return "interview";
+    case "hired": return "hired";
+    case "rejected": return "rejected";
   }
+}
 
-  const slug = applicant.name
-    .toLocaleLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-|-$/g, "");
-  const portfolioUrl = `portfolio.example/${slug || applicant.id}`;
+function formatDate(value: string | null): string {
+  if (!value) return "Date unavailable";
+  const date = new Date(value);
+  return Number.isNaN(date.getTime())
+    ? "Date unavailable"
+    : new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric" }).format(date);
+}
 
+function formatFileSize(size: number): string {
+  return size < 1024 * 1024 ? `${Math.max(1, Math.round(size / 1024))} KB` : `${(size / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function mapHistory(record: ApplicationRecord): ApplicantStatusHistoryEntry[] {
+  return record.status_history.map((entry) => ({
+    from: entry.previous_status ? toFrontendStatus(entry.previous_status) : "applied",
+    to: toFrontendStatus(entry.status),
+    changedBy: "Recorded",
+    changedAt: entry.created_at ?? "",
+    ...(entry.public_reason ? { note: entry.public_reason } : {}),
+  }));
+}
+
+function mapInterview(interview: InterviewRecord | undefined): Applicant["interviewDetails"] {
+  if (!interview?.scheduled_at) return undefined;
+  const date = new Date(interview.scheduled_at);
+  if (Number.isNaN(date.getTime())) return undefined;
+  const dateParts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: interview.timezone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(date);
+  const timeParts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: interview.timezone,
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).format(date);
   return {
-    ...applicant,
-    portfolio: portfolioUrl,
-    documents: [
-      ...applicant.documents,
-      {
-        id: "generated-portfolio",
-        title: "Website portfolio",
-        fileName: portfolioUrl,
-        fileType: "Link",
-        submittedAt: applicant.appliedDate,
-        fileSize: "Portfolio website",
-        preview: [
-          `${applicant.name} | Portfolio`,
-          applicant.role,
-          applicant.summary,
-          `Skills: ${applicant.skills.join(", ") || "Skills not provided"}`,
-          `Experience: ${applicant.experienceDetails.join("; ") || applicant.experience}`,
-          `Education: ${applicant.education}`,
-          `Contact: ${applicant.email || "Not provided"}`,
-        ],
-      },
-    ],
+    date: dateParts,
+    time: timeParts,
+    timezone: interview.timezone,
+    format: interview.mode === "online" ? "online" : "onsite",
+    locationOrLink: interview.mode === "online"
+      ? interview.meeting_url ?? interview.meeting_instructions ?? ""
+      : interview.location ?? "",
+    message: interview.meeting_instructions ?? undefined,
   };
 }
 
-function toEmployerApplicant(application: Application): Applicant {
-  const name = application.applicantName?.trim() || "Applicant";
+function toApplicant(record: ApplicationRecord, interview?: InterviewRecord): Applicant {
+  const name = record.applicant?.name ?? "Applicant";
+  const resume = record.resume;
+  const mimeType = resume?.mime_type ?? "";
+  const extension = resume?.original_filename.split(".").pop()?.toLowerCase();
+  const fileType = mimeType === "application/pdf" || extension === "pdf"
+    ? "PDF"
+    : extension === "docx" ? "DOCX" : "DOC";
+  const statusHistory = mapHistory(record);
+  const interviewDetails = mapInterview(interview);
+  const rejectionReason = [...statusHistory].reverse().find((entry) => entry.to === "rejected")?.note;
   return {
-    id: `application-${application.id}`,
+    id: `application-${record.id}`,
     name,
-    initials: getInitials(name),
-    role: application.title,
-    department: application.track === "OJT" ? "Internship" : "Hiring team",
-    location: application.applicantLocation || "Not provided",
-    appliedDate: application.appliedAt,
-    match: 0,
-    status: "applied",
-    jobType: application.track,
-    summary: application.applicantSummary || "Applicant profile submitted with this application.",
-    skills: application.applicantSkills ?? [],
-    experience: application.applicantExperience || "Not provided",
+    initials: name.trim().split(/\s+/).slice(0, 2).map((part) => part[0] ?? "").join("").toUpperCase(),
+    role: record.listing?.title ?? "Listing unavailable",
+    department: record.listing?.listing_type === "ojt" ? "OJT" : "Job",
+    location: record.applicant?.city ?? "Not provided",
+    appliedDate: formatDate(record.applied_at),
+    status: toFrontendStatus(record.status),
+    statusHistory,
+    ...(interviewDetails ? { interviewDetails } : {}),
+    jobType: record.listing?.listing_type === "ojt" ? "OJT" : "Job",
+    summary: record.cover_letter?.trim() || "No cover letter was submitted.",
+    skills: record.applicant?.skills ?? [],
+    experience: "Not provided",
     experienceDetails: [],
-    education: application.applicantEducation || "Not provided",
+    education: "Not provided",
     portfolio: "Not provided",
-    email: application.applicantEmail || "",
-    phone: "Not provided",
-    documents: (application.documents ?? []).map((document) => {
-      const extension = document.fileName.split(".").pop()?.toLowerCase();
-      const fileType = document.mimeType === "application/pdf" || extension === "pdf"
-        ? "PDF"
-        : extension === "docx"
-          ? "DOCX"
-          : "DOC";
-      return {
-        id: `submitted-${document.id}`,
-        title: document.title,
-        fileName: document.fileName,
-        fileType,
-        mimeType: document.mimeType,
-        dataUrl: document.dataUrl,
-        submittedAt: application.appliedAt,
-        fileSize: formatFileSize(document.size),
-        preview: [],
-      };
-    }),
+    email: "",
+    phone: record.applicant?.phone ?? "Not provided",
+    ...(rejectionReason ? { rejectionReason } : {}),
+    documents: resume ? [{
+      id: `resume-${record.id}`,
+      title: "Resume",
+      fileName: resume.original_filename,
+      fileType,
+      mimeType,
+      submittedAt: formatDate(record.applied_at),
+      fileSize: formatFileSize(resume.file_size),
+      preview: [],
+    }] : [],
   };
 }
 
-function getAllEmployerApplicants() {
-  const submittedApplicants = applicationStore.getSnapshot()
-    .filter((application) => application.company === "Maya Philippines" && application.applicantName && application.documents?.length)
-    .map(toEmployerApplicant);
-  return [...applicantSeedData, ...submittedApplicants].map(withPortfolioWebsite);
+function getApplicationId(applicantId: string): number {
+  const match = /^application-(\d+)$/.exec(applicantId);
+  const id = match ? Number(match[1]) : NaN;
+  if (!Number.isSafeInteger(id) || id < 1) throw new Error("Invalid application identifier.");
+  return id;
 }
 
-export async function getEmployerApplicants(): Promise<Applicant[]> {
-  await wait();
-  const states = readApplicantStateStore();
-  return getAllEmployerApplicants().map((applicant) => buildApplicant(applicant, states[applicant.id]));
+export async function getEmployerApplicants(
+  token: string,
+  page = 1,
+): Promise<{ applicants: Applicant[]; currentPage: number; lastPage: number; total: number }> {
+  const response = await apiRequest<ApplicationListResponse>(
+    "/employer/applications",
+    { params: { per_page: 50, page } },
+    token,
+  );
+  return {
+    applicants: response.data.map((record) => toApplicant(record)),
+    currentPage: response.meta.current_page,
+    lastPage: response.meta.last_page,
+    total: response.meta.total,
+  };
 }
 
-export async function getApplicantById(applicantId: string): Promise<Applicant | null> {
-  await wait();
-  const applicant = getAllEmployerApplicants().find((candidate) => candidate.id === applicantId);
-  if (!applicant) return null;
-
-  return buildApplicant(applicant, readApplicantStateStore()[applicantId]);
-}
-
-export async function getHistory(applicantId: string): Promise<ApplicantStatusHistoryEntry[]> {
-  await wait();
-  return readApplicantStateStore()[applicantId]?.history ?? [];
+export async function getApplicantById(token: string, applicantId: string): Promise<Applicant | null> {
+  const id = getApplicationId(applicantId);
+  const [application, interviews] = await Promise.all([
+    apiRequest<ApplicationResponse>(`/employer/applications/${id}`, {}, token),
+    apiRequest<{ data: InterviewRecord[] }>(`/employer/applications/${id}/interviews`, {}, token),
+  ]);
+  return toApplicant(application.data, interviews.data[0]);
 }
 
 export async function updateApplicantStatus(
+  token: string,
   applicantId: string,
   to: ApplicantStatus,
+  currentApplicant: Applicant,
   payload: ApplicantStatusUpdatePayload = {},
 ): Promise<Applicant> {
-  await wait();
-  const applicant = getAllEmployerApplicants().find((candidate) => candidate.id === applicantId);
-  if (!applicant) {
-    throw new Error("Applicant not found.");
+  const id = getApplicationId(applicantId);
+  if (to === "interview_scheduled") {
+    const details = payload.interviewDetails;
+    if (!details) throw new Error("Interview details are required to schedule an interview.");
+    const response = await apiRequest<{ data: InterviewRecord }>(
+      `/employer/applications/${id}/interviews`,
+      {
+        method: "POST",
+        data: {
+          scheduled_at: `${details.date}T${details.time}:00`,
+          timezone: details.timezone,
+          mode: details.format,
+          ...(details.format === "onsite"
+            ? { location: details.locationOrLink }
+            : { meeting_url: details.locationOrLink }),
+          ...(details.message ? { applicant_notes: details.message } : {}),
+        },
+      },
+      token,
+    );
+    const interviewDetails = mapInterview(response.data);
+    if (!interviewDetails) throw new Error("The interview was saved but the server returned invalid schedule details.");
+    return {
+      ...currentApplicant,
+      status: "interview_scheduled",
+      interviewDetails,
+      statusHistory: [
+        ...(currentApplicant.statusHistory ?? []),
+        {
+          from: currentApplicant.status,
+          to: "interview_scheduled",
+          changedBy: "Recorded",
+          changedAt: response.data.scheduled_at ?? "",
+          note: "An interview has been scheduled.",
+        },
+      ],
+    };
   }
 
-  const states = readApplicantStateStore();
-  const existing = states[applicantId];
-  const from = existing?.status ?? applicant.status;
-  const isUndoingRejection = payload.undoRejection === true && from === "rejected" && to !== "rejected";
-  if (!isUndoingRejection && !isAllowedApplicantTransition(from, to)) {
-    throw new Error(`Transition from ${from} to ${to} is not allowed.`);
-  }
-
-  const changedAt = new Date().toISOString();
-  const historyEntry: ApplicantStatusHistoryEntry = {
-    from,
-    to,
-    changedBy: payload.changedBy ?? "Maya Philippines",
-    changedAt,
-    ...(payload.note ? { note: payload.note } : {}),
+  const response = await apiRequest<ApplicationResponse>(
+    `/employer/applications/${id}/status`,
+    {
+      method: "PATCH",
+      data: {
+        status: toBackendStatus(to),
+        ...(payload.rejectionReason ? { public_reason: payload.rejectionReason } : {}),
+      },
+    },
+    token,
+  );
+  const updated = toApplicant(response.data);
+  return {
+    ...currentApplicant,
+    status: updated.status,
+    statusHistory: updated.statusHistory,
+    ...(to === "rejected" && payload.rejectionReason?.trim()
+      ? { rejectionReason: payload.rejectionReason.trim() }
+      : {}),
   };
-  const nextState: StoredApplicantState = {
-    status: to,
-    history: [...(existing?.history ?? []), historyEntry],
-    ...(existing?.interviewDetails ? { interviewDetails: existing.interviewDetails } : {}),
-    ...(existing?.offerDetails ? { offerDetails: existing.offerDetails } : {}),
-    ...(existing?.hiredAt ? { hiredAt: existing.hiredAt } : {}),
-    ...(to === "interview_scheduled" && payload.interviewDetails ? { interviewDetails: payload.interviewDetails } : {}),
-    ...(to === "offer_extended" && payload.offerDetails ? { offerDetails: payload.offerDetails } : {}),
-    ...(to === "rejected" ? {
-      rejectionReason: payload.rejectionReason?.trim() || "",
-      rejectionMessage: payload.rejectionMessage ?? "",
-    } : {}),
-    ...(to === "hired" ? { hiredAt: payload.hiredAt ?? changedAt } : {}),
-  };
-  if (from === "rejected" && to !== "rejected") {
-    delete nextState.rejectionReason;
-    delete nextState.rejectionMessage;
-  }
-
-  states[applicantId] = nextState;
-  window.localStorage.setItem(APPLICANT_STATE_STORAGE_KEY, JSON.stringify(states));
-
-  const applicationId = Number(applicantId.replace(/^application-/, ""));
-  if (
-    to === "interview_scheduled" &&
-    payload.interviewDetails &&
-    Number.isSafeInteger(applicationId)
-  ) {
-    applicationStore.scheduleInterview(applicationId, payload.interviewDetails);
-  }
-
-  try {
-    const notifications = JSON.parse(window.localStorage.getItem(NOTIFICATIONS_STORAGE_KEY) ?? "[]") as Array<{ applicantId: string; status: ApplicantStatus; createdAt: string }>;
-    notifications.push({ applicantId, status: to, createdAt: changedAt });
-    window.localStorage.setItem(NOTIFICATIONS_STORAGE_KEY, JSON.stringify(notifications));
-  } catch {
-    // Notification persistence is best-effort in this frontend mock.
-  }
-
-  return buildApplicant(applicant, nextState);
 }
 
-// TODO(backend): Persist applicant transitions and history, and send email and in-app notifications.
+export function downloadEmployerApplicantResume(token: string, applicantId: string) {
+  const applicationId = getApplicationId(applicantId);
+  return apiBlob(`/employer/applications/${applicationId}/resume`, token);
+}

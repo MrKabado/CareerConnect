@@ -1,14 +1,13 @@
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import ApplicantDialog from "@/features/employer-applicants/components/ApplicantDialog";
 import ApplicantStatusIcon from "@/features/employer-applicants/components/ApplicantStatusIcon";
-import ExtendOfferDialog from "@/features/employer-applicants/components/ExtendOfferDialog";
 import NextActionButton from "@/features/employer-applicants/components/NextActionButton";
 import RejectDialog from "@/features/employer-applicants/components/RejectDialog";
 import ScheduleInterviewDialog from "@/features/employer-applicants/components/ScheduleInterviewDialog";
 import StatusTimeline from "@/features/employer-applicants/components/StatusTimeline";
 import { applicantStatusConfig, forwardApplicantStatuses } from "@/features/employer-applicants/statuses";
 import type { ApplicantStatus } from "@/features/employer-applicants/statuses";
-import type { ApplicantStatusHistoryEntry, ApplicantStatusUpdatePayload, InterviewDetails, OfferDetails } from "@/features/employer-applicants/types";
+import type { ApplicantStatusHistoryEntry, ApplicantStatusUpdatePayload, InterviewDetails } from "@/features/employer-applicants/types";
 import { cn } from "@/lib/cn";
 
 type ApplicantStageStepperProps = {
@@ -19,15 +18,9 @@ type ApplicantStageStepperProps = {
   hiredAt?: string;
   rejectionReason?: string;
   interviewDetails?: InterviewDetails;
-  offerDetails?: OfferDetails;
   onAdvance: (payload?: ApplicantStatusUpdatePayload) => Promise<boolean>;
   onReject: (payload?: ApplicantStatusUpdatePayload) => Promise<boolean>;
-  onUndoReject: (status: ApplicantStatus) => Promise<boolean>;
   onRetry: () => Promise<boolean>;
-};
-
-type RejectionUndoState = {
-  previousStatus: ApplicantStatus;
 };
 
 function formatDate(value: string) {
@@ -44,23 +37,14 @@ export default function ApplicantStageStepper({
   hiredAt,
   rejectionReason,
   interviewDetails,
-  offerDetails,
   onAdvance,
   onReject,
-  onUndoReject,
   onRetry,
 }: ApplicantStageStepperProps) {
   const [isScheduleOpen, setIsScheduleOpen] = useState(false);
-  const [isOfferOpen, setIsOfferOpen] = useState(false);
   const [isRejectOpen, setIsRejectOpen] = useState(false);
   const [isHiredConfirmOpen, setIsHiredConfirmOpen] = useState(false);
-  const [undoState, setUndoState] = useState<RejectionUndoState | null>(null);
   const [announcement, setAnnouncement] = useState("");
-  const undoTimerRef = useRef<number | null>(null);
-
-  useEffect(() => () => {
-    if (undoTimerRef.current !== null) window.clearTimeout(undoTimerRef.current);
-  }, []);
 
   const currentStep = forwardApplicantStatuses.findIndex((step) => step.id === status);
   const progressIndex = status === "rejected" ? -1 : currentStep;
@@ -71,10 +55,6 @@ export default function ApplicantStageStepper({
       return;
     }
     if (status === "interview_scheduled") {
-      setIsOfferOpen(true);
-      return;
-    }
-    if (status === "offer_extended") {
       setIsHiredConfirmOpen(true);
       return;
     }
@@ -88,37 +68,17 @@ export default function ApplicantStageStepper({
     return advanced;
   }
 
-  async function handleExtendOffer(details: OfferDetails) {
-    const advanced = await onAdvance({ offerDetails: details, ...(details.notes ? { note: details.notes } : {}) });
-    if (advanced) setAnnouncement("Offer extended.");
-    return advanced;
-  }
-
   async function handleReject(payload: ApplicantStatusUpdatePayload) {
-    const previousStatus = status;
     const rejected = await onReject(payload);
     if (!rejected) return false;
 
     setIsRejectOpen(false);
-    setUndoState({ previousStatus });
-    setAnnouncement("Applicant moved to Rejected. Undo is available for 8 seconds.");
-    if (undoTimerRef.current !== null) window.clearTimeout(undoTimerRef.current);
-    undoTimerRef.current = window.setTimeout(() => setUndoState(null), 8000);
+    setAnnouncement("Applicant moved to Rejected.");
     return true;
   }
 
-  async function handleUndoReject() {
-    if (!undoState) return;
-    const restored = await onUndoReject(undoState.previousStatus);
-    if (restored) {
-      if (undoTimerRef.current !== null) window.clearTimeout(undoTimerRef.current);
-      setUndoState(null);
-      setAnnouncement(`Applicant restored to ${applicantStatusConfig[undoState.previousStatus].label}.`);
-    }
-  }
-
   async function handleMarkHired() {
-    const hired = await onAdvance({ hiredAt: new Date().toISOString() });
+    const hired = await onAdvance();
     if (hired) {
       setIsHiredConfirmOpen(false);
       setAnnouncement("Applicant marked as hired.");
@@ -126,24 +86,12 @@ export default function ApplicantStageStepper({
   }
 
   async function handleRetry() {
-    const previousStatus = status;
-    const wasRejecting = isRejectOpen;
-    const hadUndoToast = undoState !== null;
     const retried = await onRetry();
     if (retried) {
       setIsScheduleOpen(false);
-      setIsOfferOpen(false);
       setIsRejectOpen(false);
       setIsHiredConfirmOpen(false);
       setAnnouncement("Stage update saved.");
-      if (wasRejecting) {
-        setUndoState({ previousStatus });
-        if (undoTimerRef.current !== null) window.clearTimeout(undoTimerRef.current);
-        undoTimerRef.current = window.setTimeout(() => setUndoState(null), 8000);
-      } else if (hadUndoToast) {
-        setUndoState(null);
-        if (undoTimerRef.current !== null) window.clearTimeout(undoTimerRef.current);
-      }
     }
   }
 
@@ -178,7 +126,7 @@ export default function ApplicantStageStepper({
       ) : (
         <>
           <div className="mt-5 hidden px-4 sm:block sm:px-5">
-            <ol aria-label="Applicant progress" className="grid grid-cols-6">
+            <ol aria-label="Applicant progress" className="grid grid-cols-5">
               {forwardApplicantStatuses.map((step, index) => {
                 const completed = index < progressIndex;
                 const current = step.id === status;
@@ -219,13 +167,6 @@ export default function ApplicantStageStepper({
           {interviewDetails.message ? <div className="sm:col-span-2"><dt className="text-[#718586]">Message</dt><dd className="mt-1 text-[#31494b]">{interviewDetails.message}</dd></div> : null}
         </dl>
       ) : null}
-      {status === "offer_extended" && offerDetails ? (
-        <dl className="mx-4 mt-4 rounded-lg border border-[#e1ebea] bg-[#f7fbfa] p-4 text-xs sm:mx-5">
-          <dt className="text-[#718586]">Proposed start date</dt>
-          <dd className="mt-1 font-medium text-[#31494b]">{formatDate(offerDetails.startDate)}</dd>
-          {offerDetails.notes ? <><dt className="mt-3 text-[#718586]">Notes</dt><dd className="mt-1 text-[#31494b]">{offerDetails.notes}</dd></> : null}
-        </dl>
-      ) : null}
 
       <div className="mt-5 flex flex-wrap items-center gap-2 px-4 sm:px-5">
         <NextActionButton status={status} disabled={isSaving} onClick={() => void handleNextAction()} />
@@ -241,18 +182,10 @@ export default function ApplicantStageStepper({
         </div>
       ) : null}
 
-      {undoState ? (
-        <div className="mx-4 mt-4 flex flex-wrap items-center justify-between gap-3 rounded-lg bg-[#203638] px-4 py-3 text-white sm:mx-5" role="status" aria-live="polite">
-          <p className="text-sm">Applicant rejected.</p>
-          <button type="button" onClick={() => void handleUndoReject()} disabled={isSaving} className="rounded-md px-2 py-1 text-sm font-semibold underline underline-offset-2 disabled:opacity-60">Undo</button>
-        </div>
-      ) : null}
-
       <div className="sr-only" aria-live="polite" aria-atomic="true">{announcement}</div>
       <div className="mt-5 px-4 sm:px-5"><StatusTimeline history={history} /></div>
 
       <ScheduleInterviewDialog open={isScheduleOpen} isSubmitting={isSaving} error={error} onRetry={() => void handleRetry()} onClose={() => !isSaving && setIsScheduleOpen(false)} onSubmit={handleScheduleInterview} />
-      <ExtendOfferDialog open={isOfferOpen} isSubmitting={isSaving} error={error} onRetry={() => void handleRetry()} onClose={() => !isSaving && setIsOfferOpen(false)} onSubmit={handleExtendOffer} />
       <RejectDialog open={isRejectOpen} isSubmitting={isSaving} error={error} onRetry={() => void handleRetry()} onClose={() => !isSaving && setIsRejectOpen(false)} onSubmit={handleReject} />
 
       <ApplicantDialog open={isHiredConfirmOpen} title="Mark applicant as hired?" role="alertdialog" error={error} onRetry={() => void handleRetry()} isRetrying={isSaving} onClose={() => !isSaving && setIsHiredConfirmOpen(false)}>

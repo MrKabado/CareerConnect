@@ -1,6 +1,6 @@
 ﻿import axios, { type AxiosError, type AxiosRequestConfig } from "axios";
 
-const apiBaseUrl = (import.meta.env.VITE_API_URL || "http://localhost:8000/api")
+const apiBaseUrl = (import.meta.env.VITE_API_BASE_URL || "http://localhost:8000/api")
   .replace(/\/+$/, "");
 
 export class ApiError extends Error {
@@ -52,6 +52,15 @@ export async function apiRequest<T>(
     ...options,
     url: path,
     headers,
+  });
+
+  return response.data;
+}
+
+export async function apiBlob(path: string, token: string): Promise<Blob> {
+  const response = await apiClient.get<Blob>(path, {
+    headers: { Authorization: `Bearer ${token}` },
+    responseType: "blob",
   });
 
   return response.data;

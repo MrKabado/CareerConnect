@@ -34,7 +34,10 @@ export interface AdminOutletContext {
     id: string,
     status: VerificationStatus,
     reason?: string,
-  ) => void;
+  ) => Promise<void>;
+  isLoading?: boolean;
+  error?: string | null;
+  retry?: () => void;
 }
 
 export interface User {

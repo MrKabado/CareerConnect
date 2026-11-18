@@ -6,13 +6,25 @@ type CreateListingModalProps = {
   modalTitle: string;
   newListingForm: {
     title: string;
-    department: string;
+    categoryId: string;
     location: string;
     workSetup: string;
     availableSlots: string;
     requiredHours: string;
     summary: string;
+    responsibilities: string;
+    requirements: string;
+    employmentType: string;
+    salaryMin: string;
+    salaryMax: string;
+    allowanceType: string;
+    allowanceAmount: string;
+    acceptedCourses: string;
+    moaAccepted: string;
   };
+  categories: Array<{ id: number; name: string }>;
+  isSaving: boolean;
+  error: string | null;
   onClose: () => void;
   onTypePick: (type: "job" | "ojt") => void;
   onBack: () => void;
@@ -27,6 +39,9 @@ export default function CreateListingModal({
   newListingStep,
   modalTitle,
   newListingForm,
+  categories,
+  isSaving,
+  error,
   onClose,
   onTypePick,
   onBack,
@@ -109,8 +124,11 @@ export default function CreateListingModal({
                   <input value={newListingForm.title} onChange={(event) => onFieldChange("title", event.target.value)} placeholder={newListingType === "ojt" ? "e.g. OJT Intern" : "e.g. Backend Developer"} className="w-full rounded-xl border border-[#dfe8e7] bg-white px-3 py-2.5 text-[12px] text-[#1d3133] placeholder:text-[#8a9b9d] outline-none transition focus:border-[#b8dde0]" />
                 </label>
                 <label className="block text-[11px] font-medium text-[#445a5d]">
-                  <span className="mb-1.5 block">Department *</span>
-                  <input value={newListingForm.department} onChange={(event) => onFieldChange("department", event.target.value)} placeholder="e.g. Platform Engineering" className="w-full rounded-xl border border-[#dfe8e7] bg-white px-3 py-2.5 text-[12px] text-[#1d3133] placeholder:text-[#8a9b9d] outline-none transition focus:border-[#b8dde0]" />
+                  <span className="mb-1.5 block">Category *</span>
+                  <select value={newListingForm.categoryId} onChange={(event) => onFieldChange("categoryId", event.target.value)} className="w-full rounded-xl border border-[#dfe8e7] bg-white px-3 py-2.5 text-[12px] text-[#1d3133] outline-none transition focus:border-[#b8dde0]">
+                    <option value="">Select a category</option>
+                    {categories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}
+                  </select>
                 </label>
                 <label className="block text-[11px] font-medium text-[#445a5d]">
                   <span className="mb-1.5 block">Location *</span>
@@ -119,19 +137,55 @@ export default function CreateListingModal({
                 <label className="block text-[11px] font-medium text-[#445a5d]">
                   <span className="mb-1.5 block">Work setup *</span>
                   <select value={newListingForm.workSetup} onChange={(event) => onFieldChange("workSetup", event.target.value)} className="w-full rounded-xl border border-[#dfe8e7] bg-white px-3 py-2.5 text-[12px] text-[#1d3133] outline-none transition focus:border-[#b8dde0]">
-                    <option>Hybrid</option>
-                    <option>On-site</option>
-                    <option>Remote</option>
+                    <option value="hybrid">Hybrid</option>
+                    <option value="onsite">On-site</option>
+                    <option value="remote">Remote</option>
                   </select>
                 </label>
-                <label className="block text-[11px] font-medium text-[#445a5d]">
+                {newListingType === "ojt" && <label className="block text-[11px] font-medium text-[#445a5d]">
                   <span className="mb-1.5 block">Available slots *</span>
                   <input value={newListingForm.availableSlots} onChange={(event) => onFieldChange("availableSlots", event.target.value)} className="w-full rounded-xl border border-[#dfe8e7] bg-white px-3 py-2.5 text-[12px] text-[#1d3133] outline-none transition focus:border-[#b8dde0]" />
                 </label>
-                <label className="block text-[11px] font-medium text-[#445a5d]">
+                }
+                {newListingType === "ojt" && <label className="block text-[11px] font-medium text-[#445a5d]">
                   <span className="mb-1.5 block">Required hours *</span>
                   <input value={newListingForm.requiredHours} onChange={(event) => onFieldChange("requiredHours", event.target.value)} className="w-full rounded-xl border border-[#dfe8e7] bg-white px-3 py-2.5 text-[12px] text-[#1d3133] outline-none transition focus:border-[#b8dde0]" />
                 </label>
+                }
+                {newListingType === "job" && <>
+                  <label className="block text-[11px] font-medium text-[#445a5d]">
+                    <span className="mb-1.5 block">Employment type *</span>
+                    <select value={newListingForm.employmentType} onChange={(event) => onFieldChange("employmentType", event.target.value)} className="w-full rounded-xl border border-[#dfe8e7] bg-white px-3 py-2.5 text-[12px]">
+                      <option value="full_time">Full-time</option><option value="part_time">Part-time</option><option value="contract">Contract</option>
+                    </select>
+                  </label>
+                  <label className="block text-[11px] font-medium text-[#445a5d]">
+                    <span className="mb-1.5 block">Minimum salary</span>
+                    <input type="number" min="0" value={newListingForm.salaryMin} onChange={(event) => onFieldChange("salaryMin", event.target.value)} className="w-full rounded-xl border border-[#dfe8e7] bg-white px-3 py-2.5 text-[12px]" />
+                  </label>
+                  <label className="block text-[11px] font-medium text-[#445a5d]">
+                    <span className="mb-1.5 block">Maximum salary</span>
+                    <input type="number" min="0" value={newListingForm.salaryMax} onChange={(event) => onFieldChange("salaryMax", event.target.value)} className="w-full rounded-xl border border-[#dfe8e7] bg-white px-3 py-2.5 text-[12px]" />
+                  </label>
+                </>}
+                {newListingType === "ojt" && <>
+                  <label className="block text-[11px] font-medium text-[#445a5d]">
+                    <span className="mb-1.5 block">Allowance</span>
+                    <select value={newListingForm.allowanceType} onChange={(event) => onFieldChange("allowanceType", event.target.value)} className="w-full rounded-xl border border-[#dfe8e7] bg-white px-3 py-2.5 text-[12px]"><option value="paid">Paid</option><option value="unpaid">Unpaid</option></select>
+                  </label>
+                  {newListingForm.allowanceType === "paid" && <label className="block text-[11px] font-medium text-[#445a5d]">
+                    <span className="mb-1.5 block">Monthly allowance</span>
+                    <input type="number" min="0" value={newListingForm.allowanceAmount} onChange={(event) => onFieldChange("allowanceAmount", event.target.value)} className="w-full rounded-xl border border-[#dfe8e7] bg-white px-3 py-2.5 text-[12px]" />
+                  </label>}
+                  <label className="block text-[11px] font-medium text-[#445a5d]">
+                    <span className="mb-1.5 block">Accepted courses (comma-separated)</span>
+                    <input value={newListingForm.acceptedCourses} onChange={(event) => onFieldChange("acceptedCourses", event.target.value)} className="w-full rounded-xl border border-[#dfe8e7] bg-white px-3 py-2.5 text-[12px]" />
+                  </label>
+                  <label className="flex items-center gap-2 text-[11px] font-medium text-[#445a5d]">
+                    <input type="checkbox" checked={newListingForm.moaAccepted === "true"} onChange={(event) => onFieldChange("moaAccepted", String(event.target.checked))} />
+                    School MOA accepted
+                  </label>
+                </>}
               </div>
 
               <label className="mt-4 block text-[11px] font-medium text-[#445a5d]">
@@ -141,12 +195,21 @@ export default function CreateListingModal({
                 </div>
                 <textarea value={newListingForm.summary} onChange={(event) => onFieldChange("summary", event.target.value)} placeholder="Describe the role, team, and impact of this opportunity." rows={4} className="w-full resize-none rounded-xl border border-[#dfe8e7] bg-white px-3 py-2.5 text-[12px] text-[#1d3133] placeholder:text-[#8a9b9d] outline-none transition focus:border-[#b8dde0]" />
               </label>
+              <label className="mt-4 block text-[11px] font-medium text-[#445a5d]">
+                <span className="mb-1.5 block">Responsibilities *</span>
+                <textarea value={newListingForm.responsibilities} onChange={(event) => onFieldChange("responsibilities", event.target.value)} rows={3} className="w-full resize-y rounded-xl border border-[#dfe8e7] bg-white px-3 py-2.5 text-[12px]" />
+              </label>
+              <label className="mt-4 block text-[11px] font-medium text-[#445a5d]">
+                <span className="mb-1.5 block">Requirements *</span>
+                <textarea value={newListingForm.requirements} onChange={(event) => onFieldChange("requirements", event.target.value)} rows={3} className="w-full resize-y rounded-xl border border-[#dfe8e7] bg-white px-3 py-2.5 text-[12px]" />
+              </label>
 
               <div className="mt-3 rounded-[10px] border border-[#dfeae8] bg-[#edf9f6] px-3 py-2 text-[10px] leading-5 text-[#476368]">
                 <span className="mr-2 text-[#0d8fa2]">•</span>
                 Company support and eligible counselors will be included from employer onboarding.
               </div>
 
+              {error && <p className="mt-3 text-xs text-red-700" role="alert">{error}</p>}
               <div className="mt-5 flex items-center justify-between gap-3 border-t border-[#edf1f0] pt-4">
                 <button type="button" onClick={onBack} className="rounded-xl border border-[#dfe8e7] bg-white px-3 py-2 text-[11px] font-semibold text-[#4a6467] transition hover:border-[#d0e2e0]">
                   ← Back
@@ -155,8 +218,8 @@ export default function CreateListingModal({
                   <button type="button" onClick={onClose} className="rounded-xl border border-[#dfe8e7] bg-white px-3 py-2 text-[11px] font-semibold text-[#4a6467] transition hover:border-[#d0e2e0]">
                     Cancel
                   </button>
-                  <button type="button" onClick={onSaveDraft} className="rounded-xl bg-[#0e8e9b] px-4 py-2.5 text-[11px] font-semibold text-white shadow-[0_10px_18px_rgba(14,142,155,0.2)] transition hover:bg-[#0a7d8a]">
-                    Save as draft
+                  <button type="button" disabled={isSaving} onClick={onSaveDraft} className="rounded-xl bg-[#0e8e9b] px-4 py-2.5 text-[11px] font-semibold text-white shadow-[0_10px_18px_rgba(14,142,155,0.2)] transition hover:bg-[#0a7d8a] disabled:opacity-50">
+                    {isSaving ? "Saving…" : "Save as draft"}
                   </button>
                 </div>
               </div>

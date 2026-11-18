@@ -1,4 +1,4 @@
-export type EmployerListingStatus = "active" | "draft" | "closed";
+export type EmployerListingStatus = "active" | "draft" | "closed" | "deactivated";
 
 export type EmployerListing = {
   id: string;
@@ -9,8 +9,8 @@ export type EmployerListing = {
   category: string;
   location: string;
   department: string;
-  applicants: number;
-  shortlisted: number;
+  applicants?: number;
+  shortlisted?: number;
   status: EmployerListingStatus;
   updated: string;
   description: string;

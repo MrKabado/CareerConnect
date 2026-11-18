@@ -1,78 +1,106 @@
-import { useMemo, useState, useSyncExternalStore } from "react";
-import { applicationStore } from "@/features/applications/applicationData";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import type { Application } from "@/features/applications/applicationData";
+import { useAuth } from "@/features/auth/useAuth";
+import {
+  applicantApplicationsApi,
+  applicationStatusLabel,
+  type ApplicantApplicationRecord,
+} from "@/features/user-applications/backendApi";
 import type { ApplicationFilter } from "@/components/ui/applications/ApplicationsMainSection";
 
+function formatAppliedAt(value: string | null): string {
+  if (!value) return "Date not available";
+  const date = new Date(value);
+  return Number.isNaN(date.getTime())
+    ? "Date not available"
+    : new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric" }).format(date);
+}
+
+function toApplication(record: ApplicantApplicationRecord): Application {
+  const company = record.listing?.company_name ?? "Company unavailable";
+  return {
+    id: record.id,
+    jobListingId: record.listing ? String(record.listing.id) : undefined,
+    companyInitial: company.slice(0, 1).toUpperCase(),
+    title: record.listing?.title ?? "Listing unavailable",
+    company,
+    appliedAt: formatAppliedAt(record.applied_at),
+    status: applicationStatusLabel(record.status),
+    track: record.listing?.listing_type === "ojt" ? "OJT" : "Job",
+    resumeFileName: record.resume?.original_filename,
+    coverLetterFileName: record.cover_letter ? "Cover letter submitted" : undefined,
+  };
+}
+
 export function useUserApplications() {
+  const { token } = useAuth();
   const [filter, setFilter] = useState<ApplicationFilter>("All applications");
   const [search, setSearch] = useState("");
-  const [selectedId, setSelectedId] = useState<number | null>(() =>
-    applicationStore.getSnapshot()[0]?.id ?? null,
-  );
-  const applications = useSyncExternalStore(
-    applicationStore.subscribe,
-    applicationStore.getSnapshot,
-    applicationStore.getSnapshot,
-  );
+  const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [applications, setApplications] = useState<Application[]>([]);
+  const [page, setPage] = useState(1);
+  const [lastPage, setLastPage] = useState(1);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const loadPage = useCallback(async (pageToLoad: number, append: boolean) => {
+    if (!token) return;
+    try {
+      const response = await applicantApplicationsApi.list(token, pageToLoad);
+      const records = response.data.map(toApplication);
+      setError(null);
+      setApplications((current) => append ? [...current, ...records] : records);
+      setPage(response.meta.current_page);
+      setLastPage(response.meta.last_page);
+      setSelectedId((current) => current ?? records[0]?.id ?? null);
+    } catch (requestError) {
+      setError(requestError instanceof Error ? requestError.message : "Unable to load applications.");
+    } finally {
+      setIsLoading(false);
+    }
+  }, [token]);
+
+  useEffect(() => {
+    // The request updates state only after its promise settles.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void loadPage(1, false);
+  }, [loadPage]);
 
   const filteredApplications = useMemo(() => {
     const query = search.trim().toLowerCase();
     return applications.filter((application) => {
-      const matchesFilter =
-        filter === "All applications" || application.track === filter;
-      const matchesQuery =
-        !query ||
+      const matchesFilter = filter === "All applications" || application.track === filter;
+      const matchesQuery = !query ||
         `${application.title} ${application.company}`.toLowerCase().includes(query);
       return matchesFilter && matchesQuery;
     });
   }, [applications, filter, search]);
 
-  function preserveSelectionIfVisible(
-    nextFilter: ApplicationFilter,
-    nextSearch: string,
-  ) {
-    setSelectedId((previousId) => {
-      if (previousId === null) return null;
-      const selectedApplication = applications.find(
-        (application) => application.id === previousId,
-      );
-      if (!selectedApplication) return null;
-
-      const query = nextSearch.trim().toLowerCase();
-      const matchesFilter =
-        nextFilter === "All applications" ||
-        selectedApplication.track === nextFilter;
-      const matchesSearch =
-        !query ||
-        `${selectedApplication.title} ${selectedApplication.company}`
-          .toLowerCase()
-          .includes(query);
-
-      return matchesFilter && matchesSearch ? previousId : null;
-    });
-  }
-
-  function handleFilterChange(nextFilter: ApplicationFilter) {
-    setFilter(nextFilter);
-    preserveSelectionIfVisible(nextFilter, search);
-  }
-
-  function handleSearchChange(nextSearch: string) {
-    setSearch(nextSearch);
-    preserveSelectionIfVisible(filter, nextSearch);
-  }
-
-  function handleSelect(id: number) {
-    setSelectedId((previous) => (previous === id ? null : id));
-  }
+  const activeSelectedId = filteredApplications.some((item) => item.id === selectedId)
+    ? selectedId
+    : filteredApplications[0]?.id ?? null;
 
   return {
     applications,
     filteredApplications,
     filter,
     search,
-    selectedId,
-    onFilterChange: handleFilterChange,
-    onSearchChange: handleSearchChange,
-    onSelect: handleSelect,
+    selectedId: activeSelectedId,
+    isLoading,
+    error,
+    hasMore: page < lastPage,
+    loadMore: () => {
+      setIsLoading(true);
+      setError(null);
+      void loadPage(page + 1, true);
+    },
+    onFilterChange: setFilter,
+    onSearchChange: setSearch,
+    onSelect: (id: number) => setSelectedId((current) => current === id ? null : id),
+    retry: () => {
+      setIsLoading(true);
+      setError(null);
+      void loadPage(1, false);
+    },
   };
 }

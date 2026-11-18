@@ -4,6 +4,10 @@ import {
   employerRegistrationApi,
   getEmployerStatusPath,
 } from "@/features/employer-registration/api";
+import { useAuth } from "@/features/auth/useAuth";
+import { ApiError } from "@/lib/axios";
+import { employerVerificationFilesApi } from "@/features/employer-verification/backendApi";
+import { PageSkeleton } from "@/components/ui/skeleton";
 import type {
   EmployerRouteAccess,
   EmployerStatus,
@@ -34,9 +38,51 @@ export default function RequireEmployerStatus({
   children: ReactNode;
 }) {
   const { employer, status } = useEmployerStatus();
+  const { user, token, status: authStatus, error: authError, refresh } = useAuth();
   const verification = useCompanyVerification();
   const [demoError, setDemoError] = useState<string | null>(null);
-  const isMayaDemoSetup = import.meta.env.DEV && access === "dashboard" && !employer;
+  const [serverStatus, setServerStatus] = useState<string | null>(null);
+  const [serverStatusError, setServerStatusError] = useState<string | null>(null);
+  const [isServerStatusLoading, setIsServerStatusLoading] = useState(false);
+  const [retryStatus, setRetryStatus] = useState(0);
+  const isAuthenticatedEmployer = user?.role === "employer";
+  const usesBackendStatus =
+    isAuthenticatedEmployer &&
+    (access === "verification" || access === "under-review" || access === "dashboard");
+  const isMayaDemoSetup =
+    import.meta.env.DEV && access === "dashboard" && !employer && !isAuthenticatedEmployer;
+
+  useEffect(() => {
+    if (!usesBackendStatus || !token) return;
+
+    let active = true;
+    setIsServerStatusLoading(true);
+    setServerStatusError(null);
+    employerVerificationFilesApi
+      .status(token)
+      .then((response) => {
+        if (active) setServerStatus(response.status);
+      })
+      .catch((requestError: unknown) => {
+        if (!active) return;
+        if (requestError instanceof ApiError && requestError.status === 401) {
+          setServerStatusError("Your session has expired. Sign in again to continue.");
+        } else {
+          setServerStatusError(
+            requestError instanceof Error
+              ? requestError.message
+              : "Unable to load your employer verification status.",
+          );
+        }
+      })
+      .finally(() => {
+        if (active) setIsServerStatusLoading(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [retryStatus, token, usesBackendStatus]);
 
   useEffect(() => {
     if (!isMayaDemoSetup) return;
@@ -53,6 +99,104 @@ export default function RequireEmployerStatus({
       }, 0);
     }
   }, [isMayaDemoSetup]);
+
+  if (
+    authStatus === "loading" &&
+    token &&
+    (access === "verification" || access === "under-review" || access === "dashboard")
+  ) {
+    return <PageSkeleton className="min-h-dvh" label="Loading employer account" />;
+  }
+
+  if (
+    (access === "verification" || access === "under-review") &&
+    !isAuthenticatedEmployer &&
+    !isMayaDemoSetup
+  ) {
+    if (authStatus === "authenticated") return <Navigate replace to="/job-search" />;
+    if (authStatus === "error") {
+      return (
+        <main className="grid min-h-dvh place-items-center px-6 text-center">
+          <div className="max-w-md">
+            <p className="text-sm text-red-700" role="alert">
+              {authError ?? "Your employer account could not be verified."}
+            </p>
+            <button
+              className="mt-4 rounded-lg bg-[#078b8d] px-4 py-2 text-sm font-semibold text-white hover:bg-[#066f72]"
+              onClick={() => void refresh()}
+              type="button"
+            >
+              Return to login
+            </button>
+          </div>
+        </main>
+      );
+    }
+    return <Navigate replace to="/login" />;
+  }
+
+  if (usesBackendStatus) {
+    if (authStatus === "loading" || isServerStatusLoading) {
+      return <PageSkeleton className="min-h-dvh" label="Loading employer status" />;
+    }
+
+    if (authStatus !== "authenticated" || !token) {
+      return <Navigate replace to="/login" />;
+    }
+
+    if (serverStatusError) {
+      return (
+        <main className="grid min-h-dvh place-items-center px-6 text-center">
+          <div className="max-w-md">
+            <p className="text-sm text-red-700" role="alert">{serverStatusError}</p>
+            <button
+              className="mt-4 rounded-lg bg-[#078b8d] px-4 py-2 text-sm font-semibold text-white hover:bg-[#066f72]"
+              onClick={() => setRetryStatus((current) => current + 1)}
+              type="button"
+            >
+              Try again
+            </button>
+          </div>
+        </main>
+      );
+    }
+
+    if (serverStatus === null) {
+      return <PageSkeleton className="min-h-dvh" label="Loading employer status" />;
+    }
+
+    if (access === "verification") {
+      if (serverStatus === "incomplete" || serverStatus === "rejected") return children;
+      return (
+        <Navigate
+          replace
+          to={serverStatus === "pending" ? "/employer/under-review" : "/employer/overview"}
+        />
+      );
+    }
+
+    if (access === "under-review") {
+      if (serverStatus === "pending") return children;
+      return (
+        <Navigate
+          replace
+          to={serverStatus === "verified" ? "/employer/overview" : "/employer/verification"}
+        />
+      );
+    }
+
+    if (serverStatus === "verified") return children;
+    return (
+      <Navigate
+        replace
+        to={serverStatus === "pending" ? "/employer/under-review" : "/employer/verification"}
+      />
+    );
+  }
+
+  if (authStatus === "authenticated" && user?.role !== "employer" && access !== "register") {
+    return <Navigate replace to="/job-search" />;
+  }
 
   if (isMayaDemoSetup) {
     return (

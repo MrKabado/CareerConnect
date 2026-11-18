@@ -17,23 +17,40 @@ export default function JobApplicationPageContent() {
     step,
     setStep,
     resume,
-    applicationLetter,
-    coverLetter,
+    savedResumeName,
+    resumeLoading,
     resumeError,
-    letterError,
-    coverLetterError,
+    coverLetter,
+    setCoverLetter,
     submitError,
     isSubmitting,
+    uploadProgress,
     isAlreadySubmitted,
     handleFileSelect,
     reviewApplication,
     submitApplication,
     navigate,
-    ojtAnswers,
+    listingLoading,
+    listingError,
   } = useJobApplication();
 
+  if (listingLoading) {
+    return (
+      <ApplicationLayout>
+        <main aria-busy="true" className="mx-auto w-full max-w-162.5 flex-1 px-6 py-16 text-center text-sm text-[#718184]">
+          Loading listing…
+        </main>
+      </ApplicationLayout>
+    );
+  }
+
   if (!opportunity) {
-    return <JobApplicationNotFound returnPath={returnPath ?? "/job-search"} />;
+    return (
+      <JobApplicationNotFound
+        message={listingError ?? undefined}
+        returnPath={returnPath ?? "/job-search"}
+      />
+    );
   }
 
   return (
@@ -65,16 +82,14 @@ export default function JobApplicationPageContent() {
           <ErrorBoundary>
             {step === 1 && (
               <JobApplicationFormStep
-                coverLetterError={coverLetterError}
-                coverLetterFileName={coverLetter?.name}
-                letterError={letterError}
+                coverLetter={coverLetter}
+                onCoverLetterChange={setCoverLetter}
                 onFileSelect={handleFileSelect}
                 onReview={reviewApplication}
-                applicationLetterFileName={applicationLetter?.name}
                 resumeError={resumeError}
-                resumeFileName={resume?.name}
+                resumeFileName={resume?.name ?? savedResumeName}
+                resumeLoading={resumeLoading}
                 submitError={submitError}
-                track={opportunity.track}
               />
             )}
           </ErrorBoundary>
@@ -82,14 +97,13 @@ export default function JobApplicationPageContent() {
           <ErrorBoundary>
             {step === 2 && (
               <JobApplicationReviewStep
-                applicationLetterName={applicationLetter?.name}
-                coverLetterName={coverLetter?.name}
+                coverLetter={coverLetter}
                 isSubmitting={isSubmitting}
-                ojtAnswers={ojtAnswers}
+                uploadProgress={uploadProgress}
                 onBack={() => setStep(1)}
                 onSubmit={submitApplication}
                 opportunity={opportunity}
-                resumeName={resume?.name}
+                resumeName={resume?.name ?? savedResumeName}
                 submitError={submitError}
               />
             )}

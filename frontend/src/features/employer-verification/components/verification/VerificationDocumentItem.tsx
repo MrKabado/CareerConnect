@@ -9,16 +9,24 @@ type VerificationDocumentItemProps = {
   requirement: (typeof verificationDocumentRequirements)[number];
   document: EmployerVerificationDocument | undefined;
   uploading: VerificationDocumentKind | null;
+  uploadProgress: number;
   submitting: boolean;
   onFileChange: (kind: VerificationDocumentKind, file?: File) => void | Promise<void>;
+  onRemove: (kind: VerificationDocumentKind) => void | Promise<void>;
+  onDownload: (documentId: string, fileName: string) => void | Promise<void>;
+  removing: boolean;
 };
 
 export default function VerificationDocumentItem({
   requirement,
   document,
   uploading,
+  uploadProgress,
   submitting,
   onFileChange,
+  onRemove,
+  onDownload,
+  removing,
 }: VerificationDocumentItemProps) {
   return (
     <section className="rounded-xl border border-[#e5eeec] bg-[#fbfdfd] p-4" key={requirement.kind}>
@@ -28,7 +36,7 @@ export default function VerificationDocumentItem({
           <span className="ml-1 text-[#ba564d]" aria-hidden="true">*</span>
         </span>
         <span className="mt-1 block text-xs text-[#78888a]">
-          PDF, JPG, or PNG · up to 10 MB
+          PDF, JPG, or PNG · up to 5 MB
         </span>
         <input
           accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png"
@@ -52,9 +60,30 @@ export default function VerificationDocumentItem({
           <span className="text-[#9b5b40]">Required — not uploaded</span>
         )}
         {uploading === requirement.kind && (
-          <span aria-live="polite" className="text-[#087879]">
-            Uploading…
-          </span>
+          <div className="flex items-center gap-2 text-[#087879]" aria-live="polite">
+            <span>Uploading… {uploadProgress}%</span>
+            <progress aria-label={`Uploading ${requirement.label}`} max={100} value={uploadProgress} />
+          </div>
+        )}
+        {document && (
+          <div className="flex gap-3">
+            <button
+              className="font-semibold text-[#087879] underline underline-offset-2 disabled:opacity-50"
+              disabled={removing || submitting || uploading !== null}
+              onClick={() => void onDownload(document.id, document.fileName)}
+              type="button"
+            >
+              Download
+            </button>
+            <button
+              className="font-semibold text-[#a2534c] underline underline-offset-2 disabled:opacity-50"
+              disabled={removing || submitting || uploading !== null}
+              onClick={() => void onRemove(requirement.kind)}
+              type="button"
+            >
+              {removing ? "Removing…" : "Remove"}
+            </button>
+          </div>
         )}
       </div>
     </section>

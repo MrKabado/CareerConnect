@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\ActivityLog;
 use App\Models\Company;
 use App\Models\CompanyVerification;
 use App\Models\User;
@@ -13,7 +14,11 @@ use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
+use Illuminate\Support\Str;
 use Symfony\Component\HttpFoundation\StreamedResponse;
+use Symfony\Component\HttpKernel\Exception\ConflictHttpException;
+use RuntimeException;
+use Throwable;
 
 class EmployerVerificationController extends Controller
 {
@@ -76,9 +81,78 @@ class EmployerVerificationController extends Controller
         ]);
     }
 
+    public function show(CompanyVerification $companyVerification): JsonResponse
+    {
+        $companyVerification->load([
+            'company.user:id,name,email',
+            'company.category:id,name',
+            'documents',
+        ]);
+        $company = $companyVerification->company;
+
+        return response()->json([
+            'data' => [
+                'id' => $companyVerification->id,
+                'status' => $companyVerification->status,
+                'rejection_reason' => $companyVerification->rejection_reason,
+                'rejection_note' => $companyVerification->rejection_note,
+                'submitted_at' => $companyVerification->submitted_at?->toISOString(),
+                'reviewed_at' => $companyVerification->reviewed_at?->toISOString(),
+                'company' => [
+                    'id' => $company->id,
+                    'name' => $company->name,
+                    'category' => $company->category?->name,
+                    'company_size' => $company->company_size,
+                    'address' => $company->address,
+                    'city' => $company->city,
+                    'website' => $company->website,
+                    'description' => $company->description,
+                    'contact_name' => $company->contact_name,
+                    'contact_phone' => $company->contact_phone,
+                    'contact_email' => $company->contact_email,
+                    'owner' => [
+                        'id' => $company->user->id,
+                        'name' => $company->user->name,
+                        'email' => $company->user->email,
+                    ],
+                ],
+                'documents' => $companyVerification->documents->map(fn (VerificationDocument $document): array => [
+                    'id' => $document->id,
+                    'type' => $document->type,
+                    'original_filename' => $document->original_filename,
+                    'mime_type' => $document->mime_type,
+                    'size_bytes' => $document->size_bytes,
+                ])->values(),
+            ],
+        ]);
+    }
+
+    public function adminDocument(
+        CompanyVerification $companyVerification,
+        VerificationDocument $document,
+    ): StreamedResponse {
+        if ($document->company_verification_id !== $companyVerification->id
+            || ! Storage::disk('local')->exists($document->file_path)) {
+            abort(404, 'The verification document is unavailable.');
+        }
+
+        return Storage::disk('local')->download($document->file_path, $document->original_filename, [
+            'Content-Type' => $document->mime_type,
+            'X-Content-Type-Options' => 'nosniff',
+        ]);
+    }
+
     public function company(Request $request): JsonResponse
     {
         $user = $request->user();
+        if ($request->isMethod('get')) {
+            $company = $user->company;
+
+            return response()->json([
+                'company' => $company ? $this->companyData($company) : null,
+            ]);
+        }
+
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:255'],
             'category_id' => ['nullable', 'exists:categories,id'],
@@ -113,24 +187,64 @@ class EmployerVerificationController extends Controller
     public function uploadLogo(Request $request): JsonResponse
     {
         $request->validate([
-            'logo' => ['required', 'image', 'mimes:jpg,jpeg,png,webp', 'max:2048'],
+            'logo' => ['required', 'image', 'mimes:jpg,jpeg,png,webp', 'extensions:jpg,jpeg,png,webp', 'max:2048'],
         ]);
 
-        $company = $request->user()->company()->firstOrNew();
-        $file = $request->file('logo');
-        $path = $file->storePublicly('company-logos', 'public');
-
-        if ($company->logo_path !== null && Storage::disk('public')->exists($company->logo_path)) {
-            Storage::disk('public')->delete($company->logo_path);
+        $company = $request->user()->company;
+        if ($company === null) {
+            return response()->json([
+                'message' => 'Create your company profile before uploading a logo.',
+                'code' => 'company_profile_required',
+            ], 422);
         }
 
-        $company->logo_path = $path;
-        $company->save();
+        $file = $request->file('logo');
+        $path = $file->storePubliclyAs(
+            'company-logos',
+            Str::uuid().'.'.$file->extension(),
+            'public',
+        );
+        if ($path === false) {
+            throw new RuntimeException('The company logo could not be stored.');
+        }
+
+        $oldPath = $company->logo_path;
+        try {
+            $company->logo_path = $path;
+            $company->save();
+        } catch (Throwable $exception) {
+            if (! Storage::disk('public')->delete($path)) {
+                throw new RuntimeException('The failed company logo upload could not be cleaned up.', previous: $exception);
+            }
+            throw $exception;
+        }
+
+        if ($oldPath !== null && ! Storage::disk('public')->delete($oldPath)) {
+            throw new RuntimeException('The previous company logo could not be removed.');
+        }
         $this->syncVerificationStatus($company);
 
         return response()->json([
             'message' => 'Company logo uploaded.',
-            'logo_path' => $path,
+            'logo_url' => Storage::disk('public')->url($path),
+        ]);
+    }
+
+    public function deleteLogo(Request $request): JsonResponse
+    {
+        $company = $request->user()->company()->firstOrFail();
+        $path = $company->logo_path;
+
+        if ($path !== null && ! Storage::disk('public')->delete($path)) {
+            throw new RuntimeException('The company logo could not be removed.');
+        }
+
+        $company->logo_path = null;
+        $company->save();
+
+        return response()->json([
+            'message' => 'Company logo removed.',
+            'company' => $this->companyData($company->fresh()),
         ]);
     }
 
@@ -138,37 +252,150 @@ class EmployerVerificationController extends Controller
     {
         $request->validate([
             'type' => ['required', Rule::in(['business_registration', 'business_permit', 'supporting'])],
-            'document' => ['required', 'file', 'mimes:pdf,jpg,jpeg,png', 'max:5120'],
+            'document' => ['required', 'file', 'mimes:pdf,jpg,jpeg,png', 'extensions:pdf,jpg,jpeg,png', 'max:5120'],
         ]);
 
         $company = $request->user()->company()->firstOrFail();
         $verification = $this->getOrCreateVerification($company);
-
-        $path = $request->file('document')->storeAs(
-            'company-verifications/'.$company->id,
-            $request->input('type').'-'.time().'.'.$request->file('document')->extension(),
+        $file = $request->file('document');
+        $path = $file->storeAs(
+            'employer-verifications/'.$company->id,
+            Str::uuid().'.'.$file->extension(),
             'local',
         );
+        if ($path === false) {
+            throw new RuntimeException('The verification document could not be stored.');
+        }
 
-        $verification->documents()->create([
-            'type' => $request->input('type'),
-            'file_path' => $path,
-            'original_filename' => $request->file('document')->getClientOriginalName(),
-            'mime_type' => $request->file('document')->getMimeType(),
-            'size_bytes' => $request->file('document')->getSize(),
-        ]);
+        $previousPath = null;
+        try {
+            $document = DB::transaction(function () use ($verification, $company, $request, $file, $path, &$previousPath): VerificationDocument {
+                $lockedVerification = CompanyVerification::query()
+                    ->lockForUpdate()
+                    ->findOrFail($verification->id);
+                $this->ensureVerificationCanBeChanged($lockedVerification);
 
-        $verification->status = $this->statusForVerification($company, $verification);
-        $verification->save();
+                $type = $request->string('type')->toString();
+                $document = in_array($type, ['business_registration', 'business_permit'], true)
+                    ? $lockedVerification->documents()->where('type', $type)->lockForUpdate()->first()
+                    : null;
+
+                if ($document === null) {
+                    $document = new VerificationDocument;
+                    $document->company_verification_id = $lockedVerification->id;
+                } else {
+                    $previousPath = $document->file_path;
+                }
+
+                $document->fill([
+                    'type' => $type,
+                    'file_path' => $path,
+                    'original_filename' => $this->safeOriginalFilename($file),
+                    'mime_type' => $file->getMimeType(),
+                    'size_bytes' => $file->getSize(),
+                ]);
+                $document->save();
+
+                $lockedVerification->forceFill([
+                    'status' => 'incomplete',
+                    'submitted_at' => null,
+                    'reviewed_by' => null,
+                    'reviewed_at' => null,
+                    'rejection_reason' => null,
+                    'rejection_note' => null,
+                ])->save();
+                $company->forceFill(['is_verified' => false, 'verified_at' => null])->save();
+
+                return $document;
+            });
+        } catch (Throwable $exception) {
+            if (! Storage::disk('local')->delete($path)) {
+                throw new RuntimeException('The failed verification upload could not be cleaned up.', previous: $exception);
+            }
+            throw $exception;
+        }
+
+        if ($previousPath !== null && ! Storage::disk('local')->delete($previousPath)) {
+            throw new RuntimeException('The replaced verification document could not be removed.');
+        }
 
         return response()->json([
-            'message' => 'Document uploaded.',
-            'status' => $verification->status,
-            'document' => [
-                'type' => $request->input('type'),
-                'file_path' => $path,
-            ],
-        ], 201);
+            'message' => $previousPath === null ? 'Document uploaded.' : 'Document replaced.',
+            'status' => $verification->fresh()->status,
+            'document' => $this->verificationDocumentData($document),
+        ], $previousPath === null ? 201 : 200);
+    }
+
+    public function documents(Request $request): JsonResponse
+    {
+        $verification = $request->user()->company?->verification;
+
+        return response()->json([
+            'data' => $verification?->documents()
+                ->orderBy('id')
+                ->get()
+                ->map(fn (VerificationDocument $document): array => $this->verificationDocumentData($document))
+                ->values() ?? collect(),
+        ]);
+    }
+
+    public function deleteDocument(Request $request, VerificationDocument $verificationDocument): JsonResponse
+    {
+        $verification = $request->user()->company?->verification;
+        if ($verification === null || $verificationDocument->company_verification_id !== $verification->id) {
+            abort(404);
+        }
+
+        $path = DB::transaction(function () use ($verification, $verificationDocument): string {
+            $lockedVerification = CompanyVerification::query()
+                ->lockForUpdate()
+                ->findOrFail($verification->id);
+            $this->ensureVerificationCanBeChanged($lockedVerification);
+            $document = $lockedVerification->documents()
+                ->lockForUpdate()
+                ->findOrFail($verificationDocument->id);
+            $path = $document->file_path;
+            $document->delete();
+
+            $lockedVerification->forceFill([
+                'status' => 'incomplete',
+                'submitted_at' => null,
+                'reviewed_by' => null,
+                'reviewed_at' => null,
+                'rejection_reason' => null,
+                'rejection_note' => null,
+            ])->save();
+            $lockedVerification->company()->update(['is_verified' => false, 'verified_at' => null]);
+
+            return $path;
+        });
+
+        if (! Storage::disk('local')->delete($path)) {
+            throw new RuntimeException('The verification document record was removed, but its file could not be deleted.');
+        }
+
+        return response()->json(['message' => 'Verification document deleted.']);
+    }
+
+    public function downloadDocument(Request $request, VerificationDocument $verificationDocument): StreamedResponse
+    {
+        $verification = $request->user()->company?->verification;
+        if ($verification === null || $verificationDocument->company_verification_id !== $verification->id) {
+            abort(404);
+        }
+
+        $expectedPrefix = 'employer-verifications/'.$request->user()->company->id.'/';
+        if (! str_starts_with($verificationDocument->file_path, $expectedPrefix)
+            || preg_match('#^employer-verifications/[0-9]+/[a-f0-9-]+\.(pdf|jpg|jpeg|png)$#i', $verificationDocument->file_path) !== 1
+            || ! Storage::disk('local')->exists($verificationDocument->file_path)) {
+            abort(404, 'The verification document is unavailable.');
+        }
+
+        return Storage::disk('local')->download(
+            $verificationDocument->file_path,
+            $verificationDocument->original_filename,
+            ['Content-Type' => $verificationDocument->mime_type, 'X-Content-Type-Options' => 'nosniff'],
+        );
     }
 
     public function submit(Request $request): JsonResponse
@@ -216,23 +443,49 @@ class EmployerVerificationController extends Controller
             'rejection_note' => ['nullable', 'string', 'max:1000'],
         ]);
 
-        $companyVerification->status = $validated['status'];
-        $companyVerification->reviewed_by = $request->user()->id;
-        $companyVerification->reviewed_at = now();
-        $companyVerification->rejection_reason = $validated['status'] === 'rejected' ? $validated['rejection_reason'] : null;
-        $companyVerification->rejection_note = $validated['status'] === 'rejected' ? ($validated['rejection_note'] ?? null) : null;
-        $companyVerification->save();
+        if ($companyVerification->status !== 'pending') {
+            throw new ConflictHttpException('Only pending company verifications can be reviewed.');
+        }
 
-        $company = $companyVerification->company;
-        $company->is_verified = $validated['status'] === 'verified';
-        $company->verified_at = $validated['status'] === 'verified' ? now() : null;
-        $company->save();
+        DB::transaction(function () use ($companyVerification, $request, $validated): void {
+            $verification = CompanyVerification::query()
+                ->lockForUpdate()
+                ->findOrFail($companyVerification->id);
+            if ($verification->status !== 'pending') {
+                throw new ConflictHttpException('Only pending company verifications can be reviewed.');
+            }
+
+            $verification->status = $validated['status'];
+            $verification->reviewed_by = $request->user()->id;
+            $verification->reviewed_at = now();
+            $verification->rejection_reason = $validated['status'] === 'rejected' ? $validated['rejection_reason'] : null;
+            $verification->rejection_note = $validated['status'] === 'rejected' ? ($validated['rejection_note'] ?? null) : null;
+            $verification->save();
+
+            $company = $verification->company()->lockForUpdate()->firstOrFail();
+            $company->is_verified = $validated['status'] === 'verified';
+            $company->verified_at = $validated['status'] === 'verified' ? now() : null;
+            $company->save();
+
+            ActivityLog::create([
+                'user_id' => $company->user_id,
+                'actor_id' => $request->user()->id,
+                'action' => 'admin.company_verification_reviewed',
+                'subject_type' => CompanyVerification::class,
+                'subject_id' => $verification->id,
+                'payload' => [
+                    'status' => $verification->status,
+                    'rejection_reason' => $verification->rejection_reason,
+                    'rejection_note' => $verification->rejection_note,
+                ],
+            ]);
+        });
 
         return response()->json([
             'message' => 'Company verification review recorded.',
-            'status' => $companyVerification->status,
-            'rejection_reason' => $companyVerification->rejection_reason,
-            'rejection_note' => $companyVerification->rejection_note,
+            'status' => $companyVerification->fresh()->status,
+            'rejection_reason' => $companyVerification->fresh()->rejection_reason,
+            'rejection_note' => $companyVerification->fresh()->rejection_note,
         ]);
     }
 
@@ -294,7 +547,14 @@ class EmployerVerificationController extends Controller
 
     protected function statusForVerification(Company $company, CompanyVerification $verification): string
     {
-        if ($this->isProfileComplete($company) && $this->hasRequiredDocuments($verification)) {
+        if ($verification->status === 'verified' && $company->is_verified) {
+            return 'verified';
+        }
+
+        if ($verification->status === 'pending'
+            && $verification->submitted_at !== null
+            && $this->isProfileComplete($company)
+            && $this->hasRequiredDocuments($verification)) {
             return 'pending';
         }
 
@@ -328,11 +588,39 @@ class EmployerVerificationController extends Controller
             'contact_phone' => $company->contact_phone,
             'contact_email' => $company->contact_email,
             'logo_path' => $company->logo_path,
+            'logo_url' => $company->logo_path ? Storage::disk('public')->url($company->logo_path) : null,
             'hires_jobs' => $company->hires_jobs,
             'hires_ojt' => $company->hires_ojt,
             'open_to_moa' => $company->open_to_moa,
             'accepted_courses' => $company->accepted_courses,
             'is_verified' => $company->is_verified,
         ];
+    }
+
+    private function ensureVerificationCanBeChanged(CompanyVerification $verification): void
+    {
+        if (in_array($verification->status, ['pending', 'verified'], true)) {
+            throw new ConflictHttpException('Submitted verification documents cannot be changed while under review or after approval.');
+        }
+    }
+
+    private function verificationDocumentData(VerificationDocument $document): array
+    {
+        return [
+            'id' => $document->id,
+            'type' => $document->type,
+            'original_filename' => $document->original_filename,
+            'mime_type' => $document->mime_type,
+            'size_bytes' => $document->size_bytes,
+            'created_at' => $document->created_at?->toISOString(),
+        ];
+    }
+
+    private function safeOriginalFilename(UploadedFile $file): string
+    {
+        $filename = basename(str_replace('\\', '/', $file->getClientOriginalName()));
+        $filename = preg_replace('/[^\pL\pN._ -]/u', '_', $filename) ?: 'document';
+
+        return mb_substr($filename, 0, 255);
     }
 }

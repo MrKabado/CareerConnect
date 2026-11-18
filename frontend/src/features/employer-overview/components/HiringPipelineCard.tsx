@@ -1,11 +1,11 @@
 import { Link } from "react-router";
-import { pipeline } from "@/features/employer-overview/constants";
 
 type HiringPipelineCardProps = {
   maximumPipelineCount: number;
+  pipeline: Array<{ label: string; count: number; color: string }>;
 };
 
-export default function HiringPipelineCard({ maximumPipelineCount }: HiringPipelineCardProps) {
+export default function HiringPipelineCard({ maximumPipelineCount, pipeline }: HiringPipelineCardProps) {
   return (
     <article className="rounded-[16px] border border-[#edf1f1] bg-white p-5 shadow-[0_8px_24px_rgba(34,66,65,0.05)] max-[680px]:p-4">
       <div className="mb-4 flex items-center justify-between gap-3">

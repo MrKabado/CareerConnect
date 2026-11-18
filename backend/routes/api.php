@@ -9,6 +9,7 @@ use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\CategoryController;
 use App\Http\Controllers\Api\EmployerJobListingController;
 use App\Http\Controllers\Api\EmployerVerificationController;
+use App\Http\Controllers\Api\DashboardController;
 use App\Http\Controllers\Api\IdentityVerificationController;
 use App\Http\Controllers\Api\InterviewController;
 use App\Http\Controllers\Api\NotificationController;
@@ -42,6 +43,7 @@ Route::middleware(['auth:sanctum', 'account.active', 'throttle:60,1'])->group(fu
     Route::patch('/notifications/{notification}/read', [NotificationController::class, 'markAsRead']);
 
     Route::middleware('role:applicant')->prefix('applicant')->group(function (): void {
+        Route::get('/dashboard', [DashboardController::class, 'applicant']);
         Route::get('/resume', [ApplicantResumeController::class, 'show']);
         Route::post('/resume', [ApplicantResumeController::class, 'store']);
         Route::delete('/resume', [ApplicantResumeController::class, 'destroy']);
@@ -76,10 +78,17 @@ Route::middleware(['auth:sanctum', 'account.active', 'throttle:60,1'])->group(fu
     });
 
     Route::middleware('role:employer')->prefix('employer')->group(function (): void {
+        Route::get('/dashboard', [DashboardController::class, 'employer']);
         Route::get('/company', [EmployerVerificationController::class, 'company']);
         Route::put('/company', [EmployerVerificationController::class, 'company']);
         Route::post('/company/logo', [EmployerVerificationController::class, 'uploadLogo']);
+        Route::delete('/company/logo', [EmployerVerificationController::class, 'deleteLogo']);
+        Route::get('/verification/documents', [EmployerVerificationController::class, 'documents']);
         Route::post('/verification/documents', [EmployerVerificationController::class, 'uploadDocument']);
+        Route::get('/verification/documents/{verificationDocument}/download', [EmployerVerificationController::class, 'downloadDocument'])
+            ->whereNumber('verificationDocument');
+        Route::delete('/verification/documents/{verificationDocument}', [EmployerVerificationController::class, 'deleteDocument'])
+            ->whereNumber('verificationDocument');
         Route::post('/verification/submit', [EmployerVerificationController::class, 'submit']);
         Route::get('/verification', [EmployerVerificationController::class, 'status']);
         Route::get('/jobs', [EmployerJobListingController::class, 'index']);
@@ -116,11 +125,14 @@ Route::middleware(['auth:sanctum', 'account.active', 'throttle:60,1'])->group(fu
         ->middleware(['role:applicant', 'applicant.eligible', 'listing.accepting-applications']);
 
     Route::middleware('role:admin')->prefix('admin')->group(function (): void {
+        Route::get('/dashboard', [DashboardController::class, 'admin']);
         Route::get('/jobs', [AdminJobListingController::class, 'index']);
         Route::get('/jobs/{jobListing}', [AdminJobListingController::class, 'show'])->whereNumber('jobListing');
         Route::post('/jobs/{jobListing}/deactivate', [AdminJobListingController::class, 'deactivate'])->whereNumber('jobListing');
         Route::post('/jobs/{jobListing}/restore', [AdminJobListingController::class, 'restore'])->whereNumber('jobListing');
         Route::get('/identity-verifications', [IdentityVerificationController::class, 'index']);
+        Route::get('/identity-verifications/{identityVerification}', [IdentityVerificationController::class, 'show'])
+            ->whereNumber('identityVerification');
         Route::get('/identity-verifications/{identityVerification}/document', [IdentityVerificationController::class, 'document']);
         Route::post('/identity-verifications/{identityVerification}/review', [IdentityVerificationController::class, 'review']);
         Route::get('/categories', [CategoryController::class, 'index']);
@@ -128,8 +140,15 @@ Route::middleware(['auth:sanctum', 'account.active', 'throttle:60,1'])->group(fu
         Route::put('/categories/{category}', [CategoryController::class, 'update']);
         Route::delete('/categories/{category}', [CategoryController::class, 'destroy']);
         Route::get('/company-verifications', [EmployerVerificationController::class, 'index']);
+        Route::get('/company-verifications/{companyVerification}', [EmployerVerificationController::class, 'show'])
+            ->whereNumber('companyVerification');
+        Route::get('/company-verifications/{companyVerification}/documents/{document}', [EmployerVerificationController::class, 'adminDocument'])
+            ->whereNumber('companyVerification')
+            ->whereNumber('document');
         Route::post('/company-verifications/{companyVerification}/review', [EmployerVerificationController::class, 'review']);
         Route::get('/users', [AdminUserController::class, 'index']);
+        Route::get('/users/{user}', [AdminUserController::class, 'show'])->whereNumber('user');
+        Route::put('/users/{user}', [AdminUserController::class, 'update'])->whereNumber('user');
         Route::patch('/users/{user}/status', [AdminUserController::class, 'updateStatus']);
         Route::post('/users/{user}/password-reset', [AdminUserController::class, 'sendPasswordReset'])
             ->middleware('throttle:5,1');

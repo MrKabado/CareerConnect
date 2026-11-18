@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\ActivityLog;
 use App\Models\IdentityVerification;
 use App\Models\User;
 use Illuminate\Http\JsonResponse;
@@ -10,6 +11,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use RuntimeException;
 use Symfony\Component\HttpFoundation\StreamedResponse;
@@ -34,7 +36,7 @@ class IdentityVerificationController extends Controller
     public function store(Request $request): JsonResponse
     {
         $request->validate([
-            'document' => ['required', 'file', 'mimes:jpg,jpeg,png,pdf', 'max:5120'],
+            'document' => ['required', 'file', 'mimes:jpg,jpeg,png,pdf', 'extensions:jpg,jpeg,png,pdf', 'max:5120'],
         ]);
 
         $oldPath = DB::transaction(function () use ($request): ?string {
@@ -57,7 +59,12 @@ class IdentityVerificationController extends Controller
             }
 
             $oldPath = $verification?->document_path;
-            $path = $request->file('document')->store('identity-verification', 'local');
+            $file = $request->file('document');
+            $path = $file->storeAs(
+                'applicant-verifications/'.$user->id,
+                Str::uuid().'.'.$file->extension(),
+                'local',
+            );
 
             if ($path === false) {
                 throw new RuntimeException('The identity document could not be stored.');
@@ -147,6 +154,30 @@ class IdentityVerificationController extends Controller
         return Storage::disk('local')->download($identityVerification->document_path, 'identity-document');
     }
 
+    public function show(IdentityVerification $identityVerification): JsonResponse
+    {
+        $identityVerification->load('user.applicantProfile');
+        $applicant = $identityVerification->user;
+        $profile = $applicant->applicantProfile;
+
+        return response()->json([
+            'data' => [
+                'id' => $identityVerification->id,
+                'status' => $identityVerification->status,
+                'rejection_reason' => $identityVerification->rejection_reason,
+                'submitted_at' => $identityVerification->created_at?->toISOString(),
+                'reviewed_at' => $identityVerification->reviewed_at?->toISOString(),
+                'applicant' => [
+                    'id' => $applicant->id,
+                    'name' => $applicant->name,
+                    'email' => $applicant->email,
+                    'city' => $profile?->city,
+                    'phone' => $profile?->phone,
+                ],
+            ],
+        ]);
+    }
+
     public function review(Request $request, IdentityVerification $identityVerification): JsonResponse
     {
         $validated = $request->validate([
@@ -176,6 +207,18 @@ class IdentityVerificationController extends Controller
                 'reviewed_by' => $request->user()->id,
                 'reviewed_at' => now(),
                 'expires_at' => now()->addDays(config('careerconnect.identity_document_retention_days')),
+            ]);
+
+            ActivityLog::create([
+                'user_id' => $verification->user_id,
+                'actor_id' => $request->user()->id,
+                'action' => 'admin.identity_verification_reviewed',
+                'subject_type' => IdentityVerification::class,
+                'subject_id' => $verification->id,
+                'payload' => [
+                    'status' => $verification->status,
+                    'rejection_reason' => $verification->rejection_reason,
+                ],
             ]);
 
             return $verification;

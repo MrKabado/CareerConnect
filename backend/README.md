@@ -11,9 +11,29 @@ Laravel 12 JSON API using MySQL and Sanctum bearer tokens. Public registration s
 5. To create the initial administrator, set `ADMIN_SEED_NAME`, `ADMIN_SEED_EMAIL`, and a strong `ADMIN_SEED_PASSWORD` in `.env`, then run `php artisan db:seed --class=AdminUserSeeder`.
 6. Set `FRONTEND_URL` in `backend/.env` and `VITE_API_BASE_URL` in `frontend/.env` to the browser-accessible frontend/API origins.
 
+## Local file storage
+
+Private resumes and verification documents are stored on Laravel's `local` disk under `storage/app/private` and are available only through authorized download endpoints. Company logos and applicant profile photos use the `public` disk under `storage/app/public`; Docker creates the `public/storage` link at startup. The backend bind mount includes `storage`, so local uploads persist across container restarts. For non-Docker development, run `php artisan storage:link` once.
+
 The example environment uses Laravel's `log` mailer. Configure `MAIL_MAILER` and the related `MAIL_*` values to deliver verification and password-reset codes by email.
 
 The API uses `Authorization: Bearer <token>` and JSON responses. Sensitive endpoints (login, registration, OTP, and password reset) are rate limited. Email codes are hashed at rest, expire after ten minutes, and are deleted after use.
+
+## Local seed credentials
+
+The demo seeder creates predictable local accounts for testing. Passwords for all seeded users are:
+
+```text
+Password123!
+```
+
+Accounts:
+
+- Admin: `admin@careerconnect.test`
+- Employer: `employer1@careerconnect.test` and `employer2@careerconnect.test`
+- Applicants: `applicant1@careerconnect.test`, `applicant2@careerconnect.test`, and `applicant3@careerconnect.test`
+
+If you want to override the seeded admin values, set `ADMIN_SEED_NAME`, `ADMIN_SEED_EMAIL`, and `ADMIN_SEED_PASSWORD` in `.env` before running the seeders.
 
 ## Phase 1 API
 
@@ -44,6 +64,9 @@ The API uses `Authorization: Bearer <token>` and JSON responses. Sensitive endpo
 ## Phase 5 resumes and applications
 
 - Applicants manage resume metadata and private files through `GET|POST|DELETE /api/applicant/resume`; `GET /api/applicant/resume/download` streams the current resume after authentication. Uploads accept validated PDF and DOCX files up to `RESUME_MAX_SIZE_KB` (5120 by default) and use Laravel's private `local` disk.
+- Employers create or update their company profile through `GET|PUT /api/employer/company`; logo uploads and removal use `POST|DELETE /api/employer/company/logo` and accept JPG, PNG, or WebP images up to 2 MB.
+- Employer verification files are listed, uploaded, replaced, downloaded, and removed through `/api/employer/verification/documents`. Business registration and permit uploads accept PDF, JPG, or PNG files up to 5 MB; these files remain private and downloads are scoped to their owning employer.
+- Applicant profile photos use `POST|DELETE /api/applicant/profile/photo`, accept JPG, PNG, or WebP images up to 2 MB, and are served from the local public disk. Cover-letter uploads and company photo galleries are not supported by the backend and remain demo-only in the frontend.
 - Apply with `POST /api/jobs/{jobListing}/applications`. Applications require an active applicant with verified email and identity, an open eligible listing, matching seeker preferences, required OJT details for OJT listings, and a current resume. Optional cover letters are text, up to 10,000 characters.
 - Applicant history is available from `GET /api/applicant/applications` and `GET /api/applicant/applications/{application}`. Status history and the resume snapshot for an owned application are available through `GET /api/applicant/applications/{application}/status-history` and `GET /api/applicant/applications/{application}/resume`.
 - Employers review only applications to their own listings through `GET /api/employer/applications`, `GET /api/employer/applications/{application}`, and `PATCH /api/employer/applications/{application}/status`. The associated submitted resume is streamed securely from `GET /api/employer/applications/{application}/resume`.
@@ -104,6 +127,14 @@ The `app:prune-identity-documents` command can also be run directly.
 The `applicant.eligible` middleware is the authorization foundation for Phase 2 application submission. Attach it to application-creation routes; it returns `403` unless the account is an active applicant with verified email and approved identity verification. Job browsing routes should remain public.
 
 For future application submission, attach `listing.accepting-applications` alongside `applicant.eligible`; it rejects closed, deactivated, unpublished, or otherwise ineligible listings at submission time. The application workflow itself is not part of Phase 3.
+
+## Core business API additions
+
+- Role-specific dashboard summaries are available at `GET /api/admin/dashboard`, `GET /api/employer/dashboard`, and `GET /api/applicant/dashboard`. Counts are calculated from persisted users, listings, verifications, and applications.
+- Admins can view and update users through `GET|PUT /api/admin/users/{id}`. Updates are audited; changing an email clears its verification timestamp, and changing a user's email or role revokes their tokens. Admins cannot change their own role.
+- Admin verification review includes applicant detail at `GET /api/admin/identity-verifications/{id}` and company details/documents at `GET /api/admin/company-verifications/{id}` and `GET /api/admin/company-verifications/{id}/documents/{documentId}`. Review decisions are audited and company verification reviews are limited to pending submissions.
+- Employer listing queries support `status`, `listing_type`, `keyword`, `location`, `page`, and `per_page`, always scoped to the authenticated employer's company.
+- Existing application endpoints enforce applicant ownership, employer listing ownership, unique submissions, eligibility, and valid employer status transitions. Public listing search and pagination remain available through `GET /api/jobs`.
 
 ## Tests
 

@@ -4,8 +4,7 @@ const actionLabels: Partial<Record<ApplicantStatus, string>> = {
   applied: "Move to Under Review",
   under_review: "Shortlist",
   shortlisted: "Schedule interview",
-  interview_scheduled: "Extend offer",
-  offer_extended: "Mark as hired",
+  interview_scheduled: "Mark as hired",
 };
 
 type NextActionButtonProps = {

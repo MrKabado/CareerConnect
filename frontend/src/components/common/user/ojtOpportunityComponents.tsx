@@ -273,9 +273,23 @@ export function OjtOpportunityCard({
             <span className="text-[10px] font-semibold text-[#078b8d]">
               OJT opportunity
             </span>
-            <span className="whitespace-nowrap text-[9px] text-[#9aa6a7]">
-              {opportunity.posted}
-            </span>
+            <div className="flex items-center gap-3">
+              {/^\d+$/.test(opportunity.id) && (
+                <button
+                  className="rounded-lg bg-[#078b8d] px-3 py-1.5 text-[10px] font-semibold text-white hover:bg-[#067476]"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    navigate(`/apply/${opportunity.id}`);
+                  }}
+                  type="button"
+                >
+                  Apply
+                </button>
+              )}
+              <span className="whitespace-nowrap text-[9px] text-[#9aa6a7]">
+                {opportunity.posted}
+              </span>
+            </div>
           </div>
         </div>
       </div>

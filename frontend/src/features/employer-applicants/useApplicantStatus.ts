@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState } from "react";
-import { getApplicantById, getHistory, updateApplicantStatus } from "@/features/employer-applicants/api";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { getApplicantById, updateApplicantStatus } from "@/features/employer-applicants/api";
+import { useAuth } from "@/features/auth/useAuth";
 import { applicantStatusConfig, isAllowedApplicantTransition } from "@/features/employer-applicants/statuses";
 import type { ApplicantStatus } from "@/features/employer-applicants/statuses";
 import type { Applicant, ApplicantStatusHistoryEntry, ApplicantStatusUpdatePayload } from "@/features/employer-applicants/types";
@@ -10,6 +11,7 @@ type PendingTransition = {
 };
 
 export function useApplicantStatus(applicantId: string) {
+  const { token, status: authStatus } = useAuth();
   const [applicant, setApplicant] = useState<Applicant | null>(null);
   const [status, setStatus] = useState<ApplicantStatus | null>(null);
   const [history, setHistory] = useState<ApplicantStatusHistoryEntry[]>([]);
@@ -18,31 +20,34 @@ export function useApplicantStatus(applicantId: string) {
   const [error, setError] = useState<string | null>(null);
   const requestInFlight = useRef(false);
   const retryTransition = useRef<PendingTransition | null>(null);
+  const loadSequence = useRef(0);
+
+  const load = useCallback(async () => {
+    const requestId = ++loadSequence.current;
+    if (!token || authStatus === "loading") return;
+    try {
+      const loadedApplicant = await getApplicantById(token, applicantId);
+      if (requestId !== loadSequence.current) return;
+      if (!loadedApplicant) {
+        setError("Applicant not found.");
+        return;
+      }
+      setApplicant(loadedApplicant);
+      setStatus(loadedApplicant.status);
+      setHistory([...(loadedApplicant.statusHistory ?? [])].reverse());
+    } catch (requestError: unknown) {
+      if (requestId === loadSequence.current) setError(requestError instanceof Error ? requestError.message : "Unable to load applicant stage.");
+    } finally {
+      if (requestId === loadSequence.current) setIsLoading(false);
+    }
+  }, [applicantId, authStatus, token]);
 
   useEffect(() => {
-    let isCurrent = true;
-    void Promise.all([getApplicantById(applicantId), getHistory(applicantId)])
-      .then(([applicant, entries]) => {
-        if (!isCurrent) return;
-        if (!applicant) {
-          setError("Applicant not found.");
-          return;
-        }
-        setApplicant(applicant);
-        setStatus(applicant.status);
-        setHistory(entries.reverse());
-      })
-      .catch(() => {
-        if (isCurrent) setError("Unable to load applicant stage. Please try again.");
-      })
-      .finally(() => {
-        if (isCurrent) setIsLoading(false);
-      });
-
-    return () => {
-      isCurrent = false;
-    };
-  }, [applicantId]);
+    // The request updates state only after its promise settles.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void load();
+    return () => { loadSequence.current += 1; };
+  }, [load]);
 
   async function transitionTo(
     to: ApplicantStatus,
@@ -51,8 +56,7 @@ export function useApplicantStatus(applicantId: string) {
     if (!status || requestInFlight.current) return false;
 
     const from = status;
-    const undoRejection = payload.undoRejection === true && from === "rejected";
-    if (!undoRejection && !isAllowedApplicantTransition(from, to)) {
+    if (!isAllowedApplicantTransition(from, to)) {
       setError(`Cannot move from ${applicantStatusConfig[from].label} to ${applicantStatusConfig[to].label}.`);
       return false;
     }
@@ -62,11 +66,17 @@ export function useApplicantStatus(applicantId: string) {
     setError(null);
     const priorHistory = history;
     const priorApplicant = applicant;
+    if (!priorApplicant) {
+      requestInFlight.current = false;
+      setIsSaving(false);
+      setError("Applicant details are unavailable. Reload the page before changing this application.");
+      return false;
+    }
     const changedAt = new Date().toISOString();
     const optimisticEntry: ApplicantStatusHistoryEntry = {
       from,
       to,
-      changedBy: payload.changedBy ?? "Maya Philippines",
+      changedBy: "Saving…",
       changedAt,
       ...(payload.note ? { note: payload.note } : {}),
     };
@@ -75,18 +85,19 @@ export function useApplicantStatus(applicantId: string) {
     setHistory((current) => [optimisticEntry, ...current]);
 
     try {
-      const updatedApplicant = await updateApplicantStatus(applicantId, to, payload);
+      if (!token) throw new Error("Your employer session has expired.");
+      const updatedApplicant = await updateApplicantStatus(token, applicantId, to, priorApplicant, payload);
       setApplicant(updatedApplicant);
       setStatus(updatedApplicant.status);
       setHistory([...(updatedApplicant.statusHistory ?? [])].reverse());
       retryTransition.current = null;
       return true;
-    } catch {
+    } catch (requestError) {
       setApplicant(priorApplicant);
       setStatus(from);
       setHistory(priorHistory);
       retryTransition.current = { to, payload };
-      setError("Unable to save this stage change. Your update was rolled back.");
+      setError(requestError instanceof Error ? requestError.message : "Unable to save this stage change. Your update was rolled back.");
       return false;
     } finally {
       requestInFlight.current = false;
@@ -105,11 +116,6 @@ export function useApplicantStatus(applicantId: string) {
     return transitionTo("rejected", payload);
   }
 
-  async function undoReject(previousStatus: ApplicantStatus) {
-    if (status !== "rejected") return false;
-    return transitionTo(previousStatus, { undoRejection: true });
-  }
-
   async function retry() {
     const pending = retryTransition.current;
     if (!pending) return false;
@@ -123,9 +129,13 @@ export function useApplicantStatus(applicantId: string) {
     isLoading,
     isSaving,
     error,
+    reload: () => {
+      setIsLoading(true);
+      setError(null);
+      void load();
+    },
     advance,
     reject,
-    undoReject,
     retry,
   };
 }

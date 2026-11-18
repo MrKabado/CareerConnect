@@ -1,13 +1,12 @@
 import EmployerWorkspaceLayout from "@/components/common/employer/EmployerWorkspaceLayout";
 import ErrorBoundary from "@/components/common/ErrorBoundary";
 import HiringPipelineCard from "@/features/employer-overview/components/HiringPipelineCard";
-import HiringSetupCard from "@/features/employer-overview/components/HiringSetupCard";
 import OverviewHeader from "@/features/employer-overview/components/OverviewHeader";
 import OverviewStatsSection from "@/features/employer-overview/components/OverviewStatsSection";
 import { useEmployerOverview } from "@/features/employer-overview/hooks/useEmployerOverview";
 
 export default function EmployerOverviewPageContent() {
-  const { companyName, maximumPipelineCount } = useEmployerOverview();
+  const { companyName, maximumPipelineCount, pipeline, stats, isLoading, error, retry } = useEmployerOverview();
 
   return (
     <EmployerWorkspaceLayout>
@@ -15,16 +14,17 @@ export default function EmployerOverviewPageContent() {
         <OverviewHeader companyName={companyName} />
 
         <ErrorBoundary>
-          <OverviewStatsSection />
+          <OverviewStatsSection
+            error={error}
+            isLoading={isLoading}
+            onRetry={retry}
+            stats={stats}
+          />
         </ErrorBoundary>
 
-        <section className="grid items-start gap-3 py-4 lg:grid-cols-[minmax(260px,0.75fr)_minmax(0,1.25fr)]">
+        <section className="grid items-start gap-3 py-4">
           <ErrorBoundary>
-            <HiringPipelineCard maximumPipelineCount={maximumPipelineCount} />
-          </ErrorBoundary>
-
-          <ErrorBoundary>
-            <HiringSetupCard />
+            <HiringPipelineCard maximumPipelineCount={maximumPipelineCount} pipeline={pipeline} />
           </ErrorBoundary>
         </section>
       </main>

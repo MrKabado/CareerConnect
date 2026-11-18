@@ -16,8 +16,10 @@ interface DocumentPreviewModalProps {
   /** Open straight into the rejection-reason step (used by the row's Reject button). */
   startRejecting?: boolean;
   onClose: () => void;
-  onApprove: (id: string) => void;
-  onReject: (id: string, reason: string) => void;
+  onApprove: (id: string) => void | Promise<void>;
+  onReject: (id: string, reason: string) => void | Promise<void>;
+  isSaving?: boolean;
+  actionError?: string | null;
 }
 
 /**
@@ -32,6 +34,8 @@ export default function DocumentPreviewModal({
   onClose,
   onApprove,
   onReject,
+  isSaving = false,
+  actionError,
 }: DocumentPreviewModalProps) {
   const [documentId, setDocumentId] = useState(initialDocumentId);
   const [checked, setChecked] = useState<boolean[]>(CHECKLIST.map(() => false));
@@ -150,10 +154,10 @@ export default function DocumentPreviewModal({
                 <Button
                   className="w-full"
                   icon={<Check size={14} />}
-                  disabled={!allChecked}
+                  disabled={!allChecked || isSaving}
                   onClick={() => onApprove(item.id)}
                 >
-                  Approve employer
+                  {isSaving ? "Saving…" : "Approve employer"}
                 </Button>
                 <Button
                   variant="danger"
@@ -186,10 +190,10 @@ export default function DocumentPreviewModal({
                 <Button
                   variant="danger"
                   className="w-full"
-                  disabled={reason.trim().length === 0}
+                  disabled={reason.trim().length === 0 || isSaving}
                   onClick={() => onReject(item.id, reason.trim())}
                 >
-                  Confirm rejection
+                  {isSaving ? "Saving…" : "Confirm rejection"}
                 </Button>
                 <Button
                   variant="outline"
@@ -218,6 +222,7 @@ export default function DocumentPreviewModal({
               </div>
             )}
           </div>
+          {actionError && <p className="mt-3 text-xs text-red-700" role="alert">{actionError}</p>}
         </aside>
       </div>
     </Modal>

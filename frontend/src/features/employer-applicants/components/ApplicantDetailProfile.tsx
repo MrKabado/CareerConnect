@@ -446,9 +446,15 @@ export function ApplicantNotFoundState() {
 
 export function ApplicantDocumentPreviewDialog({
   selectedDocument,
+  isDownloading,
+  downloadError,
+  onDownload,
   onClose,
 }: {
   selectedDocument: ApplicantDocument | null;
+  isDownloading: boolean;
+  downloadError: string | null;
+  onDownload: () => void;
   onClose: () => void;
 }) {
   if (!selectedDocument) return null;
@@ -477,10 +483,11 @@ export function ApplicantDocumentPreviewDialog({
           <div className="flex shrink-0 items-center gap-2">
             <button
               type="button"
-              onClick={() => downloadApplicantDocument(selectedDocument)}
-              className="rounded-lg bg-[#078b98] px-3 py-2 text-[10px] font-semibold text-white hover:bg-[#06767f] focus-visible:outline-[3px] focus-visible:outline-[#67c9c1]"
+              onClick={selectedDocument.dataUrl ? () => downloadApplicantDocument(selectedDocument) : onDownload}
+              disabled={isDownloading}
+              className="rounded-lg bg-[#078b98] px-3 py-2 text-[10px] font-semibold text-white hover:bg-[#06767f] focus-visible:outline-[3px] focus-visible:outline-[#67c9c1] disabled:cursor-wait disabled:opacity-60"
             >
-              Download
+              {isDownloading ? "Downloading..." : "Download"}
             </button>
             <button
               type="button"
@@ -510,21 +517,23 @@ export function ApplicantDocumentPreviewDialog({
             </p>
             <button
               type="button"
-              onClick={() => downloadApplicantDocument(selectedDocument)}
-              className="mt-4 rounded-lg bg-[#078b98] px-4 py-2.5 text-[10px] font-semibold text-white hover:bg-[#06767f] focus-visible:outline-[3px] focus-visible:outline-[#67c9c1]"
+              onClick={selectedDocument.dataUrl ? () => downloadApplicantDocument(selectedDocument) : onDownload}
+              disabled={isDownloading}
+              className="mt-4 rounded-lg bg-[#078b98] px-4 py-2.5 text-[10px] font-semibold text-white hover:bg-[#06767f] focus-visible:outline-[3px] focus-visible:outline-[#67c9c1] disabled:cursor-wait disabled:opacity-60"
             >
-              Download document
+              {isDownloading ? "Downloading..." : "Download document"}
             </button>
           </div>
         ) : (
-          <div className="min-h-0 flex-1 overflow-y-auto bg-[#f3f6f6] p-5 max-[600px]:p-3">
-            <article className="mx-auto min-h-full max-w-185 bg-white px-10 py-12 shadow-sm max-[600px]:px-5 max-[600px]:py-7">
-              <pre className="whitespace-pre-wrap wrap-break-word font-sans text-xs leading-7 text-[#344648] max-[600px]:text-[11px] max-[600px]:leading-6">
-                {selectedDocument.preview.join("\n\n")}
-              </pre>
-            </article>
+          <div className="flex min-h-75 flex-col items-center justify-center bg-[#f3f6f6] px-6 py-10 text-center">
+            <p className="text-[13px] font-semibold text-[#2c3e40]">Secure preview is unavailable</p>
+            <p className="mt-1 max-w-105 text-[11px] leading-5 text-[#829091]">This private resume can be downloaded after your employer access is verified.</p>
+            <button type="button" onClick={onDownload} disabled={isDownloading} className="mt-4 rounded-lg bg-[#078b98] px-4 py-2.5 text-[10px] font-semibold text-white hover:bg-[#06767f] disabled:cursor-wait disabled:opacity-60">
+              {isDownloading ? "Downloading..." : "Download resume"}
+            </button>
           </div>
         )}
+        {downloadError ? <p className="border-t border-[#f1d2d3] bg-[#fff8f8] px-4 py-2 text-xs text-[#8d393e]" role="alert">{downloadError}</p> : null}
       </section>
     </div>
   );

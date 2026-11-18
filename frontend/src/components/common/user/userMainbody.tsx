@@ -1,24 +1,118 @@
-import { useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import isoCountries from "i18n-iso-countries";
 import { Skeleton } from "@/components/ui/skeleton";
 import englishCountryNames from "i18n-iso-countries/langs/en.json";
 import { useNavigate } from "react-router";
-import { applicationStore } from "@/features/applications/applicationData";
 import { onboardingStore } from "@/features/onboarding/store";
 import { getJobMatch, textSimilarity } from "@/features/jobs/jobMatching";
+import type { JobListing } from "@/features/jobs/jobListings";
+import {
+  formatListingPay,
+  listingText,
+  publicJobsApi,
+  type PublicJobListing,
+} from "@/features/jobs/backendApi";
 import {
   getOjtMatch,
+  type OjtOpportunity,
   type ScoredOjtOpportunity,
 } from "@/features/jobs/ojtMatching";
 import { getCompanyProfileUrl } from "@/features/companies/companyProfiles";
-import { jobListings } from "@/features/jobs/jobListings";
 import { savedOpportunityStore } from "@/features/jobs/savedOpportunities";
 import {
   LockedOjtFilters,
   OjtOpportunityCard,
 } from "@/components/common/user/ojtOpportunityComponents";
-import { ojtOpportunities } from "@/components/common/user/ojtOpportunityData";
 
+type ApiJobListing = JobListing & { listingId: number };
+
+function apiWorkSetup(value: string): "onsite" | "hybrid" | "remote" | undefined {
+  switch (value.toLowerCase()) {
+    case "onsite":
+    case "on-site":
+      return "onsite";
+    case "hybrid":
+      return "hybrid";
+    case "remote":
+      return "remote";
+    default:
+      return undefined;
+  }
+}
+
+function toFrontendListing(listing: PublicJobListing): ApiJobListing {
+  const company = listing.company?.name ?? "Company unavailable";
+  const publishedAt = listing.published_at ? new Date(listing.published_at) : null;
+  const hoursSincePublished = publishedAt && !Number.isNaN(publishedAt.getTime())
+    ? Math.max(0, Math.floor((Date.now() - publishedAt.getTime()) / 3_600_000))
+    : 0;
+  return {
+    id: String(listing.id),
+    listingId: listing.id,
+    company,
+    initials: company.slice(0, 1).toUpperCase(),
+    title: listing.title,
+    category: listing.category?.name ?? "Uncategorized",
+    location: listing.location,
+    countryCode: "",
+    country: "",
+    city: listing.company?.city ?? "",
+    arrangement: listing.work_setup === "onsite"
+      ? "On-site"
+      : listing.work_setup.charAt(0).toUpperCase() + listing.work_setup.slice(1),
+    employmentType: listing.employment_type
+      ? ({ full_time: "Full-time", part_time: "Part-time", contract: "Contract" } as const)[listing.employment_type]
+      : listing.listing_type === "ojt" ? "Internship" : "Not specified",
+    salary: formatListingPay(listing),
+    posted: !publishedAt || Number.isNaN(publishedAt.getTime())
+      ? "Date not available"
+      : new Intl.RelativeTimeFormat("en", { numeric: "auto" }).format(
+          -Math.max(1, hoursSincePublished >= 24 ? Math.floor(hoursSincePublished / 24) : hoursSincePublished),
+          hoursSincePublished >= 24 ? "day" : "hour",
+        ),
+    postedHoursAgo: hoursSincePublished,
+    description: listing.description,
+    skills: listingText(listing.requirements),
+  };
+}
+
+function formatListingPosted(publishedAt: string | null): string {
+  if (!publishedAt) return "Date not available";
+  const date = new Date(publishedAt);
+  if (Number.isNaN(date.getTime())) return "Date not available";
+  const hours = Math.max(0, Math.floor((Date.now() - date.getTime()) / 3_600_000));
+  const amount = hours >= 24 ? Math.max(1, Math.floor(hours / 24)) : Math.max(1, hours);
+  return new Intl.RelativeTimeFormat("en", { numeric: "auto" }).format(-amount, hours >= 24 ? "day" : "hour");
+}
+
+function toOjtOpportunity(listing: PublicJobListing): OjtOpportunity {
+  const company = listing.company?.name ?? "Company unavailable";
+  return {
+    id: String(listing.id),
+    company,
+    initials: company.slice(0, 1).toUpperCase(),
+    title: listing.title,
+    trainingFields: listing.category?.name ? [listing.category.name] : [],
+    location: listing.location,
+    city: listing.company?.city ?? "",
+    countryCode: "",
+    hoursCapacity: listing.ojt?.duration_hours ?? null,
+    moaAvailable: listing.ojt?.moa_accepted ?? null,
+    eligibleCourses: listing.ojt?.accepted_courses ?? [],
+    workSetup: listing.work_setup === "onsite"
+      ? "Onsite"
+      : listing.work_setup.charAt(0).toUpperCase() + listing.work_setup.slice(1),
+    employmentType: "Internship",
+    allowance: listing.ojt?.allowance_type === "unpaid"
+      ? "Unpaid"
+      : listing.ojt?.allowance_amount == null
+        ? ""
+        : `₱${listing.ojt.allowance_amount.toLocaleString()} allowance`,
+    skills: listingText(listing.requirements),
+    posted: formatListingPosted(listing.published_at),
+    description: listing.description,
+  };
+}
 type IconName = "search" | "chevron" | "pin" | "briefcase" | "bookmark";
 
 function Icon({ name, size = 18 }: { name: IconName; size?: number }) {
@@ -86,16 +180,20 @@ export default function MainBody({
   const [cityLoadError, setCityLoadError] = useState<string | null>(null);
   const [isCityMenuOpen, setIsCityMenuOpen] = useState(false);
   const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
+  const [apiJobs, setApiJobs] = useState<ApiJobListing[]>([]);
+  const [apiOjtOpportunities, setApiOjtOpportunities] = useState<OjtOpportunity[]>([]);
+  const [jobsLoading, setJobsLoading] = useState(true);
+  const [jobsError, setJobsError] = useState<string | null>(null);
+  const [jobsPage, setJobsPage] = useState(1);
+  const [jobsLastPage, setJobsLastPage] = useState(1);
+  const [loadingMoreJobs, setLoadingMoreJobs] = useState(false);
+  const [jobRetry, setJobRetry] = useState(0);
   const cityRequestId = useRef(0);
+  const jobsRequestId = useRef(0);
   const onboarding = useSyncExternalStore(
     onboardingStore.subscribe,
     onboardingStore.getSnapshot,
     onboardingStore.getSnapshot,
-  );
-  const applicationSnapshot = useSyncExternalStore(
-    applicationStore.subscribe,
-    applicationStore.getSnapshot,
-    applicationStore.getSnapshot,
   );
   const savedOpportunities = useSyncExternalStore(
     savedOpportunityStore.subscribe,
@@ -135,8 +233,77 @@ export default function MainBody({
       .slice(0, cityResultLimit);
   }, [cityList, citySearch]);
 
+  useEffect(() => {
+    const requestId = ++jobsRequestId.current;
+    const timer = window.setTimeout(async () => {
+      setJobsLoading(true);
+      setJobsError(null);
+      setApiJobs([]);
+      setApiOjtOpportunities([]);
+      setJobsPage(1);
+      setJobsLastPage(1);
+      try {
+        const [response, ojtResponse] = await Promise.all([
+          publicJobsApi.list({
+          keyword: search.trim() || undefined,
+          location: selectedCity || selectedCountry?.name || undefined,
+          listing_type: "job",
+          work_setup: apiWorkSetup(selectedWorkSetup),
+          per_page: 50,
+          page: 1,
+          }),
+          publicJobsApi.list({
+            keyword: search.trim() || undefined,
+            location: selectedCity || selectedCountry?.name || undefined,
+            listing_type: "ojt",
+            work_setup: apiWorkSetup(selectedWorkSetup),
+            per_page: 50,
+            page: 1,
+          }),
+        ]);
+        if (requestId !== jobsRequestId.current) return;
+        setApiJobs(response.data.map(toFrontendListing));
+        setApiOjtOpportunities(ojtResponse.data.map(toOjtOpportunity));
+        setJobsPage(response.meta.current_page);
+        setJobsLastPage(response.meta.last_page);
+      } catch (requestError) {
+        if (requestId !== jobsRequestId.current) return;
+        setJobsError(requestError instanceof Error ? requestError.message : "Unable to load current job listings.");
+        setApiJobs([]);
+        setApiOjtOpportunities([]);
+      } finally {
+        if (requestId === jobsRequestId.current) setJobsLoading(false);
+      }
+    }, search.trim() ? 250 : 0);
+
+    return () => window.clearTimeout(timer);
+  }, [search, selectedCity, selectedCountry?.name, selectedWorkSetup, jobRetry]);
+
+  async function loadMoreJobs() {
+    if (loadingMoreJobs || jobsPage >= jobsLastPage) return;
+    setLoadingMoreJobs(true);
+    setJobsError(null);
+    try {
+      const response = await publicJobsApi.list({
+        keyword: search.trim() || undefined,
+        location: selectedCity || selectedCountry?.name || undefined,
+        listing_type: "job",
+        work_setup: apiWorkSetup(selectedWorkSetup),
+        per_page: 50,
+        page: jobsPage + 1,
+      });
+      setApiJobs((current) => [...current, ...response.data.map(toFrontendListing)]);
+      setJobsPage(response.meta.current_page);
+      setJobsLastPage(response.meta.last_page);
+    } catch (requestError) {
+      setJobsError(requestError instanceof Error ? requestError.message : "Unable to load more listings.");
+    } finally {
+      setLoadingMoreJobs(false);
+    }
+  }
+
   const visibleJobs = useMemo(() => {
-    const matchingJobs = jobListings
+    const matchingJobs = apiJobs
       .map((job) => ({
         ...job,
         matchScore: hasJobSeekerPreferences
@@ -158,7 +325,7 @@ export default function MainBody({
                   textSimilarity(location, job.location) > 0 ||
                   textSimilarity(location, job.city) > 0,
               )
-            : !selectedCountryCode || job.countryCode === selectedCountryCode;
+            : !selectedCountryCode || `${job.location} ${job.city}`.toLowerCase().includes((selectedCountry?.name ?? "").toLowerCase());
         const matchesCity =
           audience === "ojt-seeker" ||
           !selectedCity ||
@@ -173,14 +340,16 @@ export default function MainBody({
               )
             : selectedCategories.length === 0 ||
               selectedCategories.includes(job.category);
-        const matchesTab =
-          activeTab === "Jobs" || (audience === "job-seeker" && activeTab !== "OJT");
+        const matchesEmployment = employmentTypes.length === 0 ||
+          employmentTypes.includes(job.employmentType);
+        const matchesTab = activeTab !== "OJT";
         return (
           matchesSearch &&
           matchesSaved &&
           matchesCountry &&
           matchesCity &&
           matchesCategory &&
+          matchesEmployment &&
           matchesTab
         );
       });
@@ -194,6 +363,7 @@ export default function MainBody({
     return matchingJobs;
   }, [
     activeTab,
+    apiJobs,
     answers,
     audience,
     hasJobSeekerPreferences,
@@ -201,8 +371,10 @@ export default function MainBody({
     selectedCategories,
     selectedCity,
     selectedCountryCode,
+    selectedCountry?.name,
     savedOpportunities,
     showSavedOnly,
+    employmentTypes,
   ]);
 
   const bestMatch = visibleJobs.reduce<(typeof visibleJobs)[number] | null>(
@@ -248,7 +420,7 @@ export default function MainBody({
         : answers;
 
     const query = search.trim().toLocaleLowerCase();
-    return ojtOpportunities
+    return apiOjtOpportunities
       .map((opportunity) => getOjtMatch(opportunity, ojtAnswers))
       .filter(
         (opportunity): opportunity is ScoredOjtOpportunity =>
@@ -267,6 +439,7 @@ export default function MainBody({
       .sort((left, right) => right.matchScore - left.matchScore);
   }, [
     activeTab,
+    apiOjtOpportunities,
     answers,
     audience,
     employmentTypes,
@@ -526,11 +699,11 @@ export default function MainBody({
         </fieldset>
         <label className="mb-2 block text-[11px] font-medium text-[#718184]" htmlFor="setup-filter">Work setup</label>
         <div className="relative mb-[17px] flex items-center">
-          <select className="h-[37px] w-full appearance-none rounded-lg border border-[#e5ebeb] bg-white py-0 pr-[31px] pl-[11px] text-[11px] text-[#526466] focus-visible:outline-[3px] focus-visible:outline-[#67c9c1] focus-visible:outline-offset-[3px]" id="setup-filter" defaultValue="Any setup">
-            <option>Any setup</option>
-            <option>Remote</option>
-            <option>Hybrid</option>
-            <option>On-site</option>
+          <select className="h-[37px] w-full appearance-none rounded-lg border border-[#e5ebeb] bg-white py-0 pr-[31px] pl-[11px] text-[11px] text-[#526466] focus-visible:outline-[3px] focus-visible:outline-[#67c9c1] focus-visible:outline-offset-[3px]" id="setup-filter" onChange={(event) => setSelectedWorkSetup(event.target.value)} value={selectedWorkSetup || "Any setup"}>
+            <option value="Any setup">Any setup</option>
+            <option value="Remote">Remote</option>
+            <option value="Hybrid">Hybrid</option>
+            <option value="On-site">On-site</option>
           </select>
           <span className="pointer-events-none absolute right-[10px] text-[#849394]"><Icon name="chevron" size={15} /></span>
         </div>
@@ -650,13 +823,24 @@ export default function MainBody({
 
         {showOjtOpportunities ? (
           <div className="flex flex-col gap-[10px]">
+            {jobsError && (
+              <div className="flex items-center justify-between gap-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-800" role="alert">
+                <span>{jobsError}</span>
+                <button className="font-semibold underline" onClick={() => setJobRetry((attempt) => attempt + 1)} type="button">Try again</button>
+              </div>
+            )}
+            {jobsLoading && (
+              <p aria-live="polite" className="rounded-xl border border-[#e5efed] bg-white px-4 py-5 text-center text-xs text-[#718184]">
+                Loading current OJT listings…
+              </p>
+            )}
             {visibleOjtOpportunities.map((opportunity) => (
               <OjtOpportunityCard
                 key={opportunity.id}
                 opportunity={opportunity}
               />
             ))}
-            {visibleOjtOpportunities.length === 0 && (
+            {visibleOjtOpportunities.length === 0 && !jobsLoading && !jobsError && (
               <div className="rounded-[13px] border border-dashed border-[#cadbda] bg-white px-5 py-[50px] text-center">
                 <h3 className="text-[15px] font-semibold text-[#203638]">
                   {audience === "ojt-seeker" && !hasOjtPreferences
@@ -673,6 +857,26 @@ export default function MainBody({
           </div>
         ) : (
         <div className="flex flex-col gap-[22px] max-[680px]:gap-[10px]">
+          {jobsError && (
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-xs text-red-800" role="alert">
+              <span>{jobsError}</span>
+              <button
+                className="font-semibold underline"
+                onClick={() => {
+                  setJobsError(null);
+                  setJobRetry((attempt) => attempt + 1);
+                }}
+                type="button"
+              >
+                Try again
+              </button>
+            </div>
+          )}
+          {jobsLoading && (
+            <p aria-live="polite" className="rounded-xl border border-[#e5efed] bg-white px-4 py-5 text-center text-xs text-[#718184]">
+              Loading current listings…
+            </p>
+          )}
           {visibleJobs.map((job) => (
             <article
               aria-label={`View ${job.company} company profile`}
@@ -728,22 +932,25 @@ export default function MainBody({
                     {job.skills.map((skill) => <span className="rounded-[4px] bg-[#eff6f5] px-[7px] py-1 text-[12px] font-medium text-[#54797a] max-[680px]:text-[9px]" key={skill}>{skill}</span>)}
                   </div>
                   <div className="mt-[9px] flex items-center justify-between gap-3">
-                    <div>
-                      {applicationSnapshot.some(
-                        (application) => application.jobListingId === job.id,
-                      ) ? (
-                        <span className="rounded-full bg-[#eaf6f3] px-2.5 py-1.5 text-[9px] font-semibold text-[#39817c]">
-                          Applied
-                        </span>
-                      ) : null}
+                    <div className="flex items-center gap-3">
+                      <button
+                        className="rounded-lg bg-[#078b8d] px-3 py-1.5 text-[10px] font-semibold text-white hover:bg-[#067476]"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          navigate(`/apply/${job.listingId}`);
+                        }}
+                        type="button"
+                      >
+                        Apply
+                      </button>
+                      <span className="whitespace-nowrap text-[9px] text-[#9aa6a7]">{job.posted}</span>
                     </div>
-                    <span className="whitespace-nowrap text-[9px] text-[#9aa6a7]">{job.posted}</span>
                   </div>
                 </div>
               </div>
             </article>
           ))}
-          {visibleJobs.length === 0 ? (
+          {visibleJobs.length === 0 && !jobsLoading && !jobsError ? (
             <div className="rounded-[13px] border border-dashed border-[#cadbda] bg-white px-5 py-[50px] text-center">
               <span className="inline-grid size-[42px] place-items-center rounded-[13px] bg-[#e6f4f1] text-[#188b8a]"><Icon name="search" size={22} /></span>
               <h3 className="mt-[14px] mb-[5px] text-[15px] text-[#203638]">No matching opportunities</h3>
@@ -751,6 +958,18 @@ export default function MainBody({
               <button className="mt-[14px] text-xs font-semibold text-[#087879] focus-visible:outline-[3px] focus-visible:outline-[#67c9c1] focus-visible:outline-offset-[3px]" onClick={() => onSearchChange("")}>Clear search</button>
             </div>
           ) : null}
+          {jobsPage < jobsLastPage && (
+            <div className="text-center">
+              <button
+                className="rounded-lg border border-[#dcebea] bg-white px-4 py-2 text-xs font-semibold text-[#16878b] disabled:opacity-50"
+                disabled={loadingMoreJobs}
+                onClick={() => void loadMoreJobs()}
+                type="button"
+              >
+                {loadingMoreJobs ? "Loading…" : "Load more jobs"}
+              </button>
+            </div>
+          )}
         </div>
         )}
       </div>

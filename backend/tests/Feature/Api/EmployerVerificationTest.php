@@ -7,6 +7,7 @@ use App\Models\User;
 use Illuminate\Foundation\Testing\LazilyRefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
+use App\Models\VerificationDocument;
 
 uses(LazilyRefreshDatabase::class)->group('api');
 
@@ -61,6 +62,84 @@ it('allows employers to manage their company profile, logo, and verification sta
     $this->withToken($token)->getJson('/api/employer/verification')
         ->assertOk()
         ->assertJsonPath('status', 'pending');
+});
+
+it('keeps employer verification documents private and supports replacement and removal', function (): void {
+    Storage::fake('local');
+    $owner = User::factory()->create(['role' => 'employer']);
+    $other = User::factory()->create(['role' => 'employer']);
+    $ownerToken = $owner->createToken('owner')->plainTextToken;
+    $otherToken = $other->createToken('other')->plainTextToken;
+
+    $this->withToken($ownerToken)->putJson('/api/employer/company', [
+        'name' => 'Private Docs Ltd',
+    ])->assertOk();
+    $company = Company::query()->where('user_id', $owner->id)->firstOrFail();
+
+    $this->app['auth']->forgetGuards();
+    $firstUpload = $this->withToken($ownerToken)->postJson('/api/employer/verification/documents', [
+        'type' => 'business_registration',
+        'document' => UploadedFile::fake()->create('registration.pdf', 100, 'application/pdf'),
+    ])->assertCreated()
+        ->assertJsonMissingPath('document.file_path')
+        ->assertJsonMissingPath('document.storage_path');
+    $documentId = $firstUpload->json('document.id');
+    $document = VerificationDocument::query()->findOrFail($documentId);
+    $firstPath = $document->file_path;
+    Storage::disk('local')->assertExists($firstPath);
+
+    $this->app['auth']->forgetGuards();
+    $this->withToken($ownerToken)->postJson('/api/employer/verification/documents', [
+        'type' => 'business_registration',
+        'document' => UploadedFile::fake()->create('updated-registration.pdf', 120, 'application/pdf'),
+    ])->assertOk()
+        ->assertJsonPath('document.id', $documentId)
+        ->assertJsonPath('document.original_filename', 'updated-registration.pdf');
+    $document->refresh();
+    expect($document->file_path)->not->toBe($firstPath);
+    Storage::disk('local')->assertMissing($firstPath);
+    Storage::disk('local')->assertExists($document->file_path);
+
+    $this->app['auth']->forgetGuards();
+    $this->withToken($otherToken)->getJson(
+        "/api/employer/verification/documents/{$documentId}/download",
+    )->assertNotFound();
+
+    $this->app['auth']->forgetGuards();
+    $this->withToken($ownerToken)->get(
+        "/api/employer/verification/documents/{$documentId}/download",
+    )->assertOk()
+        ->assertHeader('content-disposition', 'attachment; filename=updated-registration.pdf');
+
+    $this->app['auth']->forgetGuards();
+    $this->withToken($ownerToken)->deleteJson(
+        "/api/employer/verification/documents/{$documentId}",
+    )->assertOk();
+    Storage::disk('local')->assertMissing($document->file_path);
+    $this->assertDatabaseMissing('verification_documents', ['id' => $documentId]);
+    $this->assertDatabaseHas('companies', ['id' => $company->id, 'is_verified' => false]);
+});
+
+it('rejects invalid employer verification file types and files above the limit', function (): void {
+    Storage::fake('local');
+    $employer = User::factory()->create(['role' => 'employer']);
+    $token = $employer->createToken('employer')->plainTextToken;
+    $this->withToken($token)->putJson('/api/employer/company', ['name' => 'Validation Ltd'])
+        ->assertOk();
+
+    $this->app['auth']->forgetGuards();
+    $this->withToken($token)->postJson('/api/employer/verification/documents', [
+        'type' => 'business_registration',
+        'document' => UploadedFile::fake()->create('invalid.exe', 100, 'application/octet-stream'),
+    ])->assertUnprocessable()
+        ->assertJsonValidationErrors('document');
+
+    $this->app['auth']->forgetGuards();
+    $this->withToken($token)->postJson('/api/employer/verification/documents', [
+        'type' => 'business_registration',
+        'document' => UploadedFile::fake()->create('oversized.pdf', 5121, 'application/pdf'),
+    ])->assertUnprocessable()
+        ->assertJsonValidationErrors('document');
 });
 
 it('lets admin review company verification submissions and reject them with reasons', function (): void {

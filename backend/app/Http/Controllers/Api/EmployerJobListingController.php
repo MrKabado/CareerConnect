@@ -23,6 +23,8 @@ class EmployerJobListingController extends Controller
         $filters = $request->validate([
             'status' => ['sometimes', 'in:draft,open,closed,deactivated'],
             'listing_type' => ['sometimes', 'in:job,ojt'],
+            'keyword' => ['sometimes', 'string', 'max:120'],
+            'location' => ['sometimes', 'string', 'max:255'],
             'per_page' => ['sometimes', 'integer', 'min:1', 'max:50'],
             'page' => ['sometimes', 'integer', 'min:1'],
         ]);
@@ -32,6 +34,8 @@ class EmployerJobListingController extends Controller
             ->with($this->listingRelations())
             ->when(isset($filters['status']), fn (Builder $query): Builder => $query->where('status', $filters['status']))
             ->when(isset($filters['listing_type']), fn (Builder $query): Builder => $query->where('listing_type', $filters['listing_type']))
+            ->when(isset($filters['keyword']), fn (Builder $query): Builder => $query->where('title', 'like', '%'.$filters['keyword'].'%'))
+            ->when(isset($filters['location']), fn (Builder $query): Builder => $query->where('location', 'like', '%'.$filters['location'].'%'))
             ->orderByDesc('created_at')
             ->orderByDesc('id')
             ->paginate($filters['per_page'] ?? 15)

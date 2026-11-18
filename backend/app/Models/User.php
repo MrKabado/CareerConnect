@@ -104,6 +104,21 @@ class User extends Authenticatable
         return $this->hasManyThrough(JobListing::class, Company::class);
     }
 
+    public function savedListings(): HasMany
+    {
+        return $this->hasMany(SavedListing::class);
+    }
+
+    public function activityLogs(): HasMany
+    {
+        return $this->hasMany(ActivityLog::class, 'user_id');
+    }
+
+    public function authoredActivityLogs(): HasMany
+    {
+        return $this->hasMany(ActivityLog::class, 'actor_id');
+    }
+
     public function hasRole(string $role): bool
     {
         return $this->role === $role;

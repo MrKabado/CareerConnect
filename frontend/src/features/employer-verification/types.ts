@@ -1,11 +1,11 @@
 export const verificationDocumentRequirements = [
-  { kind: "business_registration", label: "Business permit, license, or certification" },
-  { kind: "company_id", label: "Company ID" },
-  { kind: "employer_id_primary", label: "Employer valid ID 1" },
+  { kind: "business_registration", label: "Business registration document" },
+  { kind: "business_permit", label: "Business permit or license" },
 ] as const;
 
 export type VerificationDocumentKind =
-  (typeof verificationDocumentRequirements)[number]["kind"];
+  | (typeof verificationDocumentRequirements)[number]["kind"]
+  | "supporting";
 
 export type EmployerVerificationDocument = {
   id: string;

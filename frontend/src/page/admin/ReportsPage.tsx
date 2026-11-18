@@ -1,29 +1,60 @@
+import { useCallback, useEffect, useState } from "react";
 import { Briefcase, Building2, Download, FileText, Users } from "lucide-react";
-import { Link, useOutletContext } from "react-router";
+import { Link } from "react-router";
 import StatCard from "../../components/admin/StatCard";
 import { Button, Card, PageHeader } from "../../components/common";
-import { topJobs } from "../../data/mock";
-import type { AdminOutletContext } from "../../types";
+import { useAuth } from "@/features/auth/useAuth";
+import { adminApi, type AdminDashboardStats } from "@/features/admin/backendApi";
 import { downloadCsv } from "../../utils/csv";
 
+const emptyStats: AdminDashboardStats = {
+  total_applicants: 0,
+  total_employers: 0,
+  pending_verifications: { total: 0, applicants: 0, employers: 0 },
+  total_job_listings: 0,
+  active_job_listings: 0,
+  total_applications: 0,
+};
+
 export default function ReportsPage() {
-  const { pendingCount } = useOutletContext<AdminOutletContext>();
-  const maxApplications = Math.max(...topJobs.map((j) => j.applications));
+  const { token } = useAuth();
+  const [stats, setStats] = useState(emptyStats);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    if (!token) return;
+    try {
+      const response = await adminApi.dashboard(token);
+      setStats(response.data);
+    } catch (requestError) {
+      setError(requestError instanceof Error ? requestError.message : "Unable to load platform statistics.");
+    } finally {
+      setIsLoading(false);
+    }
+  }, [token]);
+
+  useEffect(() => {
+    // The request updates state only after its promise settles.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void load();
+  }, [load]);
+
   const reportStats = [
-    ["Total users", "12,480", "+8.2%"],
-    ["Employers", "942", "+4.1%"],
-    ["Active jobs", "1,864", "+6.7%"],
-    ["Applications", "30,720", "+12.3%"],
-    ["Pending verifications", pendingCount, ""],
+    ["Applicants", stats.total_applicants],
+    ["Employers", stats.total_employers],
+    ["Job listings", stats.total_job_listings],
+    ["Active job listings", stats.active_job_listings],
+    ["Applications", stats.total_applications],
+    ["Pending verifications", stats.pending_verifications.total],
   ] as const;
 
   function exportReport() {
-    downloadCsv("careerconnect-report.csv", [
-      ["Metric", "Value", "Change"],
-      ...reportStats.map(([label, value, change]) => [label, value, change]),
-      [],
-      ["Most applied jobs", "Company", "Applications"],
-      ...topJobs.map((job) => [job.title, job.company, job.applications]),
+    downloadCsv("careerconnect-live-report.csv", [
+      ["Metric", "Current total"],
+      ...reportStats.map(([label, value]) => [label, String(value)]),
+      ["Pending applicant verifications", String(stats.pending_verifications.applicants)],
+      ["Pending employer verifications", String(stats.pending_verifications.employers)],
     ]);
   }
 
@@ -31,86 +62,45 @@ export default function ReportsPage() {
     <section>
       <PageHeader
         title="Reports overview"
-        subtitle="Sample data for reviewing the reports interface; these figures are not live."
+        subtitle="Live totals from the CareerConnect database."
         actions={
-          <Button
-            variant="outline"
-            className="h-10"
-            icon={<Download size={14} />}
-            onClick={exportReport}
-          >
+          <Button variant="outline" className="h-10" icon={<Download size={14} />} onClick={exportReport} disabled={isLoading || Boolean(error)}>
             Export report
           </Button>
         }
       />
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <StatCard label="Total users" value="12,480" change="+8.2%" icon={Users} />
-        <StatCard label="Employers" value="942" change="+4.1%" icon={Building2} />
-        <StatCard label="Active jobs" value="1,864" change="+6.7%" icon={Briefcase} />
-        <StatCard label="Applications" value="30,720" change="+12.3%" icon={FileText} />
+      {error && (
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-xs text-red-800" role="alert">
+          <span>{error}</span><button className="font-semibold underline" onClick={() => { setIsLoading(true); setError(null); void load(); }} type="button">Try again</button>
+        </div>
+      )}
+      <div aria-busy={isLoading} className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <StatCard label="Applicants" value={isLoading ? "—" : stats.total_applicants.toLocaleString()} icon={Users} />
+        <StatCard label="Employers" value={isLoading ? "—" : stats.total_employers.toLocaleString()} icon={Building2} />
+        <StatCard label="Job listings" value={isLoading ? "—" : stats.total_job_listings.toLocaleString()} icon={Briefcase} />
+        <StatCard label="Active listings" value={isLoading ? "—" : stats.active_job_listings.toLocaleString()} icon={Briefcase} />
+        <StatCard label="Applications" value={isLoading ? "—" : stats.total_applications.toLocaleString()} icon={FileText} />
+        <StatCard label="Pending verifications" value={isLoading ? "—" : stats.pending_verifications.total.toLocaleString()} icon={Users} />
       </div>
 
-      <div className="mt-4 grid gap-4 lg:grid-cols-[1fr_18rem]">
+      <div className="mt-4 grid gap-4 lg:grid-cols-2">
         <Card className="p-6">
-          <h2 className="text-[15px] font-semibold">Most applied jobs</h2>
-          <p className="mt-1 text-xs text-muted">Top roles by applications this period.</p>
-
-          <ol className="mt-5 space-y-4">
-            {topJobs.map((job, i) => (
-              <li key={job.id}>
-                <div className="mb-1.5 flex items-baseline justify-between gap-3 text-[13px]">
-                  <span className="min-w-0 truncate">
-                    <span className="mr-2 text-xs text-muted">{i + 1}</span>
-                    <span className="font-medium">{job.title}</span>
-                    <span className="text-muted"> · {job.company}</span>
-                  </span>
-                  <span className="shrink-0 font-medium">
-                    {job.applications.toLocaleString()}
-                  </span>
-                </div>
-                <div className="h-2 overflow-hidden rounded-full bg-canvas">
-                  <div
-                    className="h-full rounded-full bg-brand-600"
-                    style={{ width: `${(job.applications / maxApplications) * 100}%` }}
-                  />
-                </div>
-              </li>
-            ))}
-          </ol>
+          <h2 className="text-[15px] font-semibold">Pending review</h2>
+          <dl className="mt-4 space-y-3 text-[13px]">
+            <div className="flex justify-between"><dt className="text-muted">Applicant verifications</dt><dd className="font-medium">{isLoading ? "—" : stats.pending_verifications.applicants}</dd></div>
+            <div className="flex justify-between"><dt className="text-muted">Employer verifications</dt><dd className="font-medium">{isLoading ? "—" : stats.pending_verifications.employers}</dd></div>
+          </dl>
+          <Link to="/admin/verifications" className="mt-4 inline-flex h-9 w-full items-center justify-center rounded-lg bg-brand-600 text-[13px] font-medium text-white hover:bg-brand-700">
+            Review employer requests
+          </Link>
         </Card>
-
-        <div className="space-y-4">
-          <Card className="p-6">
-            <h2 className="text-[15px] font-semibold">Pending verifications</h2>
-            <p className="mt-3 text-4xl font-semibold tracking-tight">{pendingCount}</p>
-            <p className="mt-1 text-xs text-muted">Employers waiting for document review.</p>
-            <Link
-              to="/admin/verifications"
-              className="mt-4 inline-flex h-9 w-full items-center justify-center rounded-lg bg-brand-600 text-[13px] font-medium text-white hover:bg-brand-700"
-            >
-              Review now
-            </Link>
-          </Card>
-
-          <Card className="p-6">
-            <h2 className="text-[15px] font-semibold">This month</h2>
-            <dl className="mt-4 space-y-3 text-[13px]">
-              <div className="flex justify-between">
-                <dt className="text-muted">New signups</dt>
-                <dd className="font-medium">1,200</dd>
-              </div>
-              <div className="flex justify-between">
-                <dt className="text-muted">Jobs published</dt>
-                <dd className="font-medium">318</dd>
-              </div>
-              <div className="flex justify-between">
-                <dt className="text-muted">Hires reported</dt>
-                <dd className="font-medium">74</dd>
-              </div>
-            </dl>
-          </Card>
-        </div>
+        <Card className="p-6">
+          <h2 className="text-[15px] font-semibold">Database totals</h2>
+          <p className="mt-3 text-xs leading-5 text-muted">
+            These values come from the admin dashboard API. Month-over-month growth and most-applied listing analytics are not exposed by the current API.
+          </p>
+        </Card>
       </div>
     </section>
   );

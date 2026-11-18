@@ -1,4 +1,3 @@
-import { Link } from "react-router";
 import EmployerOpportunityTypeBadge from "@/components/common/employer/EmployerOpportunityTypeBadge";
 import type { EmployerListing } from "@/features/employer-listings/listings";
 import StatusPill from "@/features/employer-listings/components/StatusPill";
@@ -7,9 +6,10 @@ type JobListingsBoardProps = {
   listings: EmployerListing[];
   selectedId: string;
   setSelectedId: (value: string) => void;
+  onStatusChange: (id: string, status: "draft" | "open" | "closed") => void;
 };
 
-export default function JobListingsBoard({ listings, selectedId, setSelectedId }: JobListingsBoardProps) {
+export default function JobListingsBoard({ listings, selectedId, setSelectedId, onStatusChange }: JobListingsBoardProps) {
   const selectedListing = listings.find((listing) => listing.id === selectedId) ?? null;
 
   return (
@@ -45,8 +45,8 @@ export default function JobListingsBoard({ listings, selectedId, setSelectedId }
               </div>
               <div className="mt-3 flex flex-col gap-2 border-t border-[#eef2f1] pt-3 text-[11px] text-[#64797b] sm:flex-row sm:items-center sm:justify-between">
                 <div className="flex flex-wrap items-center gap-3">
-                  <span>{listing.applicants} applicants</span>
-                  <span>{listing.shortlisted} shortlisted</span>
+                  {listing.applicants !== undefined && <span>{listing.applicants} applicants</span>}
+                  {listing.shortlisted !== undefined && <span>{listing.shortlisted} shortlisted</span>}
                 </div>
                 <span className="inline-flex items-center justify-center rounded-full border border-[#dbe7e6] bg-white px-3 py-1.5 text-[10px] font-semibold text-[#0c808d]">
                   View details
@@ -98,31 +98,23 @@ export default function JobListingsBoard({ listings, selectedId, setSelectedId }
               ))}
             </ul>
           </div>
-          <div className="mt-5 rounded-[16px] border border-[#dfeae9] bg-[#edf5f4] p-3">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[#5d7071]">Maya hiring defaults</p>
-            <p className="mt-3 text-[11px] leading-5 text-[#4a5d5f]">{selectedListing.hiring.schoolPartnerships}</p>
-            <div className="mt-4 space-y-2 text-[11px] text-[#4d6264]">
-              <div className="flex items-center justify-between gap-2">
-                <span>Hiring for</span>
-                <EmployerOpportunityTypeBadge>{selectedListing.type}</EmployerOpportunityTypeBadge>
-              </div>
-              <div className="flex items-center justify-between gap-2">
-                <span>Default workspace</span>
-                <span className="font-medium text-[#1d3133]">{selectedListing.hiring.workspace}</span>
-              </div>
-              <div className="flex items-center justify-between gap-2">
-                <span>School partnerships</span>
-                <span className="font-medium text-[#1d3133]">Open</span>
-              </div>
+          {selectedListing.type === "OJT" && (
+            <div className="mt-4 rounded-[16px] border border-[#dfeae9] bg-[#edf5f4] p-3">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[#5d7071]">Accepted courses</p>
+              <p className="mt-2 text-[11px] leading-5 text-[#4a5d5f]">{selectedListing.hiring.schoolPartnerships}</p>
             </div>
-          </div>
-          <Link
-            to="/employer/listings/review"
-            state={{ listing: selectedListing }}
-            className="mt-5 inline-flex w-full items-center justify-center rounded-xl bg-[#0e8e9b] px-4 py-2.5 text-sm font-semibold text-white shadow-[0_10px_18px_rgba(14,142,155,0.2)] transition hover:bg-[#0a7d8a]"
+          )}
+          <button
+            className="mt-5 inline-flex w-full items-center justify-center rounded-xl bg-[#0e8e9b] px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-[#0a7d8a]"
+            disabled={selectedListing.status === "deactivated"}
+            onClick={() => onStatusChange(
+              selectedListing.id,
+              selectedListing.status === "active" ? "closed" : "open",
+            )}
+            type="button"
           >
-            Review onboarding
-          </Link>
+            {selectedListing.status === "active" ? "Close listing" : selectedListing.status === "draft" ? "Publish listing" : selectedListing.status === "deactivated" ? "Listing deactivated" : "Reopen listing"}
+          </button>
         </aside>
       )}
     </section>

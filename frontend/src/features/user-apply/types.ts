@@ -1,4 +1,4 @@
-export type ApplicationFileKind = "resume" | "letter" | "cover-letter";
+export type ApplicationFileKind = "resume";
 
 export type ApplicationOpportunityTrack = "Job" | "OJT";
 

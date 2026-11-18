@@ -1,6 +1,8 @@
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { companyVerificationApi } from "@/features/company-verification/api";
 import { useCompanyVerification } from "@/features/company-verification/useCompanyVerification";
+import { useAuth } from "@/features/auth/useAuth";
+import { employerVerificationFilesApi } from "@/features/employer-verification/backendApi";
 import type {
   CompanyMediaAsset,
   CompanyMediaCollection,
@@ -33,29 +35,56 @@ function isImageUrl(value: string): boolean {
 }
 
 export default function CompanyMediaManager() {
+  const { user, token } = useAuth();
   const verification = useCompanyVerification();
   const savedMedia = verification.record.media ?? emptyMedia;
   const [draft, setDraft] = useState<CompanyMediaCollection>(savedMedia);
   const [isEditing, setIsEditing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [logoUrl, setLogoUrl] = useState<string | null>(savedMedia.logo?.url ?? null);
+  const [logoUploadProgress, setLogoUploadProgress] = useState<number | null>(null);
+  const [isRemovingLogo, setIsRemovingLogo] = useState(false);
+
+  useEffect(() => {
+    if (!token || user?.role !== "employer") return;
+    let active = true;
+    employerVerificationFilesApi
+      .company(token)
+      .then(({ company }) => {
+        if (!active) return;
+        const backendLogoUrl = company?.logo_url ?? null;
+        setLogoUrl(backendLogoUrl);
+        if ((savedMedia.logo?.url ?? null) !== backendLogoUrl) {
+          try {
+            companyVerificationApi.setCompanyMedia({
+              ...savedMedia,
+              logo: backendLogoUrl
+                ? { id: "server-company-logo", url: backendLogoUrl, altText: "Company logo" }
+                : null,
+            });
+          } catch {
+            setError("Logo loaded, but the local profile preview could not be refreshed.");
+          }
+        }
+      })
+      .catch((requestError: unknown) => {
+        if (active) {
+          setError(
+            requestError instanceof Error
+              ? requestError.message
+              : "Unable to load the company logo.",
+          );
+        }
+      });
+    return () => {
+      active = false;
+    };
+  }, [savedMedia, token, user?.role]);
 
   const resetDraft = () => {
     setDraft(savedMedia);
     setError(null);
   };
-
-  function updateLogo(field: "url" | "altText", value: string) {
-    setDraft((current) => {
-      const logo = current.logo ?? makeAsset();
-      return {
-        ...current,
-        logo: {
-          ...logo,
-          [field]: value,
-        },
-      };
-    });
-  }
 
   function updatePhoto(id: string, field: "url" | "altText", value: string) {
     setDraft((current) => ({
@@ -73,22 +102,114 @@ export default function CompanyMediaManager() {
 
   function handleSave(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const assets = [draft.logo, ...draft.gallery].filter(
-      (asset): asset is CompanyMediaAsset => asset !== null,
-    );
+    const assets = draft.gallery;
     if (assets.some((asset) => !isImageUrl(asset.url.trim()) || !asset.altText.trim())) {
-      setError("Add a valid image URL and descriptive alt text for each image.");
+      setError("Add a valid image URL and descriptive alt text for each demo photo.");
       return;
     }
 
     try {
-      companyVerificationApi.setCompanyMedia(draft);
+      companyVerificationApi.setCompanyMedia({
+        ...draft,
+        logo: logoUrl
+          ? {
+              id: draft.logo?.id ?? "server-company-logo",
+              url: logoUrl,
+              altText: draft.logo?.altText || "Company logo",
+            }
+          : null,
+      });
       setError(null);
       setIsEditing(false);
     } catch (saveError) {
       setError(
         saveError instanceof Error ? saveError.message : "Unable to save company media.",
       );
+    }
+  }
+
+  async function handleLogoUpload(file?: File) {
+    if (!file) return;
+    if (!token || user?.role !== "employer") {
+      setError("Sign in with an employer account before uploading a company logo.");
+      return;
+    }
+    if (
+      !["image/jpeg", "image/png", "image/webp"].includes(file.type) ||
+      !/\.(jpe?g|png|webp)$/i.test(file.name)
+    ) {
+      setError("Choose a JPG, PNG, or WebP logo.");
+      return;
+    }
+    if (file.size === 0 || file.size > 2 * 1024 * 1024) {
+      setError("The company logo must be larger than 0 bytes and no more than 2 MB.");
+      return;
+    }
+
+    setError(null);
+    setLogoUploadProgress(0);
+    try {
+      const uploadedUrl = await employerVerificationFilesApi.uploadLogo(
+        token,
+        file,
+        setLogoUploadProgress,
+      );
+      setLogoUrl(uploadedUrl);
+      setDraft((current) => ({
+        ...current,
+        logo: {
+          id: current.logo?.id ?? "server-company-logo",
+          url: uploadedUrl,
+          altText: "Company logo",
+        },
+      }));
+      try {
+        companyVerificationApi.setCompanyMedia({
+          ...savedMedia,
+          logo: {
+            id: "server-company-logo",
+            url: uploadedUrl,
+            altText: "Company logo",
+          },
+        });
+      } catch {
+        setError("Logo uploaded, but the local profile preview could not be refreshed.");
+      }
+    } catch (requestError) {
+      setError(
+        requestError instanceof Error
+          ? requestError.message
+          : "The company logo could not be uploaded.",
+      );
+    } finally {
+      setLogoUploadProgress(null);
+    }
+  }
+
+  async function handleRemoveLogo() {
+    if (!token || user?.role !== "employer") return;
+    setError(null);
+    setIsRemovingLogo(true);
+    try {
+      await employerVerificationFilesApi.deleteLogo(token);
+      setLogoUrl(null);
+      setDraft((current) => ({ ...current, logo: null }));
+      try {
+        companyVerificationApi.setCompanyMedia({
+          ...savedMedia,
+          logo: null,
+        });
+      } catch {
+        setError("Logo removed, but the local profile preview could not be refreshed.");
+      }
+    } catch (requestError) {
+      setError(
+        requestError instanceof Error
+          ? requestError.message
+          : "The company logo could not be removed.",
+      );
+    } finally {
+      setIsRemovingLogo(false);
     }
   }
 
@@ -108,7 +229,7 @@ export default function CompanyMediaManager() {
             Company media
           </h2>
           <p className="mt-1 text-[9px] text-[#829091]">
-            Saved logo and photos appear on your public profile immediately.
+            Company logos are uploaded to the backend. Photo gallery entries are demo-only and not stored on the server.
           </p>
         </div>
         {!isEditing ? (
@@ -121,21 +242,52 @@ export default function CompanyMediaManager() {
           </button>
         ) : null}
       </div>
+      {error && (
+        <p className="mt-3 text-[10px] text-[#b34840]" role="alert">
+          {error}
+        </p>
+      )}
 
       {!isEditing ? (
         <div className="mt-4 space-y-4">
           <div>
             <h3 className="text-[10px] font-semibold text-[#526365]">Company logo</h3>
-            {savedMedia.logo ? (
+            {logoUrl ? (
               <div className="mt-2 flex items-center gap-3">
                 <img
-                  alt={savedMedia.logo.altText}
+                  alt="Company logo"
                   className="size-12 rounded-lg border border-[#e7eeee] object-cover"
-                  src={savedMedia.logo.url}
+                  src={logoUrl}
                 />
+                <button
+                  className="text-[9px] font-semibold text-[#a2534c] underline underline-offset-2"
+                  disabled={isRemovingLogo || logoUploadProgress !== null}
+                  onClick={() => void handleRemoveLogo()}
+                  type="button"
+                >
+                  {isRemovingLogo ? "Removing…" : "Remove logo"}
+                </button>
               </div>
             ) : (
               <p className="mt-1 text-[9px] text-[#849394]">No logo added</p>
+            )}
+            <label className="mt-2 block text-[9px] font-semibold text-[#087879]">
+              {logoUrl ? "Replace logo" : "Upload logo"} · JPG, PNG, or WebP · up to 2 MB
+              <input
+                accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp"
+                className="mt-1 block w-full text-[9px] text-[#526365]"
+                disabled={logoUploadProgress !== null || isRemovingLogo}
+                onChange={(event) => {
+                  void handleLogoUpload(event.currentTarget.files?.[0]);
+                  event.currentTarget.value = "";
+                }}
+                type="file"
+              />
+            </label>
+            {logoUploadProgress !== null && (
+              <p className="mt-1 text-[9px] text-[#087879]" role="status">
+                Uploading logo… {logoUploadProgress}%
+              </p>
             )}
           </div>
           <div>
@@ -161,28 +313,6 @@ export default function CompanyMediaManager() {
         </div>
       ) : (
         <form className="mt-4 space-y-4" onSubmit={handleSave}>
-          <fieldset className="space-y-2">
-            <legend className="text-[10px] font-semibold text-[#526365]">Company logo</legend>
-            <label className="block text-[9px] text-[#718082]">
-              Image URL
-              <input
-                className="mt-1 w-full rounded-lg border border-[#dfe8e7] px-2.5 py-2 text-[10px] text-[#344749] outline-none focus:border-[#078b8d]"
-                onChange={(event) => updateLogo("url", event.currentTarget.value)}
-                placeholder="https://example.com/logo.png"
-                value={draft.logo?.url ?? ""}
-              />
-            </label>
-            <label className="block text-[9px] text-[#718082]">
-              Description
-              <input
-                className="mt-1 w-full rounded-lg border border-[#dfe8e7] px-2.5 py-2 text-[10px] text-[#344749] outline-none focus:border-[#078b8d]"
-                onChange={(event) => updateLogo("altText", event.currentTarget.value)}
-                placeholder="Company logo"
-                value={draft.logo?.altText ?? ""}
-              />
-            </label>
-          </fieldset>
-
           <fieldset className="space-y-3 border-t border-[#edf1f1] pt-3">
             <legend className="text-[10px] font-semibold text-[#526365]">Company photos</legend>
             {draft.gallery.map((photo, index) => (
@@ -231,9 +361,8 @@ export default function CompanyMediaManager() {
           </fieldset>
 
           <p className="text-[9px] leading-4 text-[#849394]">
-            Saved changes are displayed on the public company profile immediately.
+            Gallery changes in this demo are saved only in this browser.
           </p>
-          {error ? <p className="text-[9px] text-[#b34840]" role="alert">{error}</p> : null}
           <div className="flex justify-end gap-2 border-t border-[#edf1f1] pt-3">
             <button
               className="rounded-lg border border-[#dfe8e7] px-3 py-2 text-[9px] font-semibold text-[#526365]"

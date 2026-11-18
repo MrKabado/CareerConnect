@@ -42,6 +42,12 @@ export default function EmployerJobListingsPageContent() {
     updateNewListingForm,
     handleSaveDraft,
     modalTitle,
+    categories,
+    isLoading,
+    isSaving,
+    error,
+    retry,
+    updateListingStatus,
   } = useEmployerJobListings();
 
   return (
@@ -60,7 +66,7 @@ export default function EmployerJobListingsPageContent() {
         </div>
 
         <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-          {[{ label: "Active listings", value: activeListingCount, detail: "Currently accepting applications", tone: "bg-[#eefaf5] text-[#178d6b]" }, { label: "Drafts", value: draftListingCount, detail: "Waiting for review", tone: "bg-[#fff9eb] text-[#c28921]" }, { label: "Total applicants", value: listings.reduce((total, listing) => total + listing.applicants, 0), detail: "Across all company listings", tone: "bg-[#edf5ff] text-[#3477d3]" }, { label: "OJT slots", value: listings.filter((listing) => listing.type === "OJT" && listing.status === "active").length, detail: "Across active internship programs", tone: "bg-[#edeefb] text-[#5c5ad9]" }].map(({ label, value, detail, tone }) => (
+          {[{ label: "Total listings", value: listings.length, detail: "Your company's listings", tone: "bg-[#edf5ff] text-[#3477d3]" }, { label: "Active listings", value: activeListingCount, detail: "Currently accepting applications", tone: "bg-[#eefaf5] text-[#178d6b]" }, { label: "Drafts", value: draftListingCount, detail: "Not yet published", tone: "bg-[#fff9eb] text-[#c28921]" }, { label: "OJT listings", value: listings.filter((listing) => listing.type === "OJT").length, detail: "Internship opportunities", tone: "bg-[#edeefb] text-[#5c5ad9]" }].map(({ label, value, detail, tone }) => (
             <SummaryCard key={label} label={label} value={value} detail={detail} tone={tone} />
           ))}
         </section>
@@ -80,13 +86,30 @@ export default function EmployerJobListingsPageContent() {
             </div>
           </div>
           <div className="p-4">
-            <JobListingsBoard listings={visibleListings} selectedId={selectedId} setSelectedId={setSelectedId} />
+            {error && (
+              <div className="mb-3 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-xs text-red-800" role="alert">
+                <span>{error}</span><button className="font-semibold underline" onClick={retry} type="button">Try again</button>
+              </div>
+            )}
+            {isLoading ? (
+              <p aria-live="polite" className="py-8 text-center text-sm text-[#738385]">Loading your listings…</p>
+            ) : (
+              <JobListingsBoard
+                listings={visibleListings}
+                selectedId={selectedId}
+                setSelectedId={setSelectedId}
+                onStatusChange={updateListingStatus}
+              />
+            )}
           </div>
         </section>
       </main>
 
       <CreateListingModal
         companyName={companyProfile.name}
+        categories={categories}
+        error={error}
+        isSaving={isSaving}
         isOpen={isCreateModalOpen}
         newListingType={newListingType}
         newListingStep={newListingStep}

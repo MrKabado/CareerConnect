@@ -27,12 +27,7 @@ export type OfferDetails = {
 export type ApplicantStatusUpdatePayload = {
   note?: string;
   interviewDetails?: InterviewDetails;
-  offerDetails?: OfferDetails;
   rejectionReason?: string;
-  rejectionMessage?: string;
-  hiredAt?: string;
-  undoRejection?: boolean;
-  changedBy?: string;
 };
 
 export type ApplicantDocument = {
@@ -55,7 +50,7 @@ export type Applicant = {
   department: string;
   location: string;
   appliedDate: string;
-  match: number;
+  match?: number;
   status: ApplicantStatus;
   statusHistory?: ApplicantStatusHistoryEntry[];
   interviewDetails?: InterviewDetails;

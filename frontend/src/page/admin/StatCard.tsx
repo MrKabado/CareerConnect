@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { Download } from "lucide-react";
 import UserRow from "../../components/admin/UserRow";
 import {
@@ -39,28 +39,14 @@ const COLUMNS: Column<User>[] = [
 ];
 
 export default function UsersPage() {
-  const { users, toggleAccess } = useUsers();
   const [query, setQuery] = useState("");
   const [role, setRole] = useState("all");
   const [status, setStatus] = useState("all");
   const [page, setPage] = useState(1);
-
-  const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    return users.filter(
-      (u) =>
-        (role === "all" || u.role === role) &&
-        (status === "all" || u.status === status) &&
-        (q === "" ||
-          u.name.toLowerCase().includes(q) ||
-          u.email.toLowerCase().includes(q))
-    );
-  }, [users, query, role, status]);
-
-  const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const { users, total, pageCount, isLoading, isSavingId, error, toggleAccess, retry } =
+    useUsers({ query, role, status, page });
   const currentPage = Math.min(page, pageCount);
   const start = (currentPage - 1) * PAGE_SIZE;
-  const pageRows = filtered.slice(start, start + PAGE_SIZE);
 
   const resetPage = (setter: (v: string) => void) => (v: string) => {
     setter(v);
@@ -68,9 +54,9 @@ export default function UsersPage() {
   };
 
   const exportUsers = () => {
-    downloadCsv("careerconnect-users.csv", [
+    downloadCsv(`careerconnect-users-page-${currentPage}.csv`, [
       ["Name", "Email", "Role", "Joined", "Status"],
-      ...filtered.map((user) => [
+      ...users.map((user) => [
         user.name,
         user.email,
         user.role,
@@ -103,21 +89,26 @@ export default function UsersPage() {
         <Select ariaLabel="Filter by status" value={status} onChange={resetPage(setStatus)} options={STATUS_OPTIONS} />
       </div>
 
+      {error && (
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-xs text-red-800" role="alert">
+          <span>{error}</span><button className="font-semibold underline" onClick={retry} type="button">Try again</button>
+        </div>
+      )}
       <DataTable
         columns={COLUMNS}
-        rows={pageRows}
+        rows={users}
         getRowKey={(u) => u.id}
-        renderRow={(u) => <UserRow user={u} onToggleAccess={toggleAccess} />}
-        emptyMessage="No users match your filters."
+        renderRow={(u) => <UserRow user={u} onToggleAccess={toggleAccess} isSaving={isSavingId === u.id} />}
+        emptyMessage={isLoading ? "Loading users…" : "No users match your filters."}
         footer={
           <Pagination
             page={currentPage}
             pageCount={pageCount}
             onPageChange={setPage}
             summary={
-              filtered.length === 0
+              total === 0
                 ? "Showing 0 users"
-                : `Showing ${start + 1}–${start + pageRows.length} of ${filtered.length} users`
+                : `Showing ${start + 1}–${Math.min(start + users.length, total)} of ${total} users`
             }
           />
         }

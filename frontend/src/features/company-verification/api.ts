@@ -514,7 +514,7 @@ export const companyVerificationApi = {
     await simulateDelay();
     const employerId = requireEmployerId();
     const documents = getEmployerVerificationDocuments(employerId);
-    const requiredKinds = ["business_registration", "employer_id_primary"] as const;
+    const requiredKinds = ["business_registration", "business_permit"] as const;
     if (!requiredKinds.every((kind) => documents.some((document) => document.kind === kind))) {
       throw new Error("Upload proof of business existence and a government ID before submitting.");
     }

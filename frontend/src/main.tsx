@@ -55,13 +55,13 @@ createRoot(document.getElementById("root")!).render(
           </Route>
           <Route path="/job-search" element={<JobSearchPage />} />
           <Route path="/ojt-search" element={<OjtSearchPage />} />
-          <Route path="/recommendations" element={<RecommendationsPage />} />
-          <Route path="/applications" element={<ApplicationsPage />} />
-          <Route path="/messages" element={<ApplicantMessagesPage />} />
-          <Route path="/messages/:conversationId" element={<ApplicantMessagesPage />} />
-          <Route path="/profile" element={<ProfilePage />} />
+          <Route path="/recommendations" element={<RequireAuth><RequireRole role="applicant"><RecommendationsPage /></RequireRole></RequireAuth>} />
+          <Route path="/applications" element={<RequireAuth><RequireRole role="applicant"><ApplicationsPage /></RequireRole></RequireAuth>} />
+          <Route path="/messages" element={<RequireAuth><RequireRole role="applicant"><ApplicantMessagesPage /></RequireRole></RequireAuth>} />
+          <Route path="/messages/:conversationId" element={<RequireAuth><RequireRole role="applicant"><ApplicantMessagesPage /></RequireRole></RequireAuth>} />
+          <Route path="/profile" element={<RequireAuth><RequireRole role="applicant"><ProfilePage /></RequireRole></RequireAuth>} />
           <Route path="/company/:companyName" element={<CompanyProfilePage />} />
-          <Route path="/apply/:jobId" element={<JobApplicationPage />} />
+          <Route path="/apply/:jobId" element={<RequireAuth><RequireRole role="applicant"><JobApplicationPage /></RequireRole></RequireAuth>} />
           <Route path="/login" element={<LoginPage />} />
           <Route path="/forgot-password" element={<ForgotPasswordPage />} />
           <Route path="/verify-email" element={<VerifyEmailPage />} />

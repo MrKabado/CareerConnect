@@ -44,15 +44,18 @@ export default function VerificationRow({
             </button>
           </li>
         ))}
+        {item.documents.length === 0 && (
+          <li className="text-[10px] text-muted">Open review to load submitted documents.</li>
+        )}
       </ul>
 
       <div className="flex gap-2 md:justify-end max-[680px]:w-full max-[680px]:[&>button]:flex-1">
         <Button
           variant="outline"
-          onClick={() => onPreview(item.id, item.documents[0].id)}
+          onClick={() => onPreview(item.id, item.documents[0]?.id ?? "")}
           className="h-8 border-transparent bg-[#eef7f6] px-3 text-[10px] text-brand-700 hover:bg-[#e2f2ef] hover:text-brand-700"
         >
-          <p className="text-[#028090] font-semibold">Reopen review</p>
+          <p className="text-[#028090] font-semibold">          Review documents</p>
         </Button>
       </div>
     </Card>

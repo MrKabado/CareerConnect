@@ -294,25 +294,6 @@ export default function EmployerCompanyProfilePage() {
     event.preventDefault();
     try {
       updateCompanyProfile(profileSlug, draft);
-      if (draft.logoUrl.trim() !== profile.logoUrl?.trim()) {
-        const media = companyVerificationApi.getSnapshot().record.media ?? {
-          logo: null,
-          banner: null,
-          gallery: [],
-          videoUrl: "",
-          coverImageId: null,
-        };
-        companyVerificationApi.setCompanyMedia({
-          ...media,
-          logo: draft.logoUrl.trim()
-            ? {
-                id: media.logo?.id ?? `company-logo-${Date.now()}`,
-                url: draft.logoUrl.trim(),
-                altText: `${draft.name} logo`,
-              }
-            : null,
-        });
-      }
       companyVerificationApi.setHiringDefaultsComplete(
         Object.values(draft.hiringDefaults).every((value) => value.trim().length > 0),
       );
@@ -926,7 +907,9 @@ export default function EmployerCompanyProfilePage() {
                   <div className="grid gap-4 sm:grid-cols-2">
                     <ProfileField label="Company name" value={draft.name} onChange={(value) => updateDraft("name", value)} />
                     <ProfileField label="Logo initials" value={draft.initials} onChange={(value) => updateDraft("initials", value.slice(0, 3))} />
-                    <ProfileField label="Logo image URL" value={draft.logoUrl} onChange={(value) => updateDraft("logoUrl", value)} />
+                    <p className="text-xs text-[#829092]">
+                      Company logos can be uploaded or removed in the Company media section.
+                    </p>
                     <ProfileField label="Tagline" value={draft.tagline} onChange={(value) => updateDraft("tagline", value)} />
                     <ProfileField label="Industry" value={draft.industry} onChange={(value) => updateDraft("industry", value)} />
                     <ProfileField label="Headquarters" value={draft.location} onChange={(value) => updateDraft("location", value)} />

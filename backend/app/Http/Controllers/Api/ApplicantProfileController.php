@@ -65,7 +65,7 @@ class ApplicantProfileController extends Controller
     public function uploadPhoto(Request $request): JsonResponse
     {
         $request->validate([
-            'photo' => ['required', 'image', 'mimes:jpg,jpeg,png,webp', 'max:2048'],
+            'photo' => ['required', 'image', 'mimes:jpg,jpeg,png,webp', 'extensions:jpg,jpeg,png,webp', 'max:2048'],
         ]);
 
         $profile = $this->profileFor($request);
@@ -79,8 +79,15 @@ class ApplicantProfileController extends Controller
         }
 
         $oldPath = $profile->profile_photo_path;
-        $profile->profile_photo_path = $path;
-        $profile->save();
+        try {
+            $profile->profile_photo_path = $path;
+            $profile->save();
+        } catch (\Throwable $exception) {
+            if (! Storage::disk('public')->delete($path)) {
+                throw new RuntimeException('The failed applicant photo upload could not be cleaned up.', previous: $exception);
+            }
+            throw $exception;
+        }
 
         if ($oldPath !== null && ! Storage::disk('public')->delete($oldPath)) {
             throw new RuntimeException('The previous applicant photo could not be removed.');
