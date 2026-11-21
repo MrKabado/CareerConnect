@@ -28,6 +28,8 @@ export type Application = {
   appliedAt: string;
   status: ApplicationStatus;
   track: ApplicationTrack;
+  hiredAt?: string;
+  employmentEndedAt?: string | null;
   interviewSchedule?: Pick<InterviewDetails, "date" | "time" | "timezone">;
   resumeFileName?: string;
   applicationLetterFileName?: string;

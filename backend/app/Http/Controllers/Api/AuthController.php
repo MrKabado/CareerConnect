@@ -36,7 +36,7 @@ class AuthController extends Controller
     {
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:255'],
-            'email' => ['required', 'string', 'email', 'max:255', 'unique:users,email'],
+            'email' => ['required', 'string', 'email', 'max:255'],
             'password' => ['required', 'string', 'confirmed', Password::min(12)->letters()->mixedCase()->numbers()->symbols()],
             'role' => [
                 'sometimes',
@@ -45,11 +45,32 @@ class AuthController extends Controller
         ]);
 
         $validated['role'] = $forcedRole ?? ($validated['role'] ?? 'applicant');
+        $existingUser = User::where('email', $validated['email'])->first();
+
+        if ($existingUser !== null) {
+            $response = $this->resumeApplicantVerification($existingUser, $validated['role']);
+
+            if ($response !== null) {
+                return $response;
+            }
+
+            throw ValidationException::withMessages([
+                'email' => ['The email has already been taken.'],
+            ]);
+        }
 
         try {
             $user = User::create($validated);
         } catch (QueryException $exception) {
-            if (User::where('email', $validated['email'])->exists()) {
+            $existingUser = User::where('email', $validated['email'])->first();
+
+            if ($existingUser !== null) {
+                $response = $this->resumeApplicantVerification($existingUser, $validated['role']);
+
+                if ($response !== null) {
+                    return $response;
+                }
+
                 throw ValidationException::withMessages([
                     'email' => ['The email has already been taken.'],
                 ]);
@@ -65,6 +86,26 @@ class AuthController extends Controller
             'message' => 'A verification code has been sent to your email address.',
             'user' => $this->userData($user),
         ], 201);
+    }
+
+    private function resumeApplicantVerification(User $user, string $registrationRole): ?JsonResponse
+    {
+        if ($registrationRole !== 'applicant') {
+            return null;
+        }
+
+        if (
+            $user->role === 'applicant'
+            && $user->account_status === 'active'
+            && $user->email_verified_at === null
+        ) {
+            $this->otpCodes->send($user->email, 'email_verification');
+        }
+
+        return response()->json([
+            'message' => 'If this email has an account that needs verification, a code has been sent. Otherwise, try signing in.',
+            'resume_verification' => true,
+        ]);
     }
 
     public function login(Request $request): JsonResponse

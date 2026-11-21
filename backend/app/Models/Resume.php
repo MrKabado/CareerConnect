@@ -9,7 +9,9 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 class Resume extends Model
 {
     protected $fillable = [
+        'storage_disk',
         'storage_path',
+        'cloudinary_asset_id',
         'original_filename',
         'mime_type',
         'file_size',

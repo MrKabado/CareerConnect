@@ -4,16 +4,24 @@ use App\Models\Category;
 use App\Models\Company;
 use App\Models\CompanyVerification;
 use App\Models\IdentityVerification;
+use App\Models\Interview;
 use App\Models\JobListing;
 use App\Models\User;
+use App\Services\CloudinaryMediaGateway;
 use Illuminate\Foundation\Testing\LazilyRefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 use Tests\TestCase;
 
 uses(LazilyRefreshDatabase::class)->group('api');
+
+beforeEach(function (): void {
+    Config::set('careerconnect.media_storage_disk', 'local');
+});
 
 function phaseFiveApplicant(array $attributes = []): User
 {
@@ -132,6 +140,90 @@ it('uploads PDF and DOCX resumes, replaces the current version and keeps metadat
     $this->withToken($token)->deleteJson('/api/applicant/resume')->assertOk();
 });
 
+it('stores Cloudinary resumes as authenticated assets and keeps downloads behind the API', function (): void {
+    Config::set('careerconnect.media_storage_disk', 'cloudinary');
+    $applicant = phaseFiveApplicant();
+    $token = phaseFiveToken($this, $applicant);
+    $gateway = Mockery::mock(CloudinaryMediaGateway::class);
+    $gateway->shouldReceive('upload')
+        ->twice()
+        ->withArgs(fn (UploadedFile $file, string $publicId, string $assetFolder): bool => str_starts_with($publicId, 'applicant-resumes/'.$applicant->id.'/')
+            && $assetFolder === 'career-connect/users/'.$applicant->id.'/resumes'
+        )
+        ->andReturnUsing(fn (UploadedFile $file, string $publicId, string $assetFolder): array => [
+            'asset_id' => 'cloudinary-asset-'.Str::uuid(),
+            'public_id' => $publicId,
+        ]);
+    $gateway->shouldReceive('download')
+        ->twice()
+        ->withArgs(fn (string $publicId, string $extension, string $filename, string $mimeType): bool => str_starts_with($publicId, 'applicant-resumes/'.$applicant->id.'/')
+            && $extension === 'pdf'
+            && $filename === 'cloud-resume.pdf'
+            && $mimeType === 'application/pdf'
+        )
+        ->andReturnUsing(fn (): StreamedResponse => response()->streamDownload(
+            static fn () => print ('%PDF-1.4'),
+            'cloud-resume.pdf',
+            ['Content-Type' => 'application/pdf'],
+        ));
+    $gateway->shouldReceive('delete')->once()->andReturnNull();
+    $this->app->instance(CloudinaryMediaGateway::class, $gateway);
+
+    $this->withToken($token)->postJson('/api/applicant/resume', [
+        'resume' => phaseFivePdf('cloud-resume.pdf'),
+    ])->assertCreated()
+        ->assertJsonMissingPath('data.storage_path')
+        ->assertJsonMissingPath('data.cloudinary_asset_id');
+
+    $firstResume = $applicant->resumes()->where('is_current', true)->firstOrFail();
+    expect($firstResume->storage_disk)->toBe('cloudinary')
+        ->and($firstResume->cloudinary_asset_id)->toStartWith('cloudinary-asset-');
+    $this->assertDatabaseHas('resumes', [
+        'id' => $firstResume->id,
+        'storage_disk' => 'cloudinary',
+        'cloudinary_asset_id' => $firstResume->cloudinary_asset_id,
+    ]);
+
+    $this->app['auth']->forgetGuards();
+    $this->withToken($token)->get('/api/applicant/resume/download')
+        ->assertOk()
+        ->assertHeader('content-type', 'application/pdf')
+        ->assertStreamedContent('%PDF-1.4');
+
+    $employer = User::factory()->create(['role' => 'employer']);
+    $listing = phaseFiveListing($employer, Category::create(['name' => 'Cloud Computing']));
+    $application = $applicant->applications()->make([
+        'resume_id' => $firstResume->id,
+        'status' => 'pending',
+        'resume_original_filename' => $firstResume->original_filename,
+        'resume_mime_type' => $firstResume->mime_type,
+        'resume_file_size' => $firstResume->file_size,
+        'applied_at' => now(),
+    ]);
+    $application->jobListing()->associate($listing);
+    $application->save();
+    $employerToken = phaseFiveToken($this, $employer);
+
+    $this->withToken($employerToken)->get("/api/employer/applications/{$application->id}/resume")
+        ->assertOk()
+        ->assertHeader('content-type', 'application/pdf')
+        ->assertStreamedContent('%PDF-1.4');
+
+    $this->app['auth']->forgetGuards();
+    $this->withToken($token)->postJson('/api/applicant/resume', [
+        'resume' => phaseFivePdf('replacement.pdf'),
+    ])->assertOk();
+    $this->assertDatabaseHas('resumes', [
+        'id' => $firstResume->id,
+        'is_current' => false,
+        'storage_disk' => 'cloudinary',
+    ]);
+
+    $this->app['auth']->forgetGuards();
+    $this->withToken($token)->deleteJson('/api/applicant/resume')->assertOk();
+    $this->assertDatabaseHas('resumes', ['id' => $firstResume->id]);
+});
+
 it('rejects invalid resume content and files above the configured size limit', function (): void {
     Storage::fake('local');
     Config::set('careerconnect.resume_max_size_kb', 2);
@@ -238,6 +330,193 @@ it('submits eligible applications once with immutable resume and cover-letter sn
     $this->app['auth']->forgetGuards();
     $this->withToken($applicantToken)->deleteJson('/api/applicant/resume')
         ->assertOk();
+});
+
+it('blocks applications to the same company during a scheduled interview and allows resubmission after cancellation', function (): void {
+    Storage::fake('local');
+    $applicant = phaseFiveApplicant();
+    $employer = User::factory()->create(['role' => 'employer']);
+    $listing = phaseFiveListing($employer, Category::create(['name' => 'Interview Retry']));
+    $sameCompanyListing = $listing->company->jobListings()->create([
+        'category_id' => $listing->category_id,
+        'listing_type' => 'job',
+        'title' => 'Another role at the same company',
+        'description' => 'A second open role.',
+        'responsibilities' => 'Complete the work.',
+        'requirements' => 'Relevant experience.',
+        'location' => 'Cebu City',
+        'work_setup' => 'onsite',
+        'employment_type' => 'full_time',
+        'status' => 'open',
+        'published_at' => now(),
+    ]);
+    $applicantToken = phaseFiveToken($this, $applicant);
+    $employerToken = phaseFiveToken($this, $employer);
+
+    $this->withToken($applicantToken)->postJson('/api/applicant/resume', [
+        'resume' => phaseFivePdf(),
+    ])->assertCreated();
+    $this->app['auth']->forgetGuards();
+    $this->withToken($applicantToken)->postJson("/api/jobs/{$listing->id}/applications")
+        ->assertCreated();
+    $application = $applicant->applications()->firstOrFail();
+
+    $this->app['auth']->forgetGuards();
+    $this->withToken($employerToken)->patchJson("/api/employer/applications/{$application->id}/status", [
+        'status' => 'reviewing',
+    ])->assertOk();
+    $this->app['auth']->forgetGuards();
+    $this->withToken($employerToken)->patchJson("/api/employer/applications/{$application->id}/status", [
+        'status' => 'shortlisted',
+    ])->assertOk();
+
+    $scheduledAt = now('Asia/Manila')->addDays(2)->setTime(10, 0);
+    $schedule = [
+        'scheduled_at' => $scheduledAt->format('Y-m-d H:i:s'),
+        'end_at' => $scheduledAt->copy()->addHour()->format('Y-m-d H:i:s'),
+        'timezone' => 'Asia/Manila',
+        'mode' => 'onsite',
+        'location' => 'Cebu City office',
+    ];
+    $this->app['auth']->forgetGuards();
+    $this->withToken($employerToken)->postJson("/api/employer/applications/{$application->id}/interviews", $schedule)
+        ->assertCreated();
+    $interview = Interview::query()->where('application_id', $application->id)->firstOrFail();
+
+    $this->app['auth']->forgetGuards();
+    $this->withToken($applicantToken)->postJson("/api/jobs/{$sameCompanyListing->id}/applications")
+        ->assertStatus(409)
+        ->assertJsonPath('code', 'company_interview_in_progress');
+    $this->assertDatabaseMissing('applications', [
+        'applicant_id' => $applicant->id,
+        'job_listing_id' => $sameCompanyListing->id,
+    ]);
+
+    $this->app['auth']->forgetGuards();
+    $this->withToken($employerToken)->postJson("/api/employer/interviews/{$interview->id}/cancel")
+        ->assertOk()
+        ->assertJsonPath('data.status', 'cancelled');
+
+    $this->app['auth']->forgetGuards();
+    $this->withToken($applicantToken)->postJson("/api/jobs/{$listing->id}/applications")
+        ->assertOk()
+        ->assertJsonPath('message', 'Application resubmitted.')
+        ->assertJsonPath('data.status', 'pending');
+
+    $this->app['auth']->forgetGuards();
+    $this->withToken($employerToken)->patchJson("/api/employer/applications/{$application->id}/status", [
+        'status' => 'reviewing',
+    ])->assertOk();
+    $this->app['auth']->forgetGuards();
+    $this->withToken($employerToken)->patchJson("/api/employer/applications/{$application->id}/status", [
+        'status' => 'shortlisted',
+    ])->assertOk();
+    $this->app['auth']->forgetGuards();
+    $this->withToken($employerToken)->postJson("/api/employer/applications/{$application->id}/interviews", $schedule)
+        ->assertCreated();
+
+    expect(Interview::query()->where('application_id', $application->id)->count())->toBe(2)
+        ->and($application->refresh()->status)->toBe('interview');
+});
+
+it('records the hire start date and lets only the employer record the employment end date', function (): void {
+    Storage::fake('local');
+    $applicant = phaseFiveApplicant();
+    $employer = User::factory()->create(['role' => 'employer']);
+    $listing = phaseFiveListing($employer, Category::create(['name' => 'Employment Dates']));
+    $applicantToken = phaseFiveToken($this, $applicant);
+    $employerToken = phaseFiveToken($this, $employer);
+
+    $this->withToken($applicantToken)->postJson('/api/applicant/resume', [
+        'resume' => phaseFivePdf(),
+    ])->assertCreated();
+    $this->app['auth']->forgetGuards();
+    $this->withToken($applicantToken)->postJson("/api/jobs/{$listing->id}/applications")
+        ->assertCreated();
+    $application = $applicant->applications()->firstOrFail();
+
+    foreach (['reviewing', 'shortlisted', 'interview', 'hired'] as $status) {
+        $this->app['auth']->forgetGuards();
+        $response = $this->withToken($employerToken)->patchJson("/api/employer/applications/{$application->id}/status", [
+            'status' => $status,
+        ])->assertOk();
+    }
+
+    expect($application->refresh()->hired_at)->not->toBeNull();
+    $response->assertJsonPath('data.hired_at', $application->hired_at->toISOString());
+
+    $otherEmployer = User::factory()->create(['role' => 'employer']);
+    $otherEmployerToken = phaseFiveToken($this, $otherEmployer);
+    $endedAt = now()->toDateString();
+
+    $this->withToken($otherEmployerToken)->patchJson("/api/employer/applications/{$application->id}/employment/end", [
+        'employment_ended_at' => $endedAt,
+    ])->assertNotFound();
+
+    $this->app['auth']->forgetGuards();
+    $this->withToken($employerToken)->patchJson("/api/employer/applications/{$application->id}/employment/end", [
+        'employment_ended_at' => now()->subYear()->toDateString(),
+    ])->assertUnprocessable()
+        ->assertJsonValidationErrors('employment_ended_at');
+
+    $this->app['auth']->forgetGuards();
+    $this->withToken($employerToken)->patchJson("/api/employer/applications/{$application->id}/employment/end", [
+        'employment_ended_at' => $endedAt,
+    ])->assertOk()
+        ->assertJsonPath('data.status', 'hired')
+        ->assertJsonPath('data.employment_ended_at', $endedAt);
+    $this->assertDatabaseHas('applications', [
+        'id' => $application->id,
+        'employment_ended_by' => $employer->id,
+    ]);
+
+    $this->app['auth']->forgetGuards();
+    $this->withToken($employerToken)->patchJson("/api/employer/applications/{$application->id}/employment/end", [
+        'employment_ended_at' => $endedAt,
+    ])->assertStatus(409)
+        ->assertJsonPath('code', 'employment_already_ended');
+
+    $this->app['auth']->forgetGuards();
+    $this->withToken($applicantToken)->getJson('/api/applicant/applications')
+        ->assertOk()
+        ->assertJsonPath('data.0.hired_at', $application->hired_at->toISOString())
+        ->assertJsonPath('data.0.employment_ended_at', $endedAt);
+});
+
+it('allows an applicant to reapply to a rejected listing without creating a duplicate application', function (): void {
+    Storage::fake('local');
+    $applicant = phaseFiveApplicant();
+    $employer = User::factory()->create(['role' => 'employer']);
+    $listing = phaseFiveListing($employer, Category::create(['name' => 'Rejected Retry']));
+    $applicantToken = phaseFiveToken($this, $applicant);
+    $employerToken = phaseFiveToken($this, $employer);
+
+    $this->withToken($applicantToken)->postJson('/api/applicant/resume', [
+        'resume' => phaseFivePdf(),
+    ])->assertCreated();
+    $this->app['auth']->forgetGuards();
+    $this->withToken($applicantToken)->postJson("/api/jobs/{$listing->id}/applications")
+        ->assertCreated();
+    $application = $applicant->applications()->firstOrFail();
+
+    $this->app['auth']->forgetGuards();
+    $this->withToken($employerToken)->patchJson("/api/employer/applications/{$application->id}/status", [
+        'status' => 'rejected',
+    ])->assertOk();
+
+    $this->app['auth']->forgetGuards();
+    $this->withToken($applicantToken)->postJson("/api/jobs/{$listing->id}/applications")
+        ->assertOk()
+        ->assertJsonPath('data.id', $application->id)
+        ->assertJsonPath('data.status', 'pending');
+
+    expect($applicant->applications()->where('job_listing_id', $listing->id)->count())->toBe(1);
+    $this->assertDatabaseHas('application_status_histories', [
+        'application_id' => $application->id,
+        'previous_status' => 'rejected',
+        'new_status' => 'pending',
+        'actor_id' => $applicant->id,
+    ]);
 });
 
 it('enforces account, listing-type and OJT eligibility when applying', function (): void {

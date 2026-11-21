@@ -5,16 +5,18 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\ApplicantProfile;
 use App\Models\Skill;
+use App\Services\MediaStorage;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use RuntimeException;
 
 class ApplicantProfileController extends Controller
 {
+    public function __construct(private readonly MediaStorage $mediaStorage) {}
+
     private const EXPERIENCE_LEVELS = ['fresh_graduate', '1_3_years', '3_5_years', '5_plus_years'];
 
     private const EMPLOYMENT_TYPES = ['full_time', 'part_time', 'contract'];
@@ -69,33 +71,42 @@ class ApplicantProfileController extends Controller
         ]);
 
         $profile = $this->profileFor($request);
-        $path = $request->file('photo')->storePublicly(
+        $file = $request->file('photo');
+        $stored = $this->mediaStorage->storePublicImage(
+            $file,
             'applicant-photos/'.$request->user()->id,
-            'public',
+            'career-connect/users/'.$request->user()->id.'/profile-photos',
         );
-
-        if (! $path) {
-            throw new RuntimeException('The applicant photo could not be stored.');
-        }
-
         $oldPath = $profile->profile_photo_path;
+        $oldDisk = $profile->profile_photo_disk;
+        $oldAssetId = $profile->profile_photo_asset_id;
         try {
-            $profile->profile_photo_path = $path;
+            $profile->profile_photo_path = $stored['path'];
+            $profile->profile_photo_disk = $stored['disk'];
+            $profile->profile_photo_asset_id = $stored['asset_id'];
             $profile->save();
         } catch (\Throwable $exception) {
-            if (! Storage::disk('public')->delete($path)) {
-                throw new RuntimeException('The failed applicant photo upload could not be cleaned up.', previous: $exception);
+            try {
+                $this->mediaStorage->delete(
+                    $stored['disk'],
+                    $stored['path'],
+                    $stored['asset_id'],
+                    'image',
+                    'upload',
+                );
+            } catch (\Throwable $cleanupException) {
+                throw new RuntimeException('The failed applicant photo upload could not be cleaned up.', previous: $cleanupException);
             }
             throw $exception;
         }
 
-        if ($oldPath !== null && ! Storage::disk('public')->delete($oldPath)) {
-            throw new RuntimeException('The previous applicant photo could not be removed.');
+        if ($oldPath !== null) {
+            $this->mediaStorage->delete($oldDisk, $oldPath, $oldAssetId, 'image', 'upload');
         }
 
         return response()->json([
             'message' => 'Profile photo uploaded.',
-            'photo_url' => Storage::disk('public')->url($path),
+            'photo_url' => $this->mediaStorage->publicImageUrl($stored['disk'], $stored['path']),
         ], 201);
     }
 
@@ -104,11 +115,17 @@ class ApplicantProfileController extends Controller
         $profile = $this->profileFor($request);
 
         if ($profile->profile_photo_path !== null) {
-            if (! Storage::disk('public')->delete($profile->profile_photo_path)) {
-                throw new RuntimeException('The applicant photo could not be removed.');
-            }
+            $this->mediaStorage->delete(
+                $profile->profile_photo_disk,
+                $profile->profile_photo_path,
+                $profile->profile_photo_asset_id,
+                'image',
+                'upload',
+            );
 
             $profile->profile_photo_path = null;
+            $profile->profile_photo_disk = 'public';
+            $profile->profile_photo_asset_id = null;
             $profile->save();
         }
 
@@ -320,7 +337,7 @@ class ApplicantProfileController extends Controller
             'city' => $profile->city,
             'profile_photo_path' => $profile->profile_photo_path,
             'profile_photo_url' => $profile->profile_photo_path
-                ? Storage::disk('public')->url($profile->profile_photo_path)
+                ? $this->mediaStorage->publicImageUrl($profile->profile_photo_disk, $profile->profile_photo_path)
                 : null,
             'looking_for_jobs' => $profile->looking_for_jobs,
             'looking_for_ojt' => $profile->looking_for_ojt,

@@ -3,11 +3,17 @@
 use App\Models\ApplicantProfile;
 use App\Models\Category;
 use App\Models\User;
+use App\Services\CloudinaryMediaGateway;
 use Illuminate\Foundation\Testing\LazilyRefreshDatabase;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\Storage;
 
 uses(LazilyRefreshDatabase::class);
+
+beforeEach(function (): void {
+    Config::set('careerconnect.media_storage_disk', 'local');
+});
 
 function applicantToken(User $user): string
 {
@@ -87,6 +93,54 @@ it('uploads, replaces, deletes and validates profile photos', function (): void 
         ->assertOk()
         ->assertJsonPath('data.profile_photo_path', null);
     Storage::disk('public')->assertMissing($profile->profile_photo_path);
+});
+
+it('organizes Cloudinary applicant photos under their user folder', function (): void {
+    Config::set('careerconnect.media_storage_disk', 'cloudinary');
+    $applicant = User::factory()->create(['role' => 'applicant']);
+    $token = applicantToken($applicant);
+    $gateway = Mockery::mock(CloudinaryMediaGateway::class);
+    $gateway->shouldReceive('uploadImage')
+        ->twice()
+        ->withArgs(fn (UploadedFile $file, string $folder): bool => $folder === 'career-connect/users/'.$applicant->id.'/profile-photos'
+        )
+        ->andReturn(
+            ['asset_id' => 'photo-asset-1', 'public_id' => 'photo-one'],
+            ['asset_id' => 'photo-asset-2', 'public_id' => 'photo-two'],
+        );
+    $gateway->shouldReceive('imageUrl')->twice()
+        ->andReturn('https://res.cloudinary.com/demo/image/upload/photo-one', 'https://res.cloudinary.com/demo/image/upload/photo-two');
+    $gateway->shouldReceive('delete')->twice()->withArgs(
+        fn (string $publicId, string $resourceType, string $deliveryType): bool => in_array($publicId, ['photo-one', 'photo-two'], true)
+            && $resourceType === 'image'
+            && $deliveryType === 'upload',
+    );
+    $this->app->instance(CloudinaryMediaGateway::class, $gateway);
+
+    $this->withToken($token)->postJson('/api/applicant/profile/photo', [
+        'photo' => UploadedFile::fake()->create('first.jpg', 10, 'image/jpeg'),
+    ])->assertCreated()
+        ->assertJsonPath('photo_url', 'https://res.cloudinary.com/demo/image/upload/photo-one');
+
+    $profile = ApplicantProfile::where('user_id', $applicant->id)->firstOrFail();
+    expect($profile->profile_photo_path)->toBe('photo-one')
+        ->and($profile->profile_photo_disk)->toBe('cloudinary')
+        ->and($profile->profile_photo_asset_id)->toBe('photo-asset-1');
+
+    $this->app['auth']->forgetGuards();
+    $this->withToken($token)->postJson('/api/applicant/profile/photo', [
+        'photo' => UploadedFile::fake()->create('second.png', 10, 'image/png'),
+    ])->assertCreated()
+        ->assertJsonPath('photo_url', 'https://res.cloudinary.com/demo/image/upload/photo-two');
+
+    $profile->refresh();
+    expect($profile->profile_photo_path)->toBe('photo-two')
+        ->and($profile->profile_photo_asset_id)->toBe('photo-asset-2');
+
+    $this->app['auth']->forgetGuards();
+    $this->withToken($token)->deleteJson('/api/applicant/profile/photo')
+        ->assertOk()
+        ->assertJsonPath('data.profile_photo_path', null);
 });
 
 it('persists seeker types, interests, skills, work and job preferences with partial updates', function (): void {

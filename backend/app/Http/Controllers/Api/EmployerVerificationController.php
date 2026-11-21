@@ -6,22 +6,22 @@ use App\Http\Controllers\Controller;
 use App\Models\ActivityLog;
 use App\Models\Company;
 use App\Models\CompanyVerification;
-use App\Models\User;
 use App\Models\VerificationDocument;
+use App\Services\MediaStorage;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
-use Illuminate\Support\Str;
+use RuntimeException;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 use Symfony\Component\HttpKernel\Exception\ConflictHttpException;
-use RuntimeException;
 use Throwable;
 
 class EmployerVerificationController extends Controller
 {
+    public function __construct(private readonly MediaStorage $mediaStorage) {}
+
     public function index(Request $request): JsonResponse
     {
         $validated = $request->validate([
@@ -132,14 +132,18 @@ class EmployerVerificationController extends Controller
         VerificationDocument $document,
     ): StreamedResponse {
         if ($document->company_verification_id !== $companyVerification->id
-            || ! Storage::disk('local')->exists($document->file_path)) {
+            || ($document->storage_disk === 'cloudinary'
+                && ! $this->validDocumentPath($companyVerification->company_id, $document->file_path))) {
             abort(404, 'The verification document is unavailable.');
         }
 
-        return Storage::disk('local')->download($document->file_path, $document->original_filename, [
-            'Content-Type' => $document->mime_type,
-            'X-Content-Type-Options' => 'nosniff',
-        ]);
+        return $this->mediaStorage->privateDownload(
+            $document->storage_disk,
+            $document->file_path,
+            $document->cloudinary_asset_id,
+            $document->original_filename,
+            $document->mime_type,
+        );
     }
 
     public function company(Request $request): JsonResponse
@@ -199,34 +203,43 @@ class EmployerVerificationController extends Controller
         }
 
         $file = $request->file('logo');
-        $path = $file->storePubliclyAs(
+        $stored = $this->mediaStorage->storePublicImage(
+            $file,
             'company-logos',
-            Str::uuid().'.'.$file->extension(),
-            'public',
+            'career-connect/employers/'.$company->id.'/logos',
         );
-        if ($path === false) {
-            throw new RuntimeException('The company logo could not be stored.');
-        }
 
         $oldPath = $company->logo_path;
+        $oldDisk = $company->logo_disk;
+        $oldAssetId = $company->logo_asset_id;
         try {
-            $company->logo_path = $path;
+            $company->logo_path = $stored['path'];
+            $company->logo_disk = $stored['disk'];
+            $company->logo_asset_id = $stored['asset_id'];
             $company->save();
         } catch (Throwable $exception) {
-            if (! Storage::disk('public')->delete($path)) {
-                throw new RuntimeException('The failed company logo upload could not be cleaned up.', previous: $exception);
+            try {
+                $this->mediaStorage->delete(
+                    $stored['disk'],
+                    $stored['path'],
+                    $stored['asset_id'],
+                    'image',
+                    'upload',
+                );
+            } catch (Throwable $cleanupException) {
+                throw new RuntimeException('The failed company logo upload could not be cleaned up.', previous: $cleanupException);
             }
             throw $exception;
         }
 
-        if ($oldPath !== null && ! Storage::disk('public')->delete($oldPath)) {
-            throw new RuntimeException('The previous company logo could not be removed.');
+        if ($oldPath !== null) {
+            $this->mediaStorage->delete($oldDisk, $oldPath, $oldAssetId, 'image', 'upload');
         }
         $this->syncVerificationStatus($company);
 
         return response()->json([
             'message' => 'Company logo uploaded.',
-            'logo_url' => Storage::disk('public')->url($path),
+            'logo_url' => $this->mediaStorage->publicImageUrl($stored['disk'], $stored['path']),
         ]);
     }
 
@@ -235,11 +248,19 @@ class EmployerVerificationController extends Controller
         $company = $request->user()->company()->firstOrFail();
         $path = $company->logo_path;
 
-        if ($path !== null && ! Storage::disk('public')->delete($path)) {
-            throw new RuntimeException('The company logo could not be removed.');
+        if ($path !== null) {
+            $this->mediaStorage->delete(
+                $company->logo_disk,
+                $path,
+                $company->logo_asset_id,
+                'image',
+                'upload',
+            );
         }
 
         $company->logo_path = null;
+        $company->logo_disk = 'public';
+        $company->logo_asset_id = null;
         $company->save();
 
         return response()->json([
@@ -258,18 +279,16 @@ class EmployerVerificationController extends Controller
         $company = $request->user()->company()->firstOrFail();
         $verification = $this->getOrCreateVerification($company);
         $file = $request->file('document');
-        $path = $file->storeAs(
+        $stored = $this->mediaStorage->storePrivateFile(
+            $file,
             'employer-verifications/'.$company->id,
-            Str::uuid().'.'.$file->extension(),
-            'local',
+            'career-connect/employers/'.$company->id.'/verification-documents',
+            $file->extension(),
         );
-        if ($path === false) {
-            throw new RuntimeException('The verification document could not be stored.');
-        }
 
-        $previousPath = null;
+        $previousStorage = null;
         try {
-            $document = DB::transaction(function () use ($verification, $company, $request, $file, $path, &$previousPath): VerificationDocument {
+            $document = DB::transaction(function () use ($verification, $company, $request, $file, $stored, &$previousStorage): VerificationDocument {
                 $lockedVerification = CompanyVerification::query()
                     ->lockForUpdate()
                     ->findOrFail($verification->id);
@@ -284,12 +303,18 @@ class EmployerVerificationController extends Controller
                     $document = new VerificationDocument;
                     $document->company_verification_id = $lockedVerification->id;
                 } else {
-                    $previousPath = $document->file_path;
+                    $previousStorage = [
+                        'disk' => $document->storage_disk,
+                        'path' => $document->file_path,
+                        'asset_id' => $document->cloudinary_asset_id,
+                    ];
                 }
 
                 $document->fill([
                     'type' => $type,
-                    'file_path' => $path,
+                    'file_path' => $stored['path'],
+                    'storage_disk' => $stored['disk'],
+                    'cloudinary_asset_id' => $stored['asset_id'],
                     'original_filename' => $this->safeOriginalFilename($file),
                     'mime_type' => $file->getMimeType(),
                     'size_bytes' => $file->getSize(),
@@ -309,21 +334,35 @@ class EmployerVerificationController extends Controller
                 return $document;
             });
         } catch (Throwable $exception) {
-            if (! Storage::disk('local')->delete($path)) {
-                throw new RuntimeException('The failed verification upload could not be cleaned up.', previous: $exception);
+            try {
+                $this->mediaStorage->delete(
+                    $stored['disk'],
+                    $stored['path'],
+                    $stored['asset_id'],
+                    'raw',
+                    'authenticated',
+                );
+            } catch (Throwable $cleanupException) {
+                throw new RuntimeException('The failed verification upload could not be cleaned up.', previous: $cleanupException);
             }
             throw $exception;
         }
 
-        if ($previousPath !== null && ! Storage::disk('local')->delete($previousPath)) {
-            throw new RuntimeException('The replaced verification document could not be removed.');
+        if ($previousStorage !== null) {
+            $this->mediaStorage->delete(
+                $previousStorage['disk'],
+                $previousStorage['path'],
+                $previousStorage['asset_id'],
+                'raw',
+                'authenticated',
+            );
         }
 
         return response()->json([
-            'message' => $previousPath === null ? 'Document uploaded.' : 'Document replaced.',
+            'message' => $previousStorage === null ? 'Document uploaded.' : 'Document replaced.',
             'status' => $verification->fresh()->status,
             'document' => $this->verificationDocumentData($document),
-        ], $previousPath === null ? 201 : 200);
+        ], $previousStorage === null ? 201 : 200);
     }
 
     public function documents(Request $request): JsonResponse
@@ -346,7 +385,7 @@ class EmployerVerificationController extends Controller
             abort(404);
         }
 
-        $path = DB::transaction(function () use ($verification, $verificationDocument): string {
+        $stored = DB::transaction(function () use ($verification, $verificationDocument): array {
             $lockedVerification = CompanyVerification::query()
                 ->lockForUpdate()
                 ->findOrFail($verification->id);
@@ -354,7 +393,11 @@ class EmployerVerificationController extends Controller
             $document = $lockedVerification->documents()
                 ->lockForUpdate()
                 ->findOrFail($verificationDocument->id);
-            $path = $document->file_path;
+            $stored = [
+                'disk' => $document->storage_disk,
+                'path' => $document->file_path,
+                'asset_id' => $document->cloudinary_asset_id,
+            ];
             $document->delete();
 
             $lockedVerification->forceFill([
@@ -367,12 +410,16 @@ class EmployerVerificationController extends Controller
             ])->save();
             $lockedVerification->company()->update(['is_verified' => false, 'verified_at' => null]);
 
-            return $path;
+            return $stored;
         });
 
-        if (! Storage::disk('local')->delete($path)) {
-            throw new RuntimeException('The verification document record was removed, but its file could not be deleted.');
-        }
+        $this->mediaStorage->delete(
+            $stored['disk'],
+            $stored['path'],
+            $stored['asset_id'],
+            'raw',
+            'authenticated',
+        );
 
         return response()->json(['message' => 'Verification document deleted.']);
     }
@@ -384,17 +431,16 @@ class EmployerVerificationController extends Controller
             abort(404);
         }
 
-        $expectedPrefix = 'employer-verifications/'.$request->user()->company->id.'/';
-        if (! str_starts_with($verificationDocument->file_path, $expectedPrefix)
-            || preg_match('#^employer-verifications/[0-9]+/[a-f0-9-]+\.(pdf|jpg|jpeg|png)$#i', $verificationDocument->file_path) !== 1
-            || ! Storage::disk('local')->exists($verificationDocument->file_path)) {
+        if (! $this->validDocumentPath($request->user()->company->id, $verificationDocument->file_path)) {
             abort(404, 'The verification document is unavailable.');
         }
 
-        return Storage::disk('local')->download(
+        return $this->mediaStorage->privateDownload(
+            $verificationDocument->storage_disk,
             $verificationDocument->file_path,
+            $verificationDocument->cloudinary_asset_id,
             $verificationDocument->original_filename,
-            ['Content-Type' => $verificationDocument->mime_type, 'X-Content-Type-Options' => 'nosniff'],
+            $verificationDocument->mime_type,
         );
     }
 
@@ -495,7 +541,17 @@ class EmployerVerificationController extends Controller
         $company = $document->companyVerification->company;
 
         if ($user->role === 'admin' || $user->id === $company->user_id) {
-            return Storage::disk('local')->download($document->file_path, $document->original_filename);
+            if (! $this->validDocumentPath($company->id, $document->file_path)) {
+                abort(404, 'The verification document is unavailable.');
+            }
+
+            return $this->mediaStorage->privateDownload(
+                $document->storage_disk,
+                $document->file_path,
+                $document->cloudinary_asset_id,
+                $document->original_filename,
+                $document->mime_type,
+            );
         }
 
         abort(403);
@@ -588,7 +644,9 @@ class EmployerVerificationController extends Controller
             'contact_phone' => $company->contact_phone,
             'contact_email' => $company->contact_email,
             'logo_path' => $company->logo_path,
-            'logo_url' => $company->logo_path ? Storage::disk('public')->url($company->logo_path) : null,
+            'logo_url' => $company->logo_path
+                ? $this->mediaStorage->publicImageUrl($company->logo_disk, $company->logo_path)
+                : null,
             'hires_jobs' => $company->hires_jobs,
             'hires_ojt' => $company->hires_ojt,
             'open_to_moa' => $company->open_to_moa,
@@ -602,6 +660,12 @@ class EmployerVerificationController extends Controller
         if (in_array($verification->status, ['pending', 'verified'], true)) {
             throw new ConflictHttpException('Submitted verification documents cannot be changed while under review or after approval.');
         }
+    }
+
+    private function validDocumentPath(int $companyId, string $path): bool
+    {
+        return str_starts_with($path, 'employer-verifications/'.$companyId.'/')
+            && preg_match('#^employer-verifications/[0-9]+/[a-f0-9-]+\.(pdf|jpg|jpeg|png)$#i', $path) === 1;
     }
 
     private function verificationDocumentData(VerificationDocument $document): array

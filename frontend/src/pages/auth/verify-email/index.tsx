@@ -11,9 +11,11 @@ export default function VerifyEmailPage() {
     email,
     setEmail,
     codeRequested,
+    notice,
     error,
     isSubmitting,
     requestCode,
+    resendCode,
     submitCode,
     resetRequestState,
   } = useVerifyEmail();
@@ -32,6 +34,10 @@ export default function VerifyEmailPage() {
       ) : (
         <VerifyEmailCodeForm
           isSubmitting={isSubmitting}
+          notice={notice}
+          onResendCode={() => {
+            void resendCode();
+          }}
           onSubmit={submitCode}
           onUseDifferentEmail={resetRequestState}
         />

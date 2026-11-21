@@ -15,8 +15,8 @@ export function VerifyEmailHeader({
       </h1>
       <p className="mt-2 text-sm leading-6 text-[#718082]">
         {codeRequested
-          ? `Enter the six-digit verification code sent to ${email}.`
-          : "We’ll send a six-digit code to confirm your email address."}
+          ? `Enter the six-digit verification code sent to ${email}, if the account needs verification.`
+          : "Check your inbox for the six-digit code sent when you registered. If it hasn’t arrived, request another code below."}
       </p>
     </>
   );

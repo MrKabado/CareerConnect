@@ -3,12 +3,16 @@
 namespace App\Console\Commands;
 
 use App\Models\IdentityVerification;
+use App\Services\MediaStorage;
 use Illuminate\Console\Command;
-use Illuminate\Support\Facades\Storage;
-use RuntimeException;
 
 class PruneIdentityDocuments extends Command
 {
+    public function __construct(private readonly MediaStorage $mediaStorage)
+    {
+        parent::__construct();
+    }
+
     protected $signature = 'app:prune-identity-documents';
 
     protected $description = 'Delete identity documents past their retention period';
@@ -23,11 +27,20 @@ class PruneIdentityDocuments extends Command
             ->where('expires_at', '<=', now())
             ->chunkById(100, function ($verifications) use (&$deleted): void {
                 foreach ($verifications as $verification) {
-                    if (! Storage::disk('local')->delete($verification->document_path)) {
-                        throw new RuntimeException('An expired identity document could not be deleted.');
-                    }
+                    $this->mediaStorage->delete(
+                        $verification->storage_disk,
+                        $verification->document_path,
+                        $verification->cloudinary_asset_id,
+                        'raw',
+                        'authenticated',
+                    );
 
-                    $verification->update(['document_path' => null]);
+                    $verification->update([
+                        'document_path' => null,
+                        'storage_disk' => 'local',
+                        'cloudinary_asset_id' => null,
+                        'document_mime_type' => null,
+                    ]);
                     $deleted++;
                 }
             });

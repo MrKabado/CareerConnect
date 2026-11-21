@@ -4,6 +4,7 @@ use App\Mail\OtpCodeMail;
 use App\Models\IdentityVerification;
 use App\Models\OtpCode;
 use App\Models\User;
+use App\Services\CloudinaryMediaGateway;
 use Database\Seeders\AdminUserSeeder;
 use Illuminate\Foundation\Testing\LazilyRefreshDatabase;
 use Illuminate\Http\UploadedFile;
@@ -13,8 +14,13 @@ use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Storage;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 uses(LazilyRefreshDatabase::class);
+
+beforeEach(function (): void {
+    Config::set('careerconnect.media_storage_disk', 'local');
+});
 
 function fakeIdentityPdf(): UploadedFile
 {
@@ -193,6 +199,65 @@ it('lets admins review identity submissions and applicants resubmit after reject
     $this->withToken($adminToken)->get("/api/admin/identity-verifications/{$verification->id}/document")
         ->assertOk()
         ->assertHeader('content-disposition');
+});
+
+it('keeps Cloudinary identity documents private and prunes them after retention', function (): void {
+    Config::set('careerconnect.media_storage_disk', 'cloudinary');
+    $applicant = User::factory()->create(['role' => 'applicant']);
+    $admin = User::factory()->create(['role' => 'admin']);
+    $applicantToken = $applicant->createToken('cloud-applicant')->plainTextToken;
+    $adminToken = $admin->createToken('cloud-admin')->plainTextToken;
+    $gateway = Mockery::mock(CloudinaryMediaGateway::class);
+    $gateway->shouldReceive('upload')
+        ->once()
+        ->withArgs(fn (UploadedFile $file, string $publicId, string $folder): bool => str_starts_with($publicId, 'applicant-verifications/'.$applicant->id.'/')
+            && $folder === 'career-connect/users/'.$applicant->id.'/identity-verification'
+        )
+        ->andReturnUsing(fn (UploadedFile $file, string $publicId, string $folder): array => [
+            'asset_id' => 'identity-asset-1',
+            'public_id' => $publicId,
+        ]);
+    $gateway->shouldReceive('download')
+        ->once()
+        ->withArgs(fn (string $path, string $extension, string $filename, string $mimeType, string $resourceType): bool => str_starts_with($path, 'applicant-verifications/'.$applicant->id.'/')
+            && $extension === 'pdf'
+            && $filename === 'identity-document.pdf'
+            && $mimeType === 'application/pdf'
+            && $resourceType === 'raw'
+        )
+        ->andReturnUsing(fn (): StreamedResponse => response()->streamDownload(
+            static fn () => print ('%PDF-1.4'),
+            'identity-document.pdf',
+            ['Content-Type' => 'application/pdf'],
+        ));
+    $gateway->shouldReceive('delete')
+        ->once()
+        ->withArgs(fn (string $path, string $resourceType, string $deliveryType): bool => str_starts_with($path, 'applicant-verifications/'.$applicant->id.'/')
+            && $resourceType === 'raw'
+            && $deliveryType === 'authenticated'
+        );
+    $this->app->instance(CloudinaryMediaGateway::class, $gateway);
+
+    $this->withToken($applicantToken)->postJson('/api/applicant/identity-verification', [
+        'document' => fakeIdentityPdf(),
+    ])->assertCreated()
+        ->assertJsonMissingPath('document_path');
+
+    $verification = IdentityVerification::query()->where('user_id', $applicant->id)->firstOrFail();
+    expect($verification->storage_disk)->toBe('cloudinary')
+        ->and($verification->cloudinary_asset_id)->toBe('identity-asset-1');
+
+    $this->app['auth']->forgetGuards();
+    $this->withToken($adminToken)->get("/api/admin/identity-verifications/{$verification->id}/document")
+        ->assertOk()
+        ->assertHeader('content-type', 'application/pdf')
+        ->assertStreamedContent('%PDF-1.4');
+
+    $verification->update(['expires_at' => now()->subSecond()]);
+    Artisan::call('app:prune-identity-documents');
+    expect($verification->refresh()->document_path)->toBeNull()
+        ->and($verification->storage_disk)->toBe('local')
+        ->and($verification->cloudinary_asset_id)->toBeNull();
 });
 
 it('allows admins to activate and deactivate accounts without changing roles', function (): void {

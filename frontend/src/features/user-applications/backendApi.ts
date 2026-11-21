@@ -5,6 +5,8 @@ export type ApplicantApplicationRecord = {
   status: "pending" | "reviewing" | "shortlisted" | "interview" | "hired" | "rejected";
   cover_letter: string | null;
   applied_at: string | null;
+  hired_at: string | null;
+  employment_ended_at: string | null;
   listing: {
     id: number;
     title: string;

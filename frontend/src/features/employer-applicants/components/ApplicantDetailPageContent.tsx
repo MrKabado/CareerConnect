@@ -80,12 +80,15 @@ export default function ApplicantDetailPageContent() {
                 history={applicantStage.history}
                 isSaving={applicantStage.isSaving}
                 error={applicantStage.error}
+                employmentError={applicantStage.employmentError}
                 hiredAt={applicantStage.applicant?.hiredAt}
+                employmentEndedAt={applicantStage.applicant?.employmentEndedAt}
                 rejectionReason={applicantStage.applicant?.rejectionReason}
                 interviewDetails={applicantStage.applicant?.interviewDetails}
                 onAdvance={applicantStage.advance}
                 onReject={applicantStage.reject}
                 onRetry={applicantStage.retry}
+                onRecordEmploymentEnd={applicantStage.recordEmploymentEnd}
               />
             ) : null}
 

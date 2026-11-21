@@ -33,7 +33,7 @@ export function VerifyEmailRequestForm({
         />
       </div>
       <OnboardingButton className="w-full" disabled={isSubmitting}>
-        {isSubmitting ? "Sending…" : "Send verification code"}
+        {isSubmitting ? "Sending…" : "Send or resend verification code"}
       </OnboardingButton>
     </form>
   );

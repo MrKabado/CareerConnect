@@ -8,19 +8,21 @@ use App\Models\ApplicationStatusHistory;
 use App\Models\JobListing;
 use App\Models\User;
 use App\Services\NotificationService;
+use App\Services\ResumeStorage;
+use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Exceptions\HttpResponseException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Symfony\Component\HttpFoundation\StreamedResponse;
-use Throwable;
 
 class ApplicationController extends Controller
 {
+    public function __construct(private readonly ResumeStorage $resumeStorage) {}
+
     public function store(Request $request, JobListing $jobListing): JsonResponse
     {
         $validated = $request->validate([
@@ -31,13 +33,6 @@ class ApplicationController extends Controller
             'status' => ['prohibited'],
         ]);
         $applicant = $request->user();
-
-        if (Application::query()
-            ->where('applicant_id', $applicant->id)
-            ->where('job_listing_id', $jobListing->id)
-            ->exists()) {
-            return $this->alreadyApplied();
-        }
 
         $profile = $applicant->applicantProfile()->firstOrCreate(
             [],
@@ -61,74 +56,86 @@ class ApplicationController extends Controller
             ], 422);
         }
 
-        try {
-            $application = DB::transaction(function () use ($applicant, $jobListing, $validated): Application {
-                User::query()->whereKey($applicant->id)->lockForUpdate()->firstOrFail();
-                $listing = JobListing::query()
-                    ->with(['company.user', 'company.verification', 'category'])
-                    ->lockForUpdate()
-                    ->findOrFail($jobListing->id);
+        [$application, $isReapplication] = DB::transaction(function () use ($applicant, $jobListing, $validated): array {
+            User::query()->whereKey($applicant->id)->lockForUpdate()->firstOrFail();
+            $listing = JobListing::query()
+                ->with(['company.user', 'company.verification', 'category'])
+                ->lockForUpdate()
+                ->findOrFail($jobListing->id);
 
-                if (! $listing->canReceiveApplications()) {
-                    throw new HttpResponseException(response()->json([
-                        'message' => 'This listing is not currently accepting applications.',
-                        'code' => 'listing_not_open',
-                    ], 422));
-                }
-
-                if (Application::query()
-                    ->where('applicant_id', $applicant->id)
-                    ->where('job_listing_id', $listing->id)
-                    ->exists()) {
-                    throw new HttpResponseException($this->alreadyApplied());
-                }
-
-                $resume = $applicant->resumes()
-                    ->where('is_current', true)
-                    ->lockForUpdate()
-                    ->first();
-                if ($resume === null) {
-                    throw ValidationException::withMessages([
-                        'resume' => ['Upload a resume before applying.'],
-                    ]);
-                }
-
-                $application = new Application([
-                    'resume_id' => $resume->id,
-                    'status' => 'pending',
-                    'resume_original_filename' => $resume->original_filename,
-                    'resume_mime_type' => $resume->mime_type,
-                    'resume_file_size' => $resume->file_size,
-                    'cover_letter' => isset($validated['cover_letter'])
-                        ? trim($validated['cover_letter'])
-                        : null,
-                    'applied_at' => now(),
-                ]);
-                $application->applicant()->associate($applicant);
-                $application->jobListing()->associate($listing);
-                $application->save();
-
-                $application->statusHistories()->create([
-                    'previous_status' => null,
-                    'new_status' => 'pending',
-                    'actor_id' => $applicant->id,
-                    'public_reason' => null,
-                    'internal_reason' => null,
-                    'created_at' => now(),
-                ]);
-
-                return $application;
-            });
-        } catch (Throwable $exception) {
-            if (Application::query()
-                ->where('applicant_id', $applicant->id)
-                ->where('job_listing_id', $jobListing->id)
-                ->exists()) {
-                return $this->alreadyApplied();
+            if (! $listing->canReceiveApplications()) {
+                throw new HttpResponseException(response()->json([
+                    'message' => 'This listing is not currently accepting applications.',
+                    'code' => 'listing_not_open',
+                ], 422));
             }
 
-            throw $exception;
-        }
+            $hasScheduledInterview = Application::query()
+                ->where('applicant_id', $applicant->id)
+                ->whereHas('jobListing', fn (Builder $query): Builder => $query->where('company_id', $listing->company_id))
+                ->whereHas('interviews', fn (Builder $query): Builder => $query->where('status', 'scheduled'))
+                ->exists();
+
+            if ($hasScheduledInterview) {
+                throw new HttpResponseException(response()->json([
+                    'message' => 'You already have an interview scheduled with this company. You can apply again after the interview is cancelled or the application is declined.',
+                    'code' => 'company_interview_in_progress',
+                ], 409));
+            }
+
+            $existingApplication = Application::query()
+                ->where('applicant_id', $applicant->id)
+                ->where('job_listing_id', $listing->id)
+                ->lockForUpdate()
+                ->first();
+            $canReapplyAfterCancellation = $existingApplication?->status === 'interview'
+                && $existingApplication->interviews()->where('status', 'cancelled')->exists()
+                && ! $existingApplication->interviews()->where('status', 'scheduled')->exists();
+            $canReapply = $existingApplication !== null
+                && ($existingApplication->status === 'rejected' || $canReapplyAfterCancellation);
+
+            if ($existingApplication !== null && ! $canReapply) {
+                throw new HttpResponseException($this->alreadyApplied());
+            }
+
+            $resume = $applicant->resumes()
+                ->where('is_current', true)
+                ->lockForUpdate()
+                ->first();
+            if ($resume === null) {
+                throw ValidationException::withMessages([
+                    'resume' => ['Upload a resume before applying.'],
+                ]);
+            }
+
+            $previousStatus = $existingApplication?->status;
+            $application = $existingApplication ?? new Application;
+            $application->fill([
+                'resume_id' => $resume->id,
+                'status' => 'pending',
+                'resume_original_filename' => $resume->original_filename,
+                'resume_mime_type' => $resume->mime_type,
+                'resume_file_size' => $resume->file_size,
+                'cover_letter' => isset($validated['cover_letter'])
+                    ? trim($validated['cover_letter'])
+                    : null,
+                'applied_at' => now(),
+            ]);
+            $application->applicant()->associate($applicant);
+            $application->jobListing()->associate($listing);
+            $application->save();
+
+            $application->statusHistories()->create([
+                'previous_status' => $previousStatus,
+                'new_status' => 'pending',
+                'actor_id' => $applicant->id,
+                'public_reason' => null,
+                'internal_reason' => null,
+                'created_at' => now(),
+            ]);
+
+            return [$application, $existingApplication !== null];
+        });
 
         $application->loadMissing(['jobListing.company.user']);
         $employer = $application->jobListing?->company?->user;
@@ -147,13 +154,13 @@ class ApplicationController extends Controller
         }
 
         return response()->json([
-            'message' => 'Application submitted.',
+            'message' => $isReapplication ? 'Application resubmitted.' : 'Application submitted.',
             'data' => $this->applicantApplicationData($application->load([
                 'jobListing.company',
                 'resume',
                 'statusHistories',
             ])),
-        ], 201);
+        ], $isReapplication ? 200 : 201);
     }
 
     public function applicantIndex(Request $request): JsonResponse
@@ -296,7 +303,11 @@ class ApplicationController extends Controller
                 ]);
             }
 
+            $changedAt = now();
             $application->status = $newStatus;
+            if ($newStatus === 'hired') {
+                $application->hired_at = $changedAt;
+            }
             $application->save();
             $application->statusHistories()->create([
                 'previous_status' => $previousStatus,
@@ -308,7 +319,7 @@ class ApplicationController extends Controller
                 'internal_reason' => isset($validated['internal_reason'])
                     ? trim($validated['internal_reason'])
                     : null,
-                'created_at' => now(),
+                'created_at' => $changedAt,
             ]);
 
             return [$application, true];
@@ -334,6 +345,71 @@ class ApplicationController extends Controller
         return response()->json([
             'message' => $updated[1] ? 'Application status updated.' : 'Application status is unchanged.',
             'data' => $this->employerApplicationData($updated[0]->load([
+                'applicant.applicantProfile.skills',
+                'applicant.applicantProfile.categories',
+                'jobListing',
+                'resume',
+                'statusHistories',
+            ])),
+        ]);
+    }
+
+    public function endEmployment(Request $request, int $application): JsonResponse
+    {
+        $validated = $request->validate([
+            'employment_ended_at' => ['required', 'date_format:Y-m-d', 'before_or_equal:today'],
+        ]);
+        $endedAt = CarbonImmutable::parse($validated['employment_ended_at'], config('app.timezone'));
+
+        $updatedApplication = DB::transaction(function () use ($request, $application, $endedAt): Application {
+            $application = $this->employerApplicationQuery($request->user())
+                ->lockForUpdate()
+                ->findOrFail($application);
+
+            if ($application->status !== 'hired' || $application->hired_at === null) {
+                throw new HttpResponseException(response()->json([
+                    'message' => 'Only hired applications with a recorded start date can be marked as former employees.',
+                    'code' => 'employment_not_active',
+                ], 409));
+            }
+
+            if ($application->employment_ended_at !== null) {
+                throw new HttpResponseException(response()->json([
+                    'message' => 'The employment end date has already been recorded.',
+                    'code' => 'employment_already_ended',
+                ], 409));
+            }
+
+            if ($endedAt->toDateString() < $application->hired_at->toDateString()) {
+                throw ValidationException::withMessages([
+                    'employment_ended_at' => ['The employment end date cannot be before the hired date.'],
+                ]);
+            }
+
+            $application->employment_ended_at = $endedAt;
+            $application->employment_ended_by = $request->user()->id;
+            $application->save();
+
+            return $application;
+        });
+
+        $updatedApplication->load(['applicant', 'jobListing']);
+        app(NotificationService::class)->send(
+            $updatedApplication->applicant,
+            'employment_ended',
+            'Employment record updated',
+            'Your employment end date for '.$updatedApplication->jobListing->title.' was recorded.',
+            [
+                'application_id' => $updatedApplication->id,
+                'job_listing_id' => $updatedApplication->job_listing_id,
+                'job_listing_title' => $updatedApplication->jobListing->title,
+                'employment_ended_at' => $updatedApplication->employment_ended_at?->toDateString(),
+            ],
+        );
+
+        return response()->json([
+            'message' => 'Employment end date recorded.',
+            'data' => $this->employerApplicationData($updatedApplication->load([
                 'applicant.applicantProfile.skills',
                 'applicant.applicantProfile.categories',
                 'jobListing',
@@ -372,6 +448,8 @@ class ApplicationController extends Controller
                 'file_size' => $application->resume_file_size,
             ],
             'applied_at' => $application->applied_at?->toISOString(),
+            'hired_at' => $application->hired_at?->toISOString(),
+            'employment_ended_at' => $application->employment_ended_at?->toDateString(),
             'listing' => $this->listingSummary($application->jobListing),
             'status_history' => $application->statusHistories
                 ->map(fn (ApplicationStatusHistory $history): array => [
@@ -392,6 +470,8 @@ class ApplicationController extends Controller
             'status' => $application->status,
             'cover_letter' => $application->cover_letter,
             'applied_at' => $application->applied_at?->toISOString(),
+            'hired_at' => $application->hired_at?->toISOString(),
+            'employment_ended_at' => $application->employment_ended_at?->toDateString(),
             'listing' => $this->listingSummary($application->jobListing),
             'applicant' => $application->applicant ? [
                 'id' => $application->applicant->id,
@@ -440,22 +520,17 @@ class ApplicationController extends Controller
     private function downloadApplicationResume(Application $application): StreamedResponse
     {
         $resume = $application->resume;
-        $expectedPrefix = 'applicant-resumes/'.$application->applicant_id.'/';
-        $path = $resume?->storage_path;
 
         if ($resume === null
-            || $resume->applicant_id !== $application->applicant_id
-            || $path === null
-            || ! str_starts_with($path, $expectedPrefix)
-            || preg_match('#^applicant-resumes/[0-9]+/[a-f0-9-]+\.(pdf|docx)$#i', $path) !== 1
-            || ! Storage::disk('local')->exists($path)) {
+            || $resume->applicant_id !== $application->applicant_id) {
             abort(404, 'The resume file is unavailable.');
         }
 
-        return Storage::disk('local')->download($path, $application->resume_original_filename, [
-            'Content-Type' => $application->resume_mime_type,
-            'X-Content-Type-Options' => 'nosniff',
-        ]);
+        return $this->resumeStorage->download(
+            $resume,
+            $application->resume_original_filename,
+            $application->resume_mime_type,
+        );
     }
 
     private function alreadyApplied(): JsonResponse

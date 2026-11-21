@@ -51,9 +51,6 @@ export const onboardingSchemas: Record<
       errors.desiredJobTitles = "Add at least one desired job title.";
     }
     if (answers.skills.length === 0) errors.skills = "Add at least one skill.";
-    if (!answers.experienceLevel) {
-      errors.experienceLevel = "Select your experience level.";
-    }
     return errors;
   },
   "job-preferences": (answers) => {

@@ -8,7 +8,7 @@ import { onboardingApi } from "@/features/onboarding/api";
 import { validateOnboardingStep } from "@/features/onboarding/schemas";
 import { onboardingStore } from "@/features/onboarding/store";
 
-export function useOnboarding() {
+export function useOnboarding(onResumeVerification: (email: string) => void) {
   const state = useSyncExternalStore(
     onboardingStore.subscribe,
     onboardingStore.getSnapshot,
@@ -27,26 +27,47 @@ export function useOnboarding() {
   }, [state.answers.goal]);
 
   const next = useCallback(async () => {
-    if (state.currentStep === "create-account" && state.accountCreated) {
-      const nextStep = steps[currentIndex + 1];
+    const currentState = onboardingStore.getSnapshot();
+    const currentSteps = getOnboardingSteps(currentState.answers.goal);
+    const currentStepIndex = getStepIndex(
+      currentState.currentStep,
+      currentState.answers.goal,
+    );
+    const isCurrentLastStep = currentStepIndex + 1 === currentSteps.length;
+
+    if (
+      currentState.currentStep === "create-account" &&
+      currentState.accountCreated
+    ) {
+      const nextStep = currentSteps[currentStepIndex + 1];
       if (nextStep) onboardingStore.setStep(nextStep.id);
       return;
     }
 
-    const errors = validateOnboardingStep(state.currentStep, state.answers);
+    const errors = validateOnboardingStep(
+      currentState.currentStep,
+      currentState.answers,
+    );
     onboardingStore.setErrors(errors);
 
     if (Object.keys(errors).length > 0) {
       return;
     }
 
-    if (state.currentStep === "create-account") {
+    if (currentState.currentStep === "create-account") {
       onboardingStore.setSubmitting(true);
 
       try {
-        await onboardingApi.register(state.answers);
+        const registration = await onboardingApi.register(currentState.answers);
+
+        if (registration.resume_verification) {
+          onboardingStore.setSubmitting(false);
+          onResumeVerification(currentState.answers.email.trim());
+          return;
+        }
+
         onboardingStore.markAccountCreated();
-        const nextStep = steps[currentIndex + 1];
+        const nextStep = currentSteps[currentStepIndex + 1];
         if (nextStep) onboardingStore.setStep(nextStep.id);
       } catch (error) {
         onboardingStore.setSubmitError(
@@ -57,24 +78,16 @@ export function useOnboarding() {
       return;
     }
 
-    if (isLastStep) {
+    if (isCurrentLastStep) {
       await finish();
       return;
     }
 
-    const nextStep = steps[currentIndex + 1];
+    const nextStep = currentSteps[currentStepIndex + 1];
     if (nextStep) {
       onboardingStore.setStep(nextStep.id);
     }
-  }, [
-    currentIndex,
-    finish,
-    isLastStep,
-    steps,
-    state.accountCreated,
-    state.answers,
-    state.currentStep,
-  ]);
+  }, [finish, onResumeVerification]);
 
   const back = useCallback(() => {
     if (currentIndex > 0) {
@@ -92,9 +105,7 @@ export function useOnboarding() {
   }, [currentIndex, finish, isLastStep, steps]);
 
   const saveForLater = useCallback(() => {
-    onboardingStore.setSubmitError(
-      "Your progress is held only in this browser session and cannot be saved to your account yet.",
-    );
+    return onboardingStore.saveDraft();
   }, []);
 
   const setAnswer = onboardingStore.setAnswer;

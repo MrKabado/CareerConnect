@@ -1,5 +1,6 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { Link } from "react-router";
+import EmploymentTenureCounter from "@/features/applications/EmploymentTenureCounter";
 import { useAuth } from "@/features/auth/useAuth";
 import {
   getCompanyRatingSummary,
@@ -30,7 +31,6 @@ export default function CompanyRatingPanel({
   const [loadedRatingKey, setLoadedRatingKey] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState<string | null>(null);
   const ratingKey = `${companySlug}:${token ?? ""}`;
   const isLoading = loadedRatingKey !== ratingKey;
   const currentSummary = isLoading ? null : summary;
@@ -72,7 +72,6 @@ export default function CompanyRatingPanel({
 
     setIsSaving(true);
     setError(null);
-    setSuccess(null);
 
     try {
       const result = await saveCompanyRating(
@@ -82,7 +81,6 @@ export default function CompanyRatingPanel({
         token,
       );
       setSummary(result);
-      setSuccess("Thanks for sharing your experience.");
     } catch (requestError) {
       setError(
         requestError instanceof Error
@@ -94,7 +92,8 @@ export default function CompanyRatingPanel({
     }
   }
 
-  const canRate = status === "authenticated" && user?.role === "applicant";
+  const isApplicant = status === "authenticated" && user?.role === "applicant";
+  const canRate = isApplicant && currentSummary?.can_rate === true;
   const isEditing =
     currentSummary?.user_rating !== null &&
     currentSummary?.user_rating !== undefined;
@@ -113,8 +112,15 @@ export default function CompanyRatingPanel({
       <p className="mt-1 text-[9px] leading-[1.5] text-[#809091]">
         Share how satisfied you are with {companyName}.
       </p>
+      {!isLoading && !error && (
+        <p className="mt-2 text-[9px] font-medium text-[#718184]" aria-live="polite">
+          {currentSummary?.rating_count
+            ? `${currentSummary.average_rating?.toFixed(1)} out of 5 · ${currentSummary.rating_count} ${currentSummary.rating_count === 1 ? "rating" : "ratings"}`
+            : "No ratings yet."}
+        </p>
+      )}
 
-      <fieldset className="mt-4" disabled={isSaving}>
+      <fieldset className="mt-4" disabled={isSaving || !canRate}>
         <div
           aria-label="Choose from one to five stars"
           className="flex items-center gap-1"
@@ -137,7 +143,6 @@ export default function CompanyRatingPanel({
                 onClick={() => {
                   setRating(value);
                   setHoveredRating(0);
-                  setSuccess(null);
                 }}
                 onFocus={() => setHoveredRating(value)}
                 onMouseEnter={() => setHoveredRating(value)}
@@ -203,6 +208,33 @@ export default function CompanyRatingPanel({
             </p>
           )}
 
+          {isApplicant && !canRate && !error && (
+            <p className="mt-4 text-[9px] leading-5 text-[#718184]">
+              {currentSummary?.employment?.status === "current" ? (
+                <>
+                  Current employee since{" "}
+                  {new Date(currentSummary.employment.started_at).toLocaleDateString()}
+                  {" · "}
+                  <EmploymentTenureCounter
+                    startedAt={currentSummary.employment.started_at}
+                  />{" "}
+                  employed. Your employer must record your end date before you can rate.
+                </>
+              ) : currentSummary?.employment?.status === "former" ? (
+                <>
+                  Former employees must have worked there for at least three months to rate.
+                  {" "}Your recorded tenure:{" "}
+                  <EmploymentTenureCounter
+                    startedAt={currentSummary.employment.started_at}
+                    endedAt={currentSummary.employment.ended_at}
+                  />.
+                </>
+              ) : (
+                "Ratings are available to former employees after the employer records the end date and at least three months of employment are confirmed."
+              )}
+            </p>
+          )}
+
           {canRate && (
             <form className="mt-4 space-y-3" onSubmit={handleSubmit}>
               <label className="block text-[9px] font-semibold text-[#526365]">
@@ -212,7 +244,6 @@ export default function CompanyRatingPanel({
                   maxLength={1000}
                   onChange={(event) => {
                     setReview(event.target.value);
-                    setSuccess(null);
                   }}
                   placeholder="What went well, or what could be better?"
                   value={review}
@@ -222,11 +253,6 @@ export default function CompanyRatingPanel({
               {error && (
                 <p className="text-[9px] text-red-700" role="alert">
                   {error}
-                </p>
-              )}
-              {success && (
-                <p className="text-[9px] text-[#24877c]" role="status">
-                  {success}
                 </p>
               )}
 
@@ -245,8 +271,8 @@ export default function CompanyRatingPanel({
           )}
 
           {error && !canRate && (
-            <p className="mt-3 text-[9px] text-[#829091]" role="status">
-              Ratings are temporarily unavailable.
+            <p className="mt-3 text-[9px] text-red-700" role="alert">
+              {error}
             </p>
           )}
         </>

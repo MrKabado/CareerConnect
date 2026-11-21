@@ -7,9 +7,10 @@ use App\Http\Controllers\Api\ApplicantResumeController;
 use App\Http\Controllers\Api\ApplicationController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\CategoryController;
+use App\Http\Controllers\Api\CompanyRatingController;
+use App\Http\Controllers\Api\DashboardController;
 use App\Http\Controllers\Api\EmployerJobListingController;
 use App\Http\Controllers\Api\EmployerVerificationController;
-use App\Http\Controllers\Api\DashboardController;
 use App\Http\Controllers\Api\IdentityVerificationController;
 use App\Http\Controllers\Api\InterviewController;
 use App\Http\Controllers\Api\NotificationController;
@@ -29,6 +30,9 @@ Route::middleware('throttle:5,1')->group(function (): void {
 });
 
 Route::get('/categories', [CategoryController::class, 'publicIndex']);
+Route::get('/companies/{companySlug}/ratings', [CompanyRatingController::class, 'show']);
+Route::put('/companies/{companySlug}/ratings', [CompanyRatingController::class, 'save'])
+    ->middleware(['auth:sanctum', 'account.active', 'role:applicant', 'throttle:60,1']);
 Route::get('/jobs', [PublicJobListingController::class, 'index']);
 Route::get('/jobs/{jobListing}', [PublicJobListingController::class, 'show'])
     ->whereNumber('jobListing');
@@ -96,6 +100,8 @@ Route::middleware(['auth:sanctum', 'account.active', 'throttle:60,1'])->group(fu
         Route::get('/applications', [ApplicationController::class, 'employerIndex']);
         Route::get('/applications/{application}', [ApplicationController::class, 'employerShow'])->whereNumber('application');
         Route::patch('/applications/{application}/status', [ApplicationController::class, 'updateStatus'])
+            ->whereNumber('application');
+        Route::patch('/applications/{application}/employment/end', [ApplicationController::class, 'endEmployment'])
             ->whereNumber('application');
         Route::post('/applications/{application}/interviews', [InterviewController::class, 'store'])
             ->whereNumber('application');

@@ -1,6 +1,9 @@
 import { Link } from "react-router";
+import { onboardingStore } from "@/features/onboarding/store";
 
 export default function HomePage() {
+  const hasSavedDraft = onboardingStore.getSnapshot().accountCreated;
+
   return (
     <main className="bg-[#f5f8f8] px-4 py-12 text-[#263a3c] sm:px-6 sm:py-16">
       <section className="mx-auto grid max-w-6xl items-center gap-10 rounded-3xl border border-[#e6eeee] bg-white px-6 py-10 sm:px-10 lg:grid-cols-[1.2fr_0.8fr] lg:px-14 lg:py-16">
@@ -42,7 +45,7 @@ export default function HomePage() {
               className="mt-4 inline-flex text-sm font-semibold text-[#078b8d] hover:underline"
               to="/onboarding"
             >
-              Set up your profile
+              {hasSavedDraft ? "Continue your profile setup" : "Set up your profile"}
             </Link>
           </article>
           <article className="rounded-2xl border border-[#e6eeee] bg-[#f7fbfa] p-5">

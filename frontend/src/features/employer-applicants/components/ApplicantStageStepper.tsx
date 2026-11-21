@@ -1,10 +1,11 @@
-import { useState } from "react";
+import { useState, type FormEvent } from "react";
 import ApplicantDialog from "@/features/employer-applicants/components/ApplicantDialog";
 import ApplicantStatusIcon from "@/features/employer-applicants/components/ApplicantStatusIcon";
 import NextActionButton from "@/features/employer-applicants/components/NextActionButton";
 import RejectDialog from "@/features/employer-applicants/components/RejectDialog";
 import ScheduleInterviewDialog from "@/features/employer-applicants/components/ScheduleInterviewDialog";
 import StatusTimeline from "@/features/employer-applicants/components/StatusTimeline";
+import EmploymentTenureCounter from "@/features/applications/EmploymentTenureCounter";
 import { applicantStatusConfig, forwardApplicantStatuses } from "@/features/employer-applicants/statuses";
 import type { ApplicantStatus } from "@/features/employer-applicants/statuses";
 import type { ApplicantStatusHistoryEntry, ApplicantStatusUpdatePayload, InterviewDetails } from "@/features/employer-applicants/types";
@@ -15,12 +16,15 @@ type ApplicantStageStepperProps = {
   history: ApplicantStatusHistoryEntry[];
   isSaving: boolean;
   error: string | null;
+  employmentError: string | null;
   hiredAt?: string;
+  employmentEndedAt?: string;
   rejectionReason?: string;
   interviewDetails?: InterviewDetails;
   onAdvance: (payload?: ApplicantStatusUpdatePayload) => Promise<boolean>;
   onReject: (payload?: ApplicantStatusUpdatePayload) => Promise<boolean>;
   onRetry: () => Promise<boolean>;
+  onRecordEmploymentEnd: (employmentEndedAt: string) => Promise<boolean>;
 };
 
 function formatDate(value: string) {
@@ -29,21 +33,33 @@ function formatDate(value: string) {
   return new Intl.DateTimeFormat("en-US", { dateStyle: "medium" }).format(date);
 }
 
+function dateInputValue(date = new Date()) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
 export default function ApplicantStageStepper({
   status,
   history,
   isSaving,
   error,
+  employmentError,
   hiredAt,
+  employmentEndedAt,
   rejectionReason,
   interviewDetails,
   onAdvance,
   onReject,
   onRetry,
+  onRecordEmploymentEnd,
 }: ApplicantStageStepperProps) {
   const [isScheduleOpen, setIsScheduleOpen] = useState(false);
   const [isRejectOpen, setIsRejectOpen] = useState(false);
   const [isHiredConfirmOpen, setIsHiredConfirmOpen] = useState(false);
+  const [isEmploymentEndOpen, setIsEmploymentEndOpen] = useState(false);
+  const [employmentEndDate, setEmploymentEndDate] = useState(dateInputValue());
   const [announcement, setAnnouncement] = useState("");
 
   const currentStep = forwardApplicantStatuses.findIndex((step) => step.id === status);
@@ -95,7 +111,17 @@ export default function ApplicantStageStepper({
     }
   }
 
+  async function handleRecordEmploymentEnd(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const saved = await onRecordEmploymentEnd(employmentEndDate);
+    if (saved) {
+      setIsEmploymentEndOpen(false);
+      setAnnouncement("Employment end date recorded.");
+    }
+  }
+
   const hiredDate = hiredAt ?? history.find((entry) => entry.to === "hired")?.changedAt;
+  const minEndDate = hiredAt ? dateInputValue(new Date(hiredAt)) : undefined;
 
   return (
     <section aria-label="Application stage" className="mb-6 rounded-[22px] border border-[#e1ebea] bg-white py-5 shadow-[0_10px_22px_rgba(24,52,52,0.03)]">
@@ -121,6 +147,15 @@ export default function ApplicantStageStepper({
           <div>
             <h2 className="text-sm font-semibold text-[#187850]">Hired</h2>
             <p className="mt-1 text-xs text-[#58786b]">{hiredDate ? `Hired on ${formatDate(hiredDate)}` : "Final hiring stage"}</p>
+            {hiredAt ? (
+              <p className="mt-1 text-xs text-[#58786b]">
+                {employmentEndedAt ? "Time employed" : "Current tenure"}:{" "}
+                <EmploymentTenureCounter startedAt={hiredAt} endedAt={employmentEndedAt} />
+              </p>
+            ) : null}
+            {employmentEndedAt ? (
+              <p className="mt-1 text-xs text-[#58786b]">Employment ended on {formatDate(employmentEndedAt)}</p>
+            ) : null}
           </div>
         </div>
       ) : (
@@ -170,6 +205,19 @@ export default function ApplicantStageStepper({
 
       <div className="mt-5 flex flex-wrap items-center gap-2 px-4 sm:px-5">
         <NextActionButton status={status} disabled={isSaving} onClick={() => void handleNextAction()} />
+        {status === "hired" && !employmentEndedAt ? (
+          <button
+            type="button"
+            onClick={() => {
+              setEmploymentEndDate(dateInputValue());
+              setIsEmploymentEndOpen(true);
+            }}
+            disabled={isSaving}
+            className="min-h-10 rounded-lg border border-[#c8ded4] bg-white px-4 py-2 text-sm font-semibold text-[#187850] hover:bg-[#f3faf6] disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            Record employment end
+          </button>
+        ) : null}
         {status !== "hired" && status !== "rejected" ? (
           <button type="button" onClick={() => setIsRejectOpen(true)} disabled={isSaving} className="min-h-10 rounded-lg border border-[#cf7779] bg-white px-4 py-2 text-sm font-semibold text-[#a7464b] hover:bg-[#fff7f7] disabled:cursor-not-allowed disabled:opacity-60">Reject</button>
         ) : null}
@@ -197,6 +245,35 @@ export default function ApplicantStageStepper({
             <button type="button" data-dialog-initial onClick={() => void handleMarkHired()} disabled={isSaving} className="rounded-lg bg-[#0e8e9b] px-4 py-2 text-sm font-semibold text-white disabled:opacity-60">{isSaving ? "Updating..." : "Confirm hired"}</button>
           </div>
         </div>
+      </ApplicantDialog>
+      <ApplicantDialog
+        open={isEmploymentEndOpen}
+        title="Record employment end date"
+        error={employmentError}
+        isRetrying={isSaving}
+        onClose={() => !isSaving && setIsEmploymentEndOpen(false)}
+      >
+        <form className="space-y-4" onSubmit={(event) => void handleRecordEmploymentEnd(event)}>
+          <p className="text-sm leading-6 text-[#5b7072]">
+            Record the applicant's last day with the company. Only former employees who worked for at least three months can submit a company rating.
+          </p>
+          <label className="block text-sm font-medium text-[#31494b]">
+            Last day of employment
+            <input
+              className="mt-1.5 min-h-11 w-full rounded-lg border border-[#dfe8e7] px-3 text-sm text-[#203638] focus:border-[#0e8e9b] focus:outline-none focus:ring-2 focus:ring-[#0e8e9b]/20"
+              type="date"
+              required
+              min={minEndDate}
+              max={dateInputValue()}
+              value={employmentEndDate}
+              onChange={(event) => setEmploymentEndDate(event.target.value)}
+            />
+          </label>
+          <div className="flex justify-end gap-2 border-t border-[#e7efee] pt-4">
+            <button type="button" onClick={() => setIsEmploymentEndOpen(false)} disabled={isSaving} className="rounded-lg border border-[#dfe8e7] px-3 py-2 text-sm font-medium text-[#4a6467] disabled:opacity-60">Cancel</button>
+            <button type="submit" disabled={isSaving || !employmentEndDate} className="rounded-lg bg-[#0e8e9b] px-4 py-2 text-sm font-semibold text-white disabled:opacity-60">{isSaving ? "Saving..." : "Confirm end date"}</button>
+          </div>
+        </form>
       </ApplicantDialog>
     </section>
   );

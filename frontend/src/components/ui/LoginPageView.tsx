@@ -7,6 +7,7 @@ const officePhoto =
 
 type LoginPageViewProps = {
   loginError: string | null;
+  verificationEmail: string | null;
   isSubmitting: boolean;
   onSubmit: FormEventHandler<HTMLFormElement>;
 };
@@ -105,10 +106,12 @@ function LoginHeader() {
 
 function LoginCredentialsForm({
   loginError,
+  verificationEmail,
   isSubmitting,
   onSubmit,
 }: {
   loginError: string | null;
+  verificationEmail: string | null;
   isSubmitting: boolean;
   onSubmit: FormEventHandler<HTMLFormElement>;
 }) {
@@ -176,9 +179,19 @@ function LoginCredentialsForm({
       </div>
 
       {loginError && (
-        <p className="text-xs text-red-700" role="alert">
-          {loginError}
-        </p>
+        <div>
+          <p className="text-xs text-red-700" role="alert">
+            {loginError}
+          </p>
+          {verificationEmail && (
+            <Link
+              className="mt-2 inline-flex text-xs font-semibold text-[#078b8d] underline hover:text-[#066f72]"
+              to={`/verify-email?email=${encodeURIComponent(verificationEmail)}`}
+            >
+              Verify your email address
+            </Link>
+          )}
+        </div>
       )}
 
       <button
@@ -247,6 +260,7 @@ function SocialLoginOptions() {
 
 function LoginFormPanel({
   loginError,
+  verificationEmail,
   isSubmitting,
   onSubmit,
 }: LoginPageViewProps) {
@@ -257,6 +271,7 @@ function LoginFormPanel({
         <LoginCredentialsForm
           isSubmitting={isSubmitting}
           loginError={loginError}
+          verificationEmail={verificationEmail}
           onSubmit={onSubmit}
         />
         <SocialLoginOptions />

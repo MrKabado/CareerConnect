@@ -4,19 +4,21 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\Resume;
+use App\Services\ResumeStorage;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Storage;
-use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use RuntimeException;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 use Throwable;
 use ZipArchive;
 
 class ApplicantResumeController extends Controller
 {
+    public function __construct(private readonly ResumeStorage $resumeStorage) {}
+
     public function show(Request $request): JsonResponse
     {
         $resume = $request->user()->resumes()->where('is_current', true)->first();
@@ -36,24 +38,16 @@ class ApplicantResumeController extends Controller
         $file = $request->file('resume');
         [$extension, $mimeType] = $this->validatedFileType($file);
         $user = $request->user();
-        $path = $file->storeAs(
-            'applicant-resumes/'.$user->id,
-            Str::uuid().'.'.$extension,
-            'local',
-        );
-
-        if (! $path) {
-            throw new RuntimeException('The resume could not be stored.');
-        }
+        $stored = $this->resumeStorage->store($file, $user->id, $extension);
 
         try {
-            [$resume, $previous] = DB::transaction(function () use ($user, $file, $path, $mimeType): array {
+            [$resume, $previous] = DB::transaction(function () use ($user, $file, $stored, $mimeType): array {
                 $user->newQuery()->whereKey($user->id)->lockForUpdate()->firstOrFail();
                 $previous = $user->resumes()->where('is_current', true)->lockForUpdate()->first();
                 $previous?->update(['is_current' => false]);
 
                 $resume = $user->resumes()->create([
-                    'storage_path' => $path,
+                    ...$stored,
                     'original_filename' => $this->safeOriginalFilename($file),
                     'mime_type' => $mimeType,
                     'file_size' => $file->getSize(),
@@ -63,16 +57,21 @@ class ApplicantResumeController extends Controller
                 return [$resume, $previous];
             });
         } catch (Throwable $exception) {
-            if (! Storage::disk('local')->delete($path)) {
-                throw new RuntimeException('The failed resume upload could not be cleaned up.', previous: $exception);
+            try {
+                $this->resumeStorage->deleteStored(
+                    $stored['storage_disk'],
+                    $stored['storage_path'],
+                    $stored['cloudinary_asset_id'],
+                );
+            } catch (Throwable $cleanupException) {
+                throw new RuntimeException('The failed resume upload could not be cleaned up.', previous: $cleanupException);
             }
+
             throw $exception;
         }
 
         if ($previous !== null && ! $previous->applications()->exists()) {
-            if (! Storage::disk('local')->delete($previous->storage_path)) {
-                throw new RuntimeException('The replaced resume file could not be removed.');
-            }
+            $this->resumeStorage->delete($previous);
             $previous->delete();
         }
 
@@ -100,10 +99,7 @@ class ApplicantResumeController extends Controller
                 ], 409);
             }
 
-            if (! Storage::disk('local')->delete($resume->storage_path)) {
-                throw new RuntimeException('The resume file could not be removed.');
-            }
-
+            $this->resumeStorage->delete($resume);
             $resume->delete();
 
             return null;
@@ -112,11 +108,11 @@ class ApplicantResumeController extends Controller
         return $result ?? response()->json(['message' => 'Resume deleted.']);
     }
 
-    public function download(Request $request)
+    public function download(Request $request): StreamedResponse
     {
         $resume = $request->user()->resumes()->where('is_current', true)->firstOrFail();
 
-        return $this->downloadResume($resume);
+        return $this->resumeStorage->download($resume, $resume->original_filename, $resume->mime_type);
     }
 
     private function resumeData(Resume $resume): array
@@ -185,22 +181,5 @@ class ApplicantResumeController extends Controller
         $filename = preg_replace('/[^\pL\pN._ -]/u', '_', $filename) ?: 'resume';
 
         return mb_substr($filename, 0, 255);
-    }
-
-    private function downloadResume(Resume $resume)
-    {
-        $expectedPrefix = 'applicant-resumes/'.$resume->applicant_id.'/';
-        $path = $resume->storage_path;
-
-        if (! str_starts_with($path, $expectedPrefix)
-            || preg_match('#^applicant-resumes/[0-9]+/[a-f0-9-]+\.(pdf|docx)$#i', $path) !== 1
-            || ! Storage::disk('local')->exists($path)) {
-            abort(404, 'The resume file is unavailable.');
-        }
-
-        return Storage::disk('local')->download($path, $resume->original_filename, [
-            'Content-Type' => $resume->mime_type,
-            'X-Content-Type-Options' => 'nosniff',
-        ]);
     }
 }

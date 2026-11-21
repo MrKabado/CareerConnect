@@ -54,13 +54,14 @@ export default function BackContinueBar({
         )}
         {onSaveLater && (
           <OnboardingButton
-            className="max-[700px]:hidden"
+            className="max-[600px]:h-7 max-[600px]:px-2 max-[600px]:text-[10px]"
             disabled={isSubmitting}
             onClick={onSaveLater}
             type="button"
             variant="secondary"
           >
-            Save & finish later
+            <span className="max-[600px]:hidden">Save &amp; finish later</span>
+            <span className="hidden max-[600px]:inline">Save later</span>
           </OnboardingButton>
         )}
         <OnboardingButton

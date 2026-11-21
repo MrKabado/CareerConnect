@@ -10,6 +10,9 @@ class IdentityVerification extends Model
     protected $fillable = [
         'user_id',
         'document_path',
+        'storage_disk',
+        'cloudinary_asset_id',
+        'document_mime_type',
         'status',
         'rejection_reason',
         'reviewed_by',

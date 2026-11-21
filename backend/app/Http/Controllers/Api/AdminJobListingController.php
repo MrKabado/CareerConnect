@@ -106,7 +106,7 @@ class AdminJobListingController extends Controller
     {
         $relations = [
             'category:id,name',
-            'company:id,name,city,logo_path',
+            'company:id,name,city,logo_path,logo_disk',
             'ojtDetails:job_listing_id,duration_hours,allowance_type,allowance_amount,slots,accepted_courses,moa_accepted',
         ];
 

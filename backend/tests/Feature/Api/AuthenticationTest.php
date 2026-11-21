@@ -62,6 +62,51 @@ it('defaults registration to applicant', function (): void {
         ->assertJsonPath('user.role', 'applicant');
 });
 
+it('resumes verification for an existing unverified applicant without changing account details', function (): void {
+    Mail::fake();
+    $user = User::factory()->unverified()->create([
+        'name' => 'Original Applicant',
+        'email' => 'pending-applicant@example.com',
+    ]);
+
+    $this->postJson('/api/register', [
+        'name' => 'Replacement Name',
+        'email' => $user->email,
+        'password' => 'DifferentPassword123!',
+        'password_confirmation' => 'DifferentPassword123!',
+        'role' => 'applicant',
+    ])->assertOk()
+        ->assertJsonPath('resume_verification', true)
+        ->assertJsonMissingPath('user');
+
+    expect($user->refresh()->name)->toBe('Original Applicant');
+    expect(Hash::check('password', $user->password))->toBeTrue();
+    expect(OtpCode::where('email', $user->email)
+        ->where('purpose', 'email_verification')
+        ->exists())->toBeTrue();
+    Mail::assertSent(OtpCodeMail::class);
+});
+
+it('returns the same neutral recovery response for an already verified applicant without sending a code', function (): void {
+    Mail::fake();
+    $user = User::factory()->create([
+        'email' => 'verified-applicant@example.com',
+    ]);
+
+    $this->postJson('/api/register', [
+        'name' => 'Another Name',
+        'email' => $user->email,
+        'password' => 'DifferentPassword123!',
+        'password_confirmation' => 'DifferentPassword123!',
+        'role' => 'applicant',
+    ])->assertOk()
+        ->assertJsonPath('resume_verification', true)
+        ->assertJsonMissingPath('user');
+
+    expect($user->refresh()->name)->not->toBe('Another Name');
+    Mail::assertNothingSent();
+});
+
 it('resends an email-verification code without exposing it in the response', function (): void {
     $user = User::factory()->unverified()->create();
     Mail::fake();

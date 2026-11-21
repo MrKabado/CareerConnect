@@ -36,9 +36,9 @@ class InterviewController extends Controller
                 ]);
             }
 
-            if ($application->interviews()->exists()) {
+            if ($application->interviews()->where('status', 'scheduled')->exists()) {
                 throw ValidationException::withMessages([
-                    'application' => ['An interview record already exists for this application.'],
+                    'application' => ['This application already has a scheduled interview.'],
                 ]);
             }
 

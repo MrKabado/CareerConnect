@@ -58,6 +58,7 @@ export type Applicant = {
   rejectionReason?: string;
   rejectionMessage?: string;
   hiredAt?: string;
+  employmentEndedAt?: string;
   jobType: "Job" | "OJT";
   summary: string;
   skills: string[];

@@ -29,7 +29,7 @@ type Listing = {
   salary_max: number | null
   status: 'draft' | 'open' | 'closed' | 'deactivated'
   published_at: string | null
-  company?: { name: string; city: string | null; logo_path: string | null }
+  company?: { name: string; city: string | null; logo_path: string | null; logo_url: string | null }
   admin_actions?: {
     action: 'deactivated' | 'restored'
     reason: string | null

@@ -22,6 +22,8 @@ class Company extends Model
         'contact_phone',
         'contact_email',
         'logo_path',
+        'logo_disk',
+        'logo_asset_id',
         'hires_jobs',
         'hires_ojt',
         'open_to_moa',
@@ -60,5 +62,10 @@ class Company extends Model
     public function jobListings(): HasMany
     {
         return $this->hasMany(JobListing::class);
+    }
+
+    public function ratings(): HasMany
+    {
+        return $this->hasMany(CompanyRating::class);
     }
 }

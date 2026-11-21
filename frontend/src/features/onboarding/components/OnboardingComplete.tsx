@@ -3,12 +3,12 @@ import type { OnboardingAnswers } from "@/features/onboarding/store";
 
 type OnboardingCompleteProps = {
   answers: OnboardingAnswers;
-  onSeeRecommendations: () => void;
+  onVerifyEmail: () => void;
 };
 
 export default function OnboardingComplete({
   answers,
-  onSeeRecommendations,
+  onVerifyEmail,
 }: OnboardingCompleteProps) {
   return (
     <section className="w-full max-w-140 rounded-[22px] border border-[#e6eeee] bg-white px-8 py-10 text-center shadow-[0_16px_50px_rgba(27,75,72,0.08)] max-[600px]:px-5 max-[600px]:py-8">
@@ -35,13 +35,16 @@ export default function OnboardingComplete({
         You’re all set!
       </h1>
       <p className="mt-2 text-sm leading-6 text-[#718082]">
-        {answers.goal === "job-seeker"
-          ? "We’ll use your goals and preferences to surface opportunities that are a better fit for you."
-          : "Your profile setup is ready. Verify your email to activate your account."}
+        Your account is created. Verify your email to activate it and sign in.
+      </p>
+      <p className="mt-3 rounded-xl bg-[#f2f9f7] px-4 py-3 text-left text-xs leading-5 text-[#587675]">
+        You verify it yourself: check {answers.email} for the six-digit code,
+        then enter it on the next screen. Check your spam folder if it is not in
+        your inbox; you can request another code there.
       </p>
       <p className="mt-3 rounded-xl bg-[#fff9e9] px-4 py-3 text-left text-xs leading-5 text-[#75633a]">
-        Your profile answers are not yet saved to your account. They remain
-        available in this browser session only.
+        Your profile answers are not yet saved to your account. Drafts saved
+        with “Save &amp; finish later” remain in this browser.
       </p>
       <div className="mt-6 flex flex-wrap justify-center gap-2">
         {[
@@ -63,10 +66,10 @@ export default function OnboardingComplete({
       </div>
       <OnboardingButton
         className="mt-7"
-        onClick={onSeeRecommendations}
+        onClick={onVerifyEmail}
         type="button"
       >
-        See my recommendations
+        Verify email
       </OnboardingButton>
     </section>
   );

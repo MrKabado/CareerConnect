@@ -137,7 +137,11 @@ export function useJobApplication() {
       setIsAlreadySubmitted(false);
       setStep(3);
     } catch (requestError) {
-      if (requestError instanceof ApiError && requestError.status === 409) {
+      if (
+        requestError instanceof ApiError &&
+        requestError.status === 409 &&
+        requestError.code === "already_applied"
+      ) {
         setIsAlreadySubmitted(true);
         setStep(3);
       } else {

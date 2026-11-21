@@ -44,6 +44,7 @@ import {
   VerifyEmailPage,
 } from "@/pages/lazyPages";
 import NotFoundPage from "@/pages/NotFoundPage";
+import { Toaster } from "sonner";
 
 createRoot(document.getElementById("root")!).render(
   <BrowserRouter>
@@ -224,6 +225,8 @@ createRoot(document.getElementById("root")!).render(
           <Route path="*" element={<NotFoundPage />} />
         </Routes>
       </Suspense>
+
+      <Toaster position="top-center" richColors />
     </AuthProvider>
   </BrowserRouter>,
 );

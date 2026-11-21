@@ -27,6 +27,9 @@ class Application extends Model
         'resume_file_size',
         'cover_letter',
         'applied_at',
+        'hired_at',
+        'employment_ended_at',
+        'employment_ended_by',
     ];
 
     protected function casts(): array
@@ -34,6 +37,8 @@ class Application extends Model
         return [
             'resume_file_size' => 'integer',
             'applied_at' => 'datetime',
+            'hired_at' => 'datetime',
+            'employment_ended_at' => 'date',
         ];
     }
 

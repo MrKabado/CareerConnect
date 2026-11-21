@@ -1,5 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { getApplicantById, updateApplicantStatus } from "@/features/employer-applicants/api";
+import {
+  getApplicantById,
+  recordApplicantEmploymentEnd,
+  updateApplicantStatus,
+} from "@/features/employer-applicants/api";
 import { useAuth } from "@/features/auth/useAuth";
 import { applicantStatusConfig, isAllowedApplicantTransition } from "@/features/employer-applicants/statuses";
 import type { ApplicantStatus } from "@/features/employer-applicants/statuses";
@@ -18,6 +22,7 @@ export function useApplicantStatus(applicantId: string) {
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [employmentError, setEmploymentError] = useState<string | null>(null);
   const requestInFlight = useRef(false);
   const retryTransition = useRef<PendingTransition | null>(null);
   const loadSequence = useRef(0);
@@ -122,6 +127,31 @@ export function useApplicantStatus(applicantId: string) {
     return transitionTo(pending.to, pending.payload);
   }
 
+  async function recordEmploymentEnd(employmentEndedAt: string): Promise<boolean> {
+    if (!applicant || status !== "hired" || requestInFlight.current) return false;
+
+    requestInFlight.current = true;
+    setIsSaving(true);
+    setEmploymentError(null);
+    try {
+      if (!token) throw new Error("Your employer session has expired.");
+      const updatedApplicant = await recordApplicantEmploymentEnd(
+        token,
+        applicantId,
+        employmentEndedAt,
+        applicant,
+      );
+      setApplicant(updatedApplicant);
+      return true;
+    } catch (requestError) {
+      setEmploymentError(requestError instanceof Error ? requestError.message : "Unable to record the employment end date.");
+      return false;
+    } finally {
+      requestInFlight.current = false;
+      setIsSaving(false);
+    }
+  }
+
   return {
     status,
     applicant,
@@ -129,6 +159,7 @@ export function useApplicantStatus(applicantId: string) {
     isLoading,
     isSaving,
     error,
+    employmentError,
     reload: () => {
       setIsLoading(true);
       setError(null);
@@ -137,5 +168,6 @@ export function useApplicantStatus(applicantId: string) {
     advance,
     reject,
     retry,
+    recordEmploymentEnd,
   };
 }

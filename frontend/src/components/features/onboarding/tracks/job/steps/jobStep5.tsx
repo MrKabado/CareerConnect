@@ -1,6 +1,7 @@
 import { useState, type KeyboardEvent } from "react";
 import type { OjtStepProps } from "@/components/features/onboarding/tracks/ojt/steps/ojtStepTypes";
 import {
+  AddItemButton,
   OjtChoice,
   OjtField,
   ojtInputClassName,
@@ -20,8 +21,17 @@ export default function JobStep5({
   function addLocation(event: KeyboardEvent<HTMLInputElement>) {
     if (event.key !== "Enter") return;
     event.preventDefault();
+    commitLocation();
+  }
+
+  function commitLocation() {
     const value = location.trim();
-    if (value && !answers.preferredLocations.includes(value)) {
+    if (
+      value &&
+      !answers.preferredLocations.some(
+        (item) => item.toLowerCase() === value.toLowerCase(),
+      )
+    ) {
       onToggleList("preferredLocations", value);
     }
     setLocation("");
@@ -80,15 +90,22 @@ export default function JobStep5({
           </>
         }
       >
-        <input
-          aria-label="Preferred locations"
-          className={ojtInputClassName}
-          id="job-locations"
-          onChange={(event) => setLocation(event.target.value)}
-          onKeyDown={addLocation}
-          placeholder="Type a city and press Enter"
-          value={location}
-        />
+        <div className="flex items-center gap-2">
+          <input
+            aria-label="Preferred locations"
+            className={`${ojtInputClassName} min-w-0 flex-1`}
+            id="job-locations"
+            onChange={(event) => setLocation(event.target.value)}
+            onKeyDown={addLocation}
+            placeholder="Type a city or area"
+            value={location}
+          />
+          <AddItemButton
+            disabled={!location.trim()}
+            label="location"
+            onClick={commitLocation}
+          />
+        </div>
         {answers.preferredLocations.length > 0 && (
           <div className="mt-2 flex flex-wrap gap-2">
             {answers.preferredLocations.map((item) => (

@@ -8,21 +8,23 @@ import OnboardingStepContent from "./OnboardingStepContent";
 type OnboardingPageViewProps = {
   onboarding: ReturnType<typeof useOnboarding>;
   onSubmit: FormEventHandler<HTMLFormElement>;
+  onSaveLater: () => void;
   onSkipResume: () => void;
-  onSeeRecommendations: () => void;
+  onVerifyEmail: () => void;
 };
 
 export default function OnboardingPageView({
   onboarding,
   onSubmit,
+  onSaveLater,
   onSkipResume,
-  onSeeRecommendations,
+  onVerifyEmail,
 }: OnboardingPageViewProps) {
   if (onboarding.isComplete) {
     return (
       <OnboardingComplete
         answers={onboarding.answers}
-        onSeeRecommendations={onSeeRecommendations}
+        onVerifyEmail={onVerifyEmail}
       />
     );
   }
@@ -47,7 +49,7 @@ export default function OnboardingPageView({
           isLastStep={onboarding.isLastStep}
           isSubmitting={onboarding.isSubmitting}
           onBack={onboarding.back}
-          onSaveLater={saveLaterHandler}
+          onSaveLater={saveLaterHandler ? onSaveLater : undefined}
           onSkip={skipHandler}
           onSubmit={onSubmit}
           skipLabel={step.id === "resume" ? "Skip for now" : undefined}

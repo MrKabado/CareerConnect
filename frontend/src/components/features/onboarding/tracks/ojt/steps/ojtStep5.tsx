@@ -1,6 +1,7 @@
 import { useState, type KeyboardEvent } from "react";
 import type { OjtStepProps } from "./ojtStepTypes";
 import {
+  AddItemButton,
   OjtChoice,
   OjtField,
   ojtInputClassName,
@@ -18,14 +19,22 @@ export default function OjtStep5({
   const [location, setLocation] = useState("");
 
   function addLocation(event: KeyboardEvent<HTMLInputElement>) {
-    if (event.key === "Enter" && location.trim()) {
-      event.preventDefault();
-      const next = location.trim();
-      if (!answers.preferredLocations.includes(next)) {
-        onToggleList("preferredLocations", next);
-      }
-      setLocation("");
+    if (event.key !== "Enter") return;
+    event.preventDefault();
+    commitLocation();
+  }
+
+  function commitLocation() {
+    const next = location.trim();
+    if (
+      next &&
+      !answers.preferredLocations.some(
+        (item) => item.toLowerCase() === next.toLowerCase(),
+      )
+    ) {
+      onToggleList("preferredLocations", next);
     }
+    setLocation("");
   }
 
   return (
@@ -91,17 +100,21 @@ export default function OjtStep5({
         error={errors.preferredLocations}
         label="Preferred locations *"
       >
-        <p className="mb-2 text-xs text-[#718082]">
-          Enter a city or area, then press Enter.
-        </p>
-        <input
-          className={ojtInputClassName}
-          aria-label="Preferred locations"
-          onChange={(event) => setLocation(event.target.value)}
-          onKeyDown={addLocation}
-          placeholder="e.g. Quezon City"
-          value={location}
-        />
+        <div className="flex items-center gap-2">
+          <input
+            className={`${ojtInputClassName} min-w-0 flex-1`}
+            aria-label="Preferred locations"
+            onChange={(event) => setLocation(event.target.value)}
+            onKeyDown={addLocation}
+            placeholder="Type a city or area"
+            value={location}
+          />
+          <AddItemButton
+            disabled={!location.trim()}
+            label="location"
+            onClick={commitLocation}
+          />
+        </div>
         <div className="mt-2 flex flex-wrap gap-2">
           {answers.preferredLocations.map((item) => (
             <button

@@ -7,6 +7,8 @@ type ApplicationRecord = {
   status: BackendStatus;
   cover_letter: string | null;
   applied_at: string | null;
+  hired_at: string | null;
+  employment_ended_at: string | null;
   listing: {
     id: number;
     title: string;
@@ -141,6 +143,8 @@ function toApplicant(record: ApplicationRecord, interview?: InterviewRecord): Ap
     appliedDate: formatDate(record.applied_at),
     status: toFrontendStatus(record.status),
     statusHistory,
+    ...(record.hired_at ? { hiredAt: record.hired_at } : {}),
+    ...(record.employment_ended_at ? { employmentEndedAt: record.employment_ended_at } : {}),
     ...(interviewDetails ? { interviewDetails } : {}),
     jobType: record.listing?.listing_type === "ojt" ? "OJT" : "Job",
     summary: record.cover_letter?.trim() || "No cover letter was submitted.",
@@ -263,6 +267,34 @@ export async function updateApplicantStatus(
     ...(to === "rejected" && payload.rejectionReason?.trim()
       ? { rejectionReason: payload.rejectionReason.trim() }
       : {}),
+  };
+}
+
+export async function recordApplicantEmploymentEnd(
+  token: string,
+  applicantId: string,
+  employmentEndedAt: string,
+  currentApplicant: Applicant,
+): Promise<Applicant> {
+  const id = getApplicationId(applicantId);
+  const response = await apiRequest<ApplicationResponse>(
+    `/employer/applications/${id}/employment/end`,
+    {
+      method: "PATCH",
+      data: { employment_ended_at: employmentEndedAt },
+    },
+    token,
+  );
+  const updated = toApplicant(response.data);
+
+  if (!updated.hiredAt || !updated.employmentEndedAt) {
+    throw new Error("The employment end date was saved, but the server returned an incomplete employment record.");
+  }
+
+  return {
+    ...currentApplicant,
+    hiredAt: updated.hiredAt,
+    employmentEndedAt: updated.employmentEndedAt,
   };
 }
 

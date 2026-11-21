@@ -26,7 +26,8 @@ export type RegistrationDetails = {
 
 type RegistrationResponse = {
   message: string;
-  user: AuthUser;
+  user?: AuthUser;
+  resume_verification?: boolean;
 };
 
 type LoginResponse = {

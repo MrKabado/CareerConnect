@@ -11,6 +11,8 @@ class VerificationDocument extends Model
         'company_verification_id',
         'type',
         'file_path',
+        'storage_disk',
+        'cloudinary_asset_id',
         'original_filename',
         'mime_type',
         'size_bytes',

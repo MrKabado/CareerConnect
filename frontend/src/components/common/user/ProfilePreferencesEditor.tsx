@@ -145,7 +145,6 @@ function ListField({
         <input
           aria-label={label}
           className="min-w-[120px] flex-1 bg-transparent px-1 py-1 text-[10px] text-[#354749] outline-none placeholder:text-[#9aa7a7]"
-          onBlur={commitInput}
           onChange={(event) => handleChange(event.target.value)}
           onKeyDown={(event) => {
             if (event.key === "Enter" || event.key === ",") {
@@ -159,10 +158,16 @@ function ListField({
           placeholder={values.length === 0 ? placeholder : "Add another..."}
           value={input}
         />
+        <button
+          aria-label={`Add ${label.toLowerCase()}`}
+          className="min-h-8 shrink-0 rounded-md bg-[#078b8d] px-3 text-[9px] font-semibold text-white transition hover:bg-[#06777a] disabled:cursor-not-allowed disabled:opacity-50"
+          disabled={!input.trim()}
+          onClick={commitInput}
+          type="button"
+        >
+          Add
+        </button>
       </div>
-      <p className="mt-1 text-[8px] text-[#9aa7a7]">
-        Press Enter or comma to add each item.
-      </p>
     </div>
   );
 }

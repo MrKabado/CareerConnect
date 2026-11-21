@@ -3,16 +3,25 @@ import OnboardingButton from "@/components/features/onboarding/shared/onboarding
 import { VERIFY_EMAIL_CODE_INPUT_CLASS_NAME, VERIFY_EMAIL_LABELS } from "@/features/auth/verify-email/constants";
 
 export function VerifyEmailCodeForm({
+  notice,
   isSubmitting,
+  onResendCode,
   onSubmit,
   onUseDifferentEmail,
 }: {
+  notice: string | null;
   isSubmitting: boolean;
+  onResendCode: () => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
   onUseDifferentEmail: () => void;
 }) {
   return (
     <form className="mt-6 space-y-4" onSubmit={onSubmit}>
+      {notice && (
+        <p className="rounded-lg bg-[#f2f9f7] px-3 py-2 text-xs leading-5 text-[#587675]" role="status">
+          {notice}
+        </p>
+      )}
       <div>
         <label
           className="mb-1.5 block text-xs font-semibold"
@@ -35,6 +44,15 @@ export function VerifyEmailCodeForm({
       </div>
       <OnboardingButton className="w-full" disabled={isSubmitting}>
         {isSubmitting ? "Verifying…" : "Verify email"}
+      </OnboardingButton>
+      <OnboardingButton
+        className="w-full"
+        disabled={isSubmitting}
+        onClick={onResendCode}
+        type="button"
+        variant="secondary"
+      >
+        {isSubmitting ? "Sending…" : "Resend code"}
       </OnboardingButton>
       <button
         className="w-full text-center text-xs font-semibold text-[#078b8d] hover:underline"

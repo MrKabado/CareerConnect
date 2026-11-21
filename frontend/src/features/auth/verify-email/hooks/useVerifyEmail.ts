@@ -8,17 +8,23 @@ export function useVerifyEmail() {
   const { verifyEmail } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
+  const codeWasSent = new URLSearchParams(location.search).get("codeSent") === "1";
 
   const [email, setEmail] = useState(
     () => new URLSearchParams(location.search).get("email") ?? "",
   );
-  const [codeRequested, setCodeRequested] = useState(false);
+  const [codeRequested, setCodeRequested] = useState(codeWasSent);
+  const [notice, setNotice] = useState(
+    codeWasSent
+      ? "If this email has an account that needs verification, a code has been sent. You can resend it below."
+      : null,
+  );
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  async function requestCode(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  async function sendVerificationCode() {
     setError(null);
+    setNotice(null);
 
     const emailValidationError = validateVerifyEmailAddress(email);
     if (emailValidationError) {
@@ -31,6 +37,9 @@ export function useVerifyEmail() {
     try {
       await authApi.requestEmailVerificationCode(email.trim());
       setCodeRequested(true);
+      setNotice(
+        "If this email has an account that needs verification, a code has been sent.",
+      );
     } catch (requestError) {
       setError(
         requestError instanceof Error
@@ -40,6 +49,15 @@ export function useVerifyEmail() {
     } finally {
       setIsSubmitting(false);
     }
+  }
+
+  async function requestCode(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    await sendVerificationCode();
+  }
+
+  async function resendCode() {
+    await sendVerificationCode();
   }
 
   async function submitCode(event: FormEvent<HTMLFormElement>) {
@@ -54,6 +72,7 @@ export function useVerifyEmail() {
     }
 
     setError(null);
+    setNotice(null);
     setIsSubmitting(true);
 
     try {
@@ -73,16 +92,25 @@ export function useVerifyEmail() {
   function resetRequestState() {
     setCodeRequested(false);
     setError(null);
+    setNotice(null);
+  }
+
+  function changeEmail(value: string) {
+    setEmail(value);
+    setError(null);
+    setNotice(null);
   }
 
   return {
     email,
-    setEmail,
+    setEmail: changeEmail,
     codeRequested,
     setCodeRequested,
+    notice,
     error,
     isSubmitting,
     requestCode,
+    resendCode,
     submitCode,
     resetRequestState,
   };

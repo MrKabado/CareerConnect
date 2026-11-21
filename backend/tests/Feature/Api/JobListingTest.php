@@ -7,9 +7,15 @@ use App\Models\IdentityVerification;
 use App\Models\JobListing;
 use App\Models\User;
 use Illuminate\Foundation\Testing\LazilyRefreshDatabase;
+use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\Route;
+use Illuminate\Support\Facades\Storage;
 
 uses(LazilyRefreshDatabase::class)->group('api');
+
+beforeEach(function (): void {
+    Config::set('careerconnect.media_storage_disk', 'local');
+});
 
 function listingTestCompany(User $owner, bool $verified = false): Company
 {
@@ -241,6 +247,12 @@ it('shows only publicly visible listings and exposes no employer contact or veri
     $employer = User::factory()->create(['role' => 'employer']);
     $category = Category::create(['name' => 'Technology']);
     $open = listingTestRecord($employer, $category);
+    Storage::fake('public');
+    Storage::disk('public')->put('company-logos/logo.png', 'fake image');
+    $open->company->forceFill([
+        'logo_path' => 'company-logos/logo.png',
+        'logo_disk' => 'public',
+    ])->save();
     $closed = listingTestRecord($employer, $category, ['status' => 'closed']);
     $draft = listingTestRecord($employer, $category, ['status' => 'draft', 'published_at' => null]);
     $deactivated = listingTestRecord($employer, $category, ['status' => 'deactivated']);
@@ -249,6 +261,7 @@ it('shows only publicly visible listings and exposes no employer contact or veri
         ->assertOk()
         ->assertJsonCount(1, 'data')
         ->assertJsonPath('data.0.id', $open->id)
+        ->assertJsonPath('data.0.company.logo_url', Storage::disk('public')->url('company-logos/logo.png'))
         ->assertJsonMissingPath('data.0.company.contact_email')
         ->assertJsonMissingPath('data.0.company.user_id');
 

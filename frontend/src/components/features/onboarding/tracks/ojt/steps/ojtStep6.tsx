@@ -2,13 +2,12 @@ import { useState } from "react";
 import type { ChangeEvent } from "react";
 import type { OjtStepProps } from "./ojtStepTypes";
 
-const maxResumeSize = 10 * 1024 * 1024;
+const maxResumeSize = 5 * 1024 * 1024;
 const allowedResumeTypes = new Set([
   "application/pdf",
-  "application/msword",
   "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
 ]);
-const allowedResumeExtensions = /\.(pdf|doc|docx)$/i;
+const allowedResumeExtensions = /\.(pdf|docx)$/i;
 
 export default function OjtStep6({
   answers,
@@ -24,12 +23,12 @@ export default function OjtStep6({
       allowedResumeTypes.has(file.type) ||
       (!file.type && allowedResumeExtensions.test(file.name));
     if (!validType || !allowedResumeExtensions.test(file.name)) {
-      setFileError("Choose a PDF, DOC, or DOCX file.");
+      setFileError("Choose a PDF or DOCX file.");
       event.target.value = "";
       return;
     }
     if (file.size > maxResumeSize) {
-      setFileError("Your resume must be 10 MB or smaller.");
+      setFileError("Your resume must be 5 MB or smaller.");
       event.target.value = "";
       return;
     }
@@ -60,10 +59,10 @@ export default function OjtStep6({
           {answers.resumeFile?.name ?? "Choose a resume to upload"}
         </span>
         <span className="mt-2 text-xs text-[#718082]">
-          PDF, DOC, or DOCX · 10 MB max
+          PDF or DOCX · 5 MB max
         </span>
         <input
-          accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+          accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
           className="sr-only"
           id="ojt-resume-upload"
           onChange={selectResume}

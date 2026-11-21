@@ -9,11 +9,10 @@ type JobStep6Props = {
   ) => void;
 };
 
-const maxResumeSize = 10 * 1024 * 1024;
-const allowedExtensions = /\.(pdf|doc|docx)$/i;
+const maxResumeSize = 5 * 1024 * 1024;
+const allowedExtensions = /\.(pdf|docx)$/i;
 const allowedTypes = new Set([
   "application/pdf",
-  "application/msword",
   "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
 ]);
 
@@ -27,11 +26,11 @@ export default function JobStep6({ answers, onChange }: JobStep6Props) {
       allowedTypes.has(file.type) ||
       (!file.type && allowedExtensions.test(file.name));
     if (!validType || !allowedExtensions.test(file.name)) {
-      setFileError("Choose a PDF, DOC, or DOCX file.");
+      setFileError("Choose a PDF or DOCX file.");
       return;
     }
     if (file.size > maxResumeSize) {
-      setFileError("Your resume must be 10 MB or smaller.");
+      setFileError("Your resume must be 5 MB or smaller.");
       return;
     }
 
@@ -90,10 +89,10 @@ export default function JobStep6({ answers, onChange }: JobStep6Props) {
           {answers.resumeFile?.name ?? "Choose a file or drag it here"}
         </span>
         <span className="mt-1 text-xs text-[#8a9899]">
-          PDF, DOC, or DOCX up to 10 MB
+          PDF or DOCX up to 5 MB
         </span>
         <input
-          accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+          accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
           className="sr-only"
           id="job-resume-upload"
           onChange={handleFileChange}

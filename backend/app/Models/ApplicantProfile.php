@@ -13,6 +13,8 @@ class ApplicantProfile extends Model
         'phone',
         'city',
         'profile_photo_path',
+        'profile_photo_disk',
+        'profile_photo_asset_id',
         'looking_for_jobs',
         'looking_for_ojt',
         'experience_level',

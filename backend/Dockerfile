@@ -8,6 +8,7 @@ RUN apt-get update \
         libzip-dev \
         unzip \
     && docker-php-ext-install pdo_mysql zip \
+    && printf 'upload_max_filesize=6M\npost_max_size=8M\n' > /usr/local/etc/php/conf.d/uploads.ini \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=composer:2 /usr/bin/composer /usr/bin/composer

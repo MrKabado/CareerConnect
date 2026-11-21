@@ -4,12 +4,19 @@ use App\Models\Category;
 use App\Models\Company;
 use App\Models\CompanyVerification;
 use App\Models\User;
+use App\Models\VerificationDocument;
+use App\Services\CloudinaryMediaGateway;
 use Illuminate\Foundation\Testing\LazilyRefreshDatabase;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\Storage;
-use App\Models\VerificationDocument;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 uses(LazilyRefreshDatabase::class)->group('api');
+
+beforeEach(function (): void {
+    Config::set('careerconnect.media_storage_disk', 'local');
+});
 
 it('allows employers to manage their company profile, logo, and verification status', function (): void {
     Storage::fake('local');
@@ -118,6 +125,91 @@ it('keeps employer verification documents private and supports replacement and r
     Storage::disk('local')->assertMissing($document->file_path);
     $this->assertDatabaseMissing('verification_documents', ['id' => $documentId]);
     $this->assertDatabaseHas('companies', ['id' => $company->id, 'is_verified' => false]);
+});
+
+it('organizes Cloudinary employer logos and private verification documents by company', function (): void {
+    Config::set('careerconnect.media_storage_disk', 'cloudinary');
+    $owner = User::factory()->create(['role' => 'employer']);
+    $token = $owner->createToken('cloud-employer')->plainTextToken;
+
+    $this->withToken($token)->putJson('/api/employer/company', ['name' => 'Cloud Employer'])
+        ->assertOk();
+    $company = Company::query()->where('user_id', $owner->id)->firstOrFail();
+    $gateway = Mockery::mock(CloudinaryMediaGateway::class);
+    $gateway->shouldReceive('uploadImage')
+        ->once()
+        ->withArgs(fn (UploadedFile $file, string $folder): bool => $folder === 'career-connect/employers/'.$company->id.'/logos'
+        )
+        ->andReturn(['asset_id' => 'logo-asset-1', 'public_id' => 'cloud-logo']);
+    $gateway->shouldReceive('upload')
+        ->once()
+        ->withArgs(fn (UploadedFile $file, string $publicId, string $folder): bool => str_starts_with($publicId, 'employer-verifications/'.$company->id.'/')
+            && str_ends_with($publicId, '.pdf')
+            && $folder === 'career-connect/employers/'.$company->id.'/verification-documents'
+        )
+        ->andReturnUsing(fn (UploadedFile $file, string $publicId, string $folder): array => [
+            'asset_id' => 'verification-asset-1',
+            'public_id' => $publicId,
+        ]);
+    $gateway->shouldReceive('imageUrl')->once()
+        ->with('cloud-logo')
+        ->andReturn('https://res.cloudinary.com/demo/image/upload/cloud-logo');
+    $gateway->shouldReceive('download')
+        ->once()
+        ->withArgs(fn (string $path, string $extension, string $filename, string $mimeType, string $resourceType): bool => str_starts_with($path, 'employer-verifications/'.$company->id.'/')
+            && $extension === 'pdf'
+            && $filename === 'registration.pdf'
+            && $mimeType === 'application/pdf'
+            && $resourceType === 'raw'
+        )
+        ->andReturnUsing(fn (): StreamedResponse => response()->streamDownload(
+            static fn () => print ('%PDF-1.4'),
+            'registration.pdf',
+            ['Content-Type' => 'application/pdf'],
+        ));
+    $gateway->shouldReceive('delete')
+        ->twice()
+        ->withArgs(fn (string $publicId, string $resourceType, string $deliveryType): bool => ($publicId === 'cloud-logo' && $resourceType === 'image' && $deliveryType === 'upload')
+            || (str_starts_with($publicId, 'employer-verifications/'.$company->id.'/')
+                && $resourceType === 'raw'
+                && $deliveryType === 'authenticated')
+        );
+    $this->app->instance(CloudinaryMediaGateway::class, $gateway);
+
+    $this->app['auth']->forgetGuards();
+    $this->withToken($token)->postJson('/api/employer/company/logo', [
+        'logo' => UploadedFile::fake()->create('logo.png', 120, 'image/png'),
+    ])->assertOk()
+        ->assertJsonPath('logo_url', 'https://res.cloudinary.com/demo/image/upload/cloud-logo');
+
+    $company->refresh();
+    expect($company->logo_path)->toBe('cloud-logo')
+        ->and($company->logo_disk)->toBe('cloudinary')
+        ->and($company->logo_asset_id)->toBe('logo-asset-1');
+
+    $this->app['auth']->forgetGuards();
+    $upload = $this->withToken($token)->postJson('/api/employer/verification/documents', [
+        'type' => 'business_registration',
+        'document' => UploadedFile::fake()->create('registration.pdf', 100, 'application/pdf'),
+    ])->assertCreated()
+        ->assertJsonMissingPath('document.file_path')
+        ->assertJsonMissingPath('document.storage_disk');
+    $documentId = $upload->json('document.id');
+    $document = VerificationDocument::query()->findOrFail($documentId);
+    expect($document->storage_disk)->toBe('cloudinary')
+        ->and($document->cloudinary_asset_id)->toBe('verification-asset-1');
+
+    $this->app['auth']->forgetGuards();
+    $this->withToken($token)->get("/api/employer/verification/documents/{$documentId}/download")
+        ->assertOk()
+        ->assertHeader('content-type', 'application/pdf')
+        ->assertStreamedContent('%PDF-1.4');
+
+    $this->app['auth']->forgetGuards();
+    $this->withToken($token)->deleteJson("/api/employer/verification/documents/{$documentId}")
+        ->assertOk();
+    $this->app['auth']->forgetGuards();
+    $this->withToken($token)->deleteJson('/api/employer/company/logo')->assertOk();
 });
 
 it('rejects invalid employer verification file types and files above the limit', function (): void {

@@ -1,11 +1,20 @@
-import { type FormEvent } from "react";
+import { type FormEvent, useCallback } from "react";
 import { useNavigate } from "react-router";
 import { useOnboarding } from "@/features/onboarding/useOnboarding";
 import OnboardingPageView from "@/features/onboarding/components/OnboardingPageView";
 
 export default function OnboardingPage() {
-  const onboarding = useOnboarding();
   const navigate = useNavigate();
+  const handleResumeVerification = useCallback(
+    (email: string) => {
+      navigate(
+        `/verify-email?email=${encodeURIComponent(email)}&codeSent=1`,
+        { replace: true },
+      );
+    },
+    [navigate],
+  );
+  const onboarding = useOnboarding(handleResumeVerification);
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -18,14 +27,24 @@ export default function OnboardingPage() {
     void onboarding.skip();
   }
 
-  function handleSeeRecommendations() {
-    navigate("/recommendations", { replace: true });
+  function handleVerifyEmail() {
+    navigate(
+      `/verify-email?email=${encodeURIComponent(onboarding.answers.email.trim())}&codeSent=1`,
+      { replace: true },
+    );
+  }
+
+  function handleSaveLater() {
+    if (onboarding.saveForLater()) {
+      navigate("/", { replace: true });
+    }
   }
 
   return (
     <OnboardingPageView
       onboarding={onboarding}
-      onSeeRecommendations={handleSeeRecommendations}
+      onVerifyEmail={handleVerifyEmail}
+      onSaveLater={handleSaveLater}
       onSkipResume={handleSkipResume}
       onSubmit={handleSubmit}
     />

@@ -1,15 +1,18 @@
 ﻿import axios, { type AxiosError, type AxiosRequestConfig } from "axios";
+import { toast } from "sonner";
 
 const apiBaseUrl = (import.meta.env.VITE_API_BASE_URL || "http://localhost:8000/api")
   .replace(/\/+$/, "");
 
 export class ApiError extends Error {
   readonly status: number;
+  readonly code?: string;
 
-  constructor(message: string, status: number) {
+  constructor(message: string, status: number, code?: string) {
     super(message);
     this.name = "ApiError";
     this.status = status;
+    this.code = code;
   }
 }
 
@@ -21,17 +24,74 @@ const apiClient = axios.create({
   validateStatus: (status) => status >= 200 && status < 300,
 });
 
+function isActionRequest(method: string | undefined): boolean {
+  return method !== undefined && !["GET", "HEAD", "OPTIONS"].includes(method.toUpperCase());
+}
+
+function getResponseMessage(payload: unknown): string | null {
+  if (
+    typeof payload === "object" &&
+    payload !== null &&
+    "message" in payload &&
+    typeof payload.message === "string" &&
+    payload.message.trim() !== ""
+  ) {
+    return payload.message;
+  }
+
+  return null;
+}
+
+function getActionSuccessMessage(
+  method: string | undefined,
+  payload: unknown,
+): string | null {
+  const responseMessage = getResponseMessage(payload);
+  if (responseMessage) return responseMessage;
+
+  switch (method?.toUpperCase()) {
+    case "POST":
+      return "Action completed successfully.";
+    case "PUT":
+    case "PATCH":
+      return "Changes saved successfully.";
+    case "DELETE":
+      return "Removed successfully.";
+    default:
+      return null;
+  }
+}
+
 apiClient.interceptors.response.use(
-  (response) => response,
-  (error: AxiosError<{ message?: string }>) => {
+  (response) => {
+    if (isActionRequest(response.config.method)) {
+      const message = getActionSuccessMessage(
+        response.config.method,
+        response.data,
+      );
+      if (message) toast.success(message);
+    }
+
+    return response;
+  },
+  (error: AxiosError<{ code?: string; message?: string }>) => {
     const message =
       typeof error.response?.data === "object" &&
       error.response.data !== null &&
       typeof error.response.data.message === "string"
         ? error.response.data.message
         : error.message || "Request failed.";
+    const status = error.response?.status ?? 0;
 
-    return Promise.reject(new ApiError(message, error.response?.status ?? 0));
+    if (isActionRequest(error.config?.method) && status !== 422) {
+      toast.error(
+        status === 0
+          ? "Unable to reach the server. Check your connection and try again."
+          : message,
+      );
+    }
+
+    return Promise.reject(new ApiError(message, status, error.response?.data?.code));
   },
 );
 

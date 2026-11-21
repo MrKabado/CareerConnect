@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { Link } from "react-router";
+import EmploymentTenureCounter from "@/features/applications/EmploymentTenureCounter";
 import type {
   Application,
   ApplicationStatus,
@@ -195,6 +196,29 @@ export function ApplicationDetailPanel({
             {statusGuidance[application.status]}
           </p>
         </section>
+
+        {application.status === "Hired" && application.hiredAt ? (
+          <section aria-label="Employment duration" className="rounded-[10px] border border-[#d1eadf] bg-[#f3faf6] p-3">
+            <h3 className="text-[8px] font-bold uppercase tracking-[0.04em] text-[#187850]">
+              Employment
+            </h3>
+            <p className="mt-1.5 text-[9px] text-[#58786b]">
+              Started {new Intl.DateTimeFormat("en-US", { dateStyle: "medium" }).format(new Date(application.hiredAt))}
+            </p>
+            <p className="mt-1 text-[10px] font-semibold text-[#187850]">
+              {application.employmentEndedAt ? "Time employed" : "Current tenure"}:{" "}
+              <EmploymentTenureCounter
+                startedAt={application.hiredAt}
+                endedAt={application.employmentEndedAt}
+              />
+            </p>
+            {application.employmentEndedAt ? (
+              <p className="mt-1 text-[9px] text-[#58786b]">
+                Employment ended {new Intl.DateTimeFormat("en-US", { dateStyle: "medium" }).format(new Date(`${application.employmentEndedAt}T00:00:00`))}
+              </p>
+            ) : null}
+          </section>
+        ) : null}
 
         <section aria-labelledby="application-progress-heading">
           <h3

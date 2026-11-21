@@ -6,19 +6,19 @@ use App\Http\Controllers\Controller;
 use App\Models\ActivityLog;
 use App\Models\IdentityVerification;
 use App\Models\User;
+use App\Services\MediaStorage;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
-use Illuminate\Support\Facades\Storage;
-use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
-use RuntimeException;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 use Symfony\Component\HttpKernel\Exception\ConflictHttpException;
 
 class IdentityVerificationController extends Controller
 {
+    public function __construct(private readonly MediaStorage $mediaStorage) {}
+
     public function status(Request $request): JsonResponse
     {
         $verification = $request->user()->identityVerification;
@@ -39,62 +39,89 @@ class IdentityVerificationController extends Controller
             'document' => ['required', 'file', 'mimes:jpg,jpeg,png,pdf', 'extensions:jpg,jpeg,png,pdf', 'max:5120'],
         ]);
 
-        $oldPath = DB::transaction(function () use ($request): ?string {
-            $user = User::query()->lockForUpdate()->findOrFail($request->user()->id);
-            $verification = IdentityVerification::query()
-                ->where('user_id', $user->id)
-                ->lockForUpdate()
-                ->first();
+        $file = $request->file('document');
+        $stored = $this->mediaStorage->storePrivateFile(
+            $file,
+            'applicant-verifications/'.$request->user()->id,
+            'career-connect/users/'.$request->user()->id.'/identity-verification',
+            $file->extension(),
+        );
 
-            if ($verification !== null && $verification->status !== 'rejected') {
-                throw new ConflictHttpException(
-                    'A verification is already pending or has been approved.',
+        try {
+            $oldStorage = DB::transaction(function () use ($request, $file, $stored): ?array {
+                $user = User::query()->lockForUpdate()->findOrFail($request->user()->id);
+                $verification = IdentityVerification::query()
+                    ->where('user_id', $user->id)
+                    ->lockForUpdate()
+                    ->first();
+
+                if ($verification !== null && $verification->status !== 'rejected') {
+                    throw new ConflictHttpException(
+                        'A verification is already pending or has been approved.',
+                    );
+                }
+
+                if ($verification === null) {
+                    Gate::forUser($user)->authorize('create', IdentityVerification::class);
+                } else {
+                    Gate::forUser($user)->authorize('update', $verification);
+                }
+
+                $oldStorage = $verification === null ? null : [
+                    'disk' => $verification->storage_disk,
+                    'path' => $verification->document_path,
+                    'asset_id' => $verification->cloudinary_asset_id,
+                ];
+
+                $attributes = [
+                    'document_path' => $stored['path'],
+                    'storage_disk' => $stored['disk'],
+                    'cloudinary_asset_id' => $stored['asset_id'],
+                    'document_mime_type' => $file->getMimeType(),
+                    'status' => 'pending',
+                    'rejection_reason' => null,
+                    'reviewed_by' => null,
+                    'reviewed_at' => null,
+                    'expires_at' => null,
+                ];
+
+                if ($verification === null) {
+                    IdentityVerification::create([
+                        ...$attributes,
+                        'user_id' => $user->id,
+                    ]);
+
+                    return null;
+                }
+
+                $verification->update($attributes);
+
+                return $oldStorage;
+            });
+        } catch (\Throwable $exception) {
+            try {
+                $this->mediaStorage->delete(
+                    $stored['disk'],
+                    $stored['path'],
+                    $stored['asset_id'],
+                    'raw',
+                    'authenticated',
                 );
+            } catch (\Throwable $cleanupException) {
+                throw new \RuntimeException('The failed identity document upload could not be cleaned up.', previous: $cleanupException);
             }
 
-            if ($verification === null) {
-                Gate::forUser($user)->authorize('create', IdentityVerification::class);
-            } else {
-                Gate::forUser($user)->authorize('update', $verification);
-            }
+            throw $exception;
+        }
 
-            $oldPath = $verification?->document_path;
-            $file = $request->file('document');
-            $path = $file->storeAs(
-                'applicant-verifications/'.$user->id,
-                Str::uuid().'.'.$file->extension(),
-                'local',
+        if ($oldStorage !== null && $oldStorage['path'] !== null) {
+            $this->mediaStorage->delete(
+                $oldStorage['disk'],
+                $oldStorage['path'],
+                $oldStorage['asset_id'],
+                'raw',
+                'authenticated',
             );
-
-            if ($path === false) {
-                throw new RuntimeException('The identity document could not be stored.');
-            }
-
-            $attributes = [
-                'document_path' => $path,
-                'status' => 'pending',
-                'rejection_reason' => null,
-                'reviewed_by' => null,
-                'reviewed_at' => null,
-                'expires_at' => null,
-            ];
-
-            if ($verification === null) {
-                IdentityVerification::create([
-                    ...$attributes,
-                    'user_id' => $user->id,
-                ]);
-
-                return null;
-            }
-
-            $verification->update($attributes);
-
-            return $oldPath;
-        });
-
-        if ($oldPath !== null) {
-            Storage::disk('local')->delete($oldPath);
         }
 
         return response()->json([
@@ -147,11 +174,19 @@ class IdentityVerificationController extends Controller
     {
         Gate::authorize('view', $identityVerification);
 
-        if ($identityVerification->document_path === null || ! Storage::disk('local')->exists($identityVerification->document_path)) {
+        if ($identityVerification->document_path === null
+            || ! str_starts_with($identityVerification->document_path, 'applicant-verifications/'.$identityVerification->user_id.'/')
+            || preg_match('#^applicant-verifications/[0-9]+/[a-f0-9-]+\.(pdf|jpg|jpeg|png)$#i', $identityVerification->document_path) !== 1) {
             abort(404, 'The identity document is no longer available.');
         }
 
-        return Storage::disk('local')->download($identityVerification->document_path, 'identity-document');
+        return $this->mediaStorage->privateDownload(
+            $identityVerification->storage_disk,
+            $identityVerification->document_path,
+            $identityVerification->cloudinary_asset_id,
+            'identity-document.'.pathinfo($identityVerification->document_path, PATHINFO_EXTENSION),
+            $identityVerification->document_mime_type ?? 'application/octet-stream',
+        );
     }
 
     public function show(IdentityVerification $identityVerification): JsonResponse

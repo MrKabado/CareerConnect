@@ -2,6 +2,7 @@
 
 namespace App\Http\Resources;
 
+use App\Services\MediaStorage;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -44,6 +45,9 @@ class JobListingResource extends JsonResource
                 'name' => $this->company->name,
                 'city' => $this->company->city,
                 'logo_path' => $this->company->logo_path,
+                'logo_url' => $this->company->logo_path
+                    ? app(MediaStorage::class)->publicImageUrl($this->company->logo_disk, $this->company->logo_path)
+                    : null,
             ]),
             'admin_actions' => $this->whenLoaded('adminActions', fn (): array => $this->adminActions
                 ->map(fn ($action): array => [

@@ -1,6 +1,7 @@
 import { useState, type KeyboardEvent } from "react";
 import type { OjtStepProps } from "@/components/features/onboarding/tracks/ojt/steps/ojtStepTypes";
 import {
+  AddItemButton,
   OjtChoice,
   OjtField,
   ojtInputClassName,
@@ -24,8 +25,22 @@ function addToken(
 ) {
   if (event.key !== "Enter") return;
   event.preventDefault();
+  commitToken(value, field, onToggleList, clear, currentItems, limit);
+}
+
+function commitToken(
+  value: string,
+  field: "desiredJobTitles" | "skills",
+  onToggleList: OjtStepProps["onToggleList"],
+  clear: () => void,
+  currentItems: string[],
+  limit?: number,
+) {
   const token = value.trim();
-  if (!token || currentItems.includes(token)) {
+  if (
+    !token ||
+    currentItems.some((item) => item.toLowerCase() === token.toLowerCase())
+  ) {
     clear();
     return;
   }
@@ -52,6 +67,11 @@ function TokenField({
   onToggleList: OjtStepProps["onToggleList"];
 }) {
   const [value, setValue] = useState("");
+  const token = value.trim();
+  const isDuplicate = values.some(
+    (item) => item.toLowerCase() === token.toLowerCase(),
+  );
+  const isAtLimit = limit !== undefined && values.length >= limit;
 
   return (
     <OjtField
@@ -70,24 +90,40 @@ function TokenField({
         </span>
       }
     >
-      <input
-        className={ojtInputClassName}
-        id={`job-${field}`}
-        onChange={(event) => setValue(event.target.value)}
-        onKeyDown={(event) =>
-          addToken(
-            event,
-            value,
-            field,
-            onToggleList,
-            () => setValue(""),
-            values,
-            limit,
-          )
-        }
-        placeholder={placeholder}
-        value={value}
-      />
+      <div className="flex items-center gap-2">
+        <input
+          className={`${ojtInputClassName} min-w-0 flex-1`}
+          id={`job-${field}`}
+          onChange={(event) => setValue(event.target.value)}
+          onKeyDown={(event) =>
+            addToken(
+              event,
+              value,
+              field,
+              onToggleList,
+              () => setValue(""),
+              values,
+              limit,
+            )
+          }
+          placeholder={placeholder}
+          value={value}
+        />
+        <AddItemButton
+          disabled={!token || (isAtLimit && !isDuplicate)}
+          label={field === "desiredJobTitles" ? "job title" : "skill"}
+          onClick={() =>
+            commitToken(
+              value,
+              field,
+              onToggleList,
+              () => setValue(""),
+              values,
+              limit,
+            )
+          }
+        />
+      </div>
       {values.length > 0 && (
         <div className="mt-2 flex flex-wrap gap-2">
           {values.map((item) => (
@@ -121,7 +157,7 @@ export default function JobStep4({
         label="Desired job titles"
         limit={3}
         onToggleList={onToggleList}
-        placeholder="Type a role and press Enter"
+        placeholder="Type a job title"
         values={answers.desiredJobTitles}
       />
       <TokenField
@@ -129,10 +165,10 @@ export default function JobStep4({
         field="skills"
         label="Skills"
         onToggleList={onToggleList}
-        placeholder="Type a skill and press Enter"
+        placeholder="Type a skill"
         values={answers.skills}
       />
-      <OjtField error={errors.experienceLevel} label="Experience level *">
+      <OjtField error={errors.experienceLevel} label="Experience level (optional)">
         <div className="flex flex-wrap gap-2">
           {experienceLevels.map((level) => (
             <OjtChoice

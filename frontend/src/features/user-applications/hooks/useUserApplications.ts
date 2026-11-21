@@ -27,6 +27,8 @@ function toApplication(record: ApplicantApplicationRecord): Application {
     appliedAt: formatAppliedAt(record.applied_at),
     status: applicationStatusLabel(record.status),
     track: record.listing?.listing_type === "ojt" ? "OJT" : "Job",
+    hiredAt: record.hired_at ?? undefined,
+    employmentEndedAt: record.employment_ended_at,
     resumeFileName: record.resume?.original_filename,
     coverLetterFileName: record.cover_letter ? "Cover letter submitted" : undefined,
   };

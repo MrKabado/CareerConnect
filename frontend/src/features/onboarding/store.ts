@@ -1,5 +1,8 @@
 import type { OnboardingErrors } from "@/features/onboarding/schemas";
-import type { OnboardingStepId } from "@/features/onboarding/config/steps";
+import {
+  getOnboardingSteps,
+  type OnboardingStepId,
+} from "@/features/onboarding/config/steps";
 
 export type OnboardingAnswers = {
   name: string;
@@ -81,7 +84,128 @@ const initialState: OnboardingState = {
   submitError: null,
 };
 
-let state = initialState;
+const draftStorageKey = "careerconnect-onboarding-draft";
+const stepIds = new Set<string>([
+  "goal",
+  "create-account",
+  "job-interests",
+  "job-skills",
+  "job-preferences",
+  "school",
+  "interests",
+  "preferences",
+  "resume",
+  "review",
+]);
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function isStringArray(value: unknown): value is string[] {
+  return Array.isArray(value) && value.every((item) => typeof item === "string");
+}
+
+function isOnboardingAnswers(
+  value: Record<string, unknown>,
+): value is OnboardingAnswers {
+  const stringFields = [
+    "name",
+    "email",
+    "password",
+    "passwordConfirmation",
+    "school",
+    "course",
+    "yearLevel",
+    "requiredOjtHours",
+    "experienceLevel",
+    "minimumSalary",
+    "maximumSalary",
+    "preferredStartDate",
+    "allowancePreference",
+    "workSetup",
+  ];
+  const arrayFields = [
+    "trainingFields",
+    "jobCategories",
+    "desiredJobTitles",
+    "employmentTypes",
+    "skills",
+    "preferredLocations",
+  ];
+
+  return (
+    stringFields.every((field) => typeof value[field] === "string") &&
+    arrayFields.every((field) => isStringArray(value[field])) &&
+    typeof value.acceptedTerms === "boolean" &&
+    typeof value.requiresMoa === "boolean" &&
+    typeof value.resumeSkipped === "boolean" &&
+    value.resumeFile === null &&
+    value.coverLetterFile === null &&
+    (value.role === "applicant" || value.role === "employer") &&
+    (value.goal === "job-seeker" || value.goal === "ojt-seeker")
+  );
+}
+
+function readSavedDraft(): OnboardingState {
+  let saved: string | null;
+  try {
+    saved = localStorage.getItem(draftStorageKey);
+  } catch {
+    return {
+      ...initialState,
+      submitError:
+        "We couldn’t access saved progress in this browser. Check your browser storage settings and try again.",
+    };
+  }
+  if (!saved) return initialState;
+
+  let draft: unknown;
+  try {
+    draft = JSON.parse(saved);
+  } catch {
+    return {
+      ...initialState,
+      submitError:
+        "We couldn’t read your saved progress in this browser. You can start again or continue from the beginning.",
+    };
+  }
+
+  if (
+    !isRecord(draft) ||
+    !isRecord(draft.answers) ||
+    !isOnboardingAnswers(draft.answers) ||
+    draft.version !== 1 ||
+    draft.accountCreated !== true ||
+    typeof draft.currentStep !== "string" ||
+    !stepIds.has(draft.currentStep) ||
+    !getOnboardingSteps(draft.answers.goal).some(
+      (step) => step.id === draft.currentStep,
+    )
+  ) {
+    return {
+      ...initialState,
+      submitError:
+        "Your saved progress has an invalid format. You can start again or continue from the beginning.",
+    };
+  }
+
+  return {
+    ...initialState,
+    answers: {
+      ...initialState.answers,
+      ...draft.answers,
+      password: "",
+      passwordConfirmation: "",
+      resumeFile: null,
+      coverLetterFile: null,
+    },
+    currentStep: draft.currentStep as OnboardingStepId,
+    accountCreated: true,
+  };
+}
+
+let state = readSavedDraft();
 const listeners = new Set<() => void>();
 
 function publish(nextState: OnboardingState) {
@@ -185,6 +309,35 @@ export const onboardingStore = {
 
   setSubmitError(submitError: string | null) {
     publish({ ...state, isSubmitting: false, submitError });
+  },
+
+  saveDraft() {
+    const draft = JSON.stringify({
+      version: 1,
+      answers: {
+        ...state.answers,
+        password: "",
+        passwordConfirmation: "",
+        resumeFile: null,
+        coverLetterFile: null,
+      },
+      currentStep: state.currentStep,
+      accountCreated: state.accountCreated,
+    });
+
+    try {
+      localStorage.setItem(draftStorageKey, draft);
+    } catch {
+      publish({
+        ...state,
+        submitError:
+          "We couldn’t save your progress in this browser. Check your browser storage settings and try again.",
+      });
+      return false;
+    }
+
+    publish({ ...state, submitError: null });
+    return true;
   },
 
   complete(completionMessage: string) {

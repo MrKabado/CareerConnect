@@ -25,7 +25,7 @@ export type PublicJobListing = {
   published_at: string | null;
   created_at?: string | null;
   updated_at?: string | null;
-  company?: { name: string; city: string | null; logo_path: string | null } | null;
+  company?: { name: string; city: string | null; logo_path: string | null; logo_url: string | null } | null;
 };
 
 type Paginated<T> = {
