@@ -51,7 +51,12 @@ export default function OjtStep7({ answers, onEdit }: OjtStep7Props) {
       title: "Resume",
       step: "resume",
       rows: [
-        ["File", answers.resumeFile ?? (answers.resumeSkipped ? "Skipped" : null)],
+        [
+          "File",
+          answers.resumeFile ??
+            answers.resumeUploadedFileName ??
+            (answers.resumeSkipped ? "Skipped" : null),
+        ],
       ],
     },
   ];

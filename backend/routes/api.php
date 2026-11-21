@@ -32,12 +32,14 @@ Route::middleware('throttle:5,1')->group(function (): void {
 Route::get('/categories', [CategoryController::class, 'publicIndex']);
 Route::get('/companies/{companySlug}/ratings', [CompanyRatingController::class, 'show']);
 Route::put('/companies/{companySlug}/ratings', [CompanyRatingController::class, 'save'])
-    ->middleware(['auth:sanctum', 'account.active', 'role:applicant', 'throttle:60,1']);
+    ->middleware(['auth:sanctum', 'account.active', 'abilities:*', 'role:applicant', 'throttle:60,1']);
+Route::post('/onboarding/resume', [ApplicantResumeController::class, 'store'])
+    ->middleware(['auth:sanctum', 'account.active', 'abilities:onboarding:resume', 'role:applicant', 'throttle:10,1']);
 Route::get('/jobs', [PublicJobListingController::class, 'index']);
 Route::get('/jobs/{jobListing}', [PublicJobListingController::class, 'show'])
     ->whereNumber('jobListing');
 
-Route::middleware(['auth:sanctum', 'account.active', 'throttle:60,1'])->group(function (): void {
+Route::middleware(['auth:sanctum', 'account.active', 'abilities:*', 'throttle:60,1'])->group(function (): void {
     Route::post('/logout', [AuthController::class, 'logout']);
     Route::get('/user', [AuthController::class, 'me']);
     Route::put('/change-password', [AuthController::class, 'changePassword']);

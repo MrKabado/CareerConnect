@@ -4,8 +4,12 @@ use App\Mail\OtpCodeMail;
 use App\Models\OtpCode;
 use App\Models\User;
 use Illuminate\Foundation\Testing\LazilyRefreshDatabase;
+use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Storage;
 
 uses(LazilyRefreshDatabase::class);
 
@@ -62,6 +66,49 @@ it('defaults registration to applicant', function (): void {
         ->assertJsonPath('user.role', 'applicant');
 });
 
+it('issues a limited resume upload token for new applicants and revokes it after verification', function (): void {
+    Mail::fake();
+    Storage::fake('local');
+    Config::set('careerconnect.media_storage_disk', 'local');
+
+    $registration = $this->postJson('/api/register', [
+        'name' => 'Resume Applicant',
+        'email' => 'resume-applicant@example.com',
+        'password' => 'Password123!',
+        'password_confirmation' => 'Password123!',
+        'role' => 'applicant',
+    ])->assertCreated()
+        ->assertJsonStructure(['onboarding_token'])
+        ->assertJsonMissingPath('token');
+
+    $user = User::where('email', 'resume-applicant@example.com')->firstOrFail();
+    $token = $registration->json('onboarding_token');
+
+    $this->withToken($token)->post('/api/onboarding/resume', [
+        'resume' => UploadedFile::fake()->createWithContent(
+            'resume.pdf',
+            "%PDF-1.4\n1 0 obj\n<< /Type /Catalog >>\nendobj\ntrailer\n<< /Root 1 0 R >>\n%%EOF",
+        ),
+    ])->assertCreated()
+        ->assertJsonPath('data.original_filename', 'resume.pdf');
+
+    $this->withToken($token)->getJson('/api/user')->assertForbidden();
+
+    $code = Mail::sent(OtpCodeMail::class)->first()->code;
+    $this->postJson('/api/otp/verify', [
+        'email' => $user->email,
+        'code' => $code,
+    ])->assertOk()
+        ->assertJsonStructure(['token']);
+
+    $this->assertDatabaseMissing('personal_access_tokens', [
+        'tokenable_id' => $user->id,
+        'name' => 'careerconnect-onboarding-resume',
+    ]);
+    Auth::forgetGuards();
+    $this->withToken($token)->getJson('/api/user')->assertUnauthorized();
+});
+
 it('resumes verification for an existing unverified applicant without changing account details', function (): void {
     Mail::fake();
     $user = User::factory()->unverified()->create([
@@ -77,6 +124,7 @@ it('resumes verification for an existing unverified applicant without changing a
         'role' => 'applicant',
     ])->assertOk()
         ->assertJsonPath('resume_verification', true)
+        ->assertJsonMissingPath('onboarding_token')
         ->assertJsonMissingPath('user');
 
     expect($user->refresh()->name)->toBe('Original Applicant');

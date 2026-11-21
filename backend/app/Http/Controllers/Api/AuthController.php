@@ -81,10 +81,18 @@ class AuthController extends Controller
 
         $user->refresh();
         $this->otpCodes->send($user->email, 'email_verification');
+        $onboardingToken = $user->role === 'applicant'
+            ? $user->createToken(
+                'careerconnect-onboarding-resume',
+                ['onboarding:resume'],
+                now()->addDays(7),
+            )->plainTextToken
+            : null;
 
         return response()->json([
             'message' => 'A verification code has been sent to your email address.',
             'user' => $this->userData($user),
+            ...($onboardingToken === null ? [] : ['onboarding_token' => $onboardingToken]),
         ], 201);
     }
 

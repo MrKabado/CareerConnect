@@ -48,6 +48,15 @@ export default function OnboardingPageView({
           isFirstStep={onboarding.isFirstStep}
           isLastStep={onboarding.isLastStep}
           isSubmitting={onboarding.isSubmitting}
+          submitLabel={
+            onboarding.uploadProgress !== null
+              ? onboarding.uploadProgress > 0
+                ? `Uploading ${onboarding.uploadProgress}%…`
+                : "Starting upload…"
+              : step.id === "create-account"
+                ? "Creating account…"
+                : "Please wait…"
+          }
           onBack={onboarding.back}
           onSaveLater={saveLaterHandler ? onSaveLater : undefined}
           onSkip={skipHandler}
@@ -59,6 +68,8 @@ export default function OnboardingPageView({
             accountCreated={onboarding.accountCreated}
             answers={onboarding.answers}
             errors={onboarding.errors}
+            isResumeUploaded={onboarding.isResumeUploaded}
+            isSubmitting={onboarding.isSubmitting}
             onChange={onboarding.setAnswer}
             onEdit={onboarding.setStep}
             onToggleList={onboarding.toggleListAnswer}

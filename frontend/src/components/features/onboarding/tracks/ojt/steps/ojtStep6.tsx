@@ -11,6 +11,8 @@ const allowedResumeExtensions = /\.(pdf|docx)$/i;
 
 export default function OjtStep6({
   answers,
+  isSubmitting = false,
+  isResumeUploaded = false,
   onChange,
 }: OjtStepProps) {
   const [fileError, setFileError] = useState<string | null>(null);
@@ -36,12 +38,15 @@ export default function OjtStep6({
     setFileError(null);
     onChange("resumeFile", file);
     onChange("resumeSkipped", false);
+    event.target.value = "";
   }
 
   return (
     <div>
       <label
-        className="flex min-h-52 cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed border-[#cbdede] bg-[#fbfdfd] px-5 text-center transition hover:border-[#078b8d] hover:bg-[#f5fbfa]"
+        className={`flex min-h-52 flex-col items-center justify-center rounded-2xl border-2 border-dashed border-[#cbdede] bg-[#fbfdfd] px-5 text-center transition hover:border-[#078b8d] hover:bg-[#f5fbfa] ${
+          isSubmitting ? "cursor-not-allowed opacity-60" : "cursor-pointer"
+        }`}
         htmlFor="ojt-resume-upload"
       >
         <span className="mb-3 grid size-12 place-items-center rounded-full bg-[#e6f7f4] text-[#078b8d]">
@@ -65,6 +70,7 @@ export default function OjtStep6({
           accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
           className="sr-only"
           id="ojt-resume-upload"
+          disabled={isSubmitting}
           onChange={selectResume}
           type="file"
         />
@@ -80,17 +86,26 @@ export default function OjtStep6({
           <span>
             {answers.resumeFile.name} ·{" "}
             {(answers.resumeFile.size / (1024 * 1024)).toFixed(1)} MB
+            {isResumeUploaded ? " · Uploaded" : " · Ready to upload"}
           </span>
-          <button
-            aria-label="Remove resume"
-            className="font-semibold"
-            onClick={() => onChange("resumeFile", null)}
-            type="button"
-          >
-            Remove
-          </button>
+          {!isResumeUploaded ? (
+            <button
+              aria-label="Remove selected resume"
+              className="font-semibold disabled:cursor-not-allowed disabled:opacity-60"
+              disabled={isSubmitting}
+              onClick={() => onChange("resumeFile", null)}
+              type="button"
+            >
+              Remove
+            </button>
+          ) : null}
         </div>
       )}
+      {!answers.resumeFile && answers.resumeUploadedFileName ? (
+        <p className="mt-3 rounded-lg bg-[#edf9f7] px-3 py-2 text-xs text-[#087f87]">
+          Saved to your account: {answers.resumeUploadedFileName}. Choose a new file to replace it.
+        </p>
+      ) : null}
       <p className="mt-4 text-center text-xs leading-5 text-[#718082]">
         Your resume is optional. You can add or update it later from your
         profile.

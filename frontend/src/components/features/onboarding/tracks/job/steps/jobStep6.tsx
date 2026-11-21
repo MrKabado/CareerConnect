@@ -3,6 +3,8 @@ import type { OnboardingAnswers } from "@/features/onboarding/store";
 
 type JobStep6Props = {
   answers: OnboardingAnswers;
+  isSubmitting: boolean;
+  isResumeUploaded: boolean;
   onChange: <Key extends keyof OnboardingAnswers>(
     field: Key,
     value: OnboardingAnswers[Key],
@@ -16,7 +18,12 @@ const allowedTypes = new Set([
   "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
 ]);
 
-export default function JobStep6({ answers, onChange }: JobStep6Props) {
+export default function JobStep6({
+  answers,
+  isSubmitting,
+  isResumeUploaded,
+  onChange,
+}: JobStep6Props) {
   const [fileError, setFileError] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
 
@@ -47,6 +54,7 @@ export default function JobStep6({ answers, onChange }: JobStep6Props) {
   function handleDrop(event: DragEvent<HTMLLabelElement>) {
     event.preventDefault();
     setIsDragging(false);
+    if (isSubmitting) return;
     setResume(event.dataTransfer.files[0]);
   }
 
@@ -57,7 +65,9 @@ export default function JobStep6({ answers, onChange }: JobStep6Props) {
         <span className="font-normal text-[#9ba6a7]">Optional</span>
       </div>
       <label
-        className={`flex min-h-36 cursor-pointer flex-col items-center justify-center rounded-xl border border-dashed px-5 py-5 text-center transition ${
+        className={`flex min-h-36 flex-col items-center justify-center rounded-xl border border-dashed px-5 py-5 text-center transition ${
+          isSubmitting ? "cursor-not-allowed opacity-60" : "cursor-pointer"
+        } ${
           isDragging
             ? "border-[#078b8d] bg-[#edf9f7]"
             : "border-[#cbdede] bg-[#f7fbfa] hover:border-[#078b8d]"
@@ -95,6 +105,7 @@ export default function JobStep6({ answers, onChange }: JobStep6Props) {
           accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
           className="sr-only"
           id="job-resume-upload"
+          disabled={isSubmitting}
           onChange={handleFileChange}
           type="file"
         />
@@ -110,17 +121,26 @@ export default function JobStep6({ answers, onChange }: JobStep6Props) {
           <span>
             {answers.resumeFile.name} ·{" "}
             {(answers.resumeFile.size / (1024 * 1024)).toFixed(1)} MB
+            {isResumeUploaded ? " · Uploaded" : " · Ready to upload"}
           </span>
-          <button
-            aria-label="Remove resume"
-            className="font-semibold"
-            onClick={() => onChange("resumeFile", null)}
-            type="button"
-          >
-            Remove
-          </button>
+          {!isResumeUploaded ? (
+            <button
+              aria-label="Remove selected resume"
+              className="font-semibold disabled:cursor-not-allowed disabled:opacity-60"
+              disabled={isSubmitting}
+              onClick={() => onChange("resumeFile", null)}
+              type="button"
+            >
+              Remove
+            </button>
+          ) : null}
         </div>
       )}
+      {!answers.resumeFile && answers.resumeUploadedFileName ? (
+        <p className="mt-2 rounded-lg bg-[#edf9f7] px-3 py-2 text-xs text-[#087f87]">
+          Saved to your account: {answers.resumeUploadedFileName}. Choose a new file to replace it.
+        </p>
+      ) : null}
       <p className="mt-3 flex items-center gap-2 rounded-xl bg-[#effaf8] px-4 py-3 text-xs leading-5 text-[#718082]">
         <span aria-hidden="true" className="text-[#078b8d]">✦</span>
         Skills found in your resume help us improve the quality of your

@@ -4,6 +4,7 @@ type BackContinueBarProps = {
   canGoBack: boolean;
   isLastStep: boolean;
   isSubmitting: boolean;
+  submitLabel: string;
   onBack: () => void;
   onSaveLater?: () => void;
   onSkip?: () => void;
@@ -14,6 +15,7 @@ export default function BackContinueBar({
   canGoBack,
   isLastStep,
   isSubmitting,
+  submitLabel,
   onBack,
   onSaveLater,
   onSkip,
@@ -67,18 +69,31 @@ export default function BackContinueBar({
         <OnboardingButton
           className="max-[600px]:h-7 max-[600px]:px-4 max-[600px]:text-[10px]"
           disabled={isSubmitting}
+          aria-busy={isSubmitting}
           type="submit"
         >
-          {isSubmitting ? "Saving…" : isLastStep ? "Finish" : "Continue"}
-          <svg aria-hidden="true" className="size-4" fill="none" viewBox="0 0 20 20">
-            <path
-              d="M3 10h13m-5-5 5 5-5 5"
-              stroke="currentColor"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth="1.7"
-            />
-          </svg>
+          {isSubmitting ? (
+            <>
+              <span
+                aria-hidden="true"
+                className="size-4 animate-spin rounded-full border-2 border-current border-r-transparent"
+              />
+              {submitLabel}
+            </>
+          ) : (
+            <>
+              {isLastStep ? "Finish" : "Continue"}
+              <svg aria-hidden="true" className="size-4" fill="none" viewBox="0 0 20 20">
+                <path
+                  d="M3 10h13m-5-5 5 5-5 5"
+                  stroke="currentColor"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth="1.7"
+                />
+              </svg>
+            </>
+          )}
         </OnboardingButton>
       </div>
     </div>

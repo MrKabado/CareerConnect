@@ -28,6 +28,7 @@ export function useOnboarding(onResumeVerification: (email: string) => void) {
 
   const next = useCallback(async () => {
     const currentState = onboardingStore.getSnapshot();
+    if (currentState.isSubmitting) return;
     const currentSteps = getOnboardingSteps(currentState.answers.goal);
     const currentStepIndex = getStepIndex(
       currentState.currentStep,
@@ -54,6 +55,38 @@ export function useOnboarding(onResumeVerification: (email: string) => void) {
       return;
     }
 
+    if (
+      currentState.currentStep === "resume" &&
+      currentState.answers.resumeFile &&
+      !onboardingStore.isResumeUploaded(currentState.answers.resumeFile)
+    ) {
+      if (!currentState.onboardingToken) {
+        onboardingStore.setSubmitError(
+          "Your secure resume upload session is unavailable. Verify your email first, then add your resume from your profile.",
+        );
+        return;
+      }
+
+      onboardingStore.setSubmitting(true);
+      onboardingStore.setUploadProgress(0);
+      try {
+        const uploaded = await onboardingApi.uploadResume(
+          currentState.onboardingToken,
+          currentState.answers.resumeFile,
+          onboardingStore.setUploadProgress,
+        );
+        onboardingStore.markResumeUploaded(uploaded.original_filename);
+      } catch (error) {
+        onboardingStore.setSubmitError(
+          error instanceof Error ? error.message : "Unable to upload your resume.",
+        );
+        return;
+      } finally {
+        onboardingStore.setSubmitting(false);
+        onboardingStore.setUploadProgress(null);
+      }
+    }
+
     if (currentState.currentStep === "create-account") {
       onboardingStore.setSubmitting(true);
 
@@ -69,6 +102,9 @@ export function useOnboarding(onResumeVerification: (email: string) => void) {
         onboardingStore.markAccountCreated();
         const nextStep = currentSteps[currentStepIndex + 1];
         if (nextStep) onboardingStore.setStep(nextStep.id);
+        if (registration.onboarding_token) {
+          onboardingStore.setOnboardingToken(registration.onboarding_token);
+        }
       } catch (error) {
         onboardingStore.setSubmitError(
           error instanceof Error ? error.message : "Unable to create your account.",
@@ -118,6 +154,7 @@ export function useOnboarding(onResumeVerification: (email: string) => void) {
     isLastStep,
     totalSteps: onboardingTotalSteps,
     steps,
+    isResumeUploaded: onboardingStore.isResumeUploaded(state.answers.resumeFile),
     next,
     back,
     skip,

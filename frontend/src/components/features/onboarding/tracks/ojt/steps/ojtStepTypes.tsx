@@ -5,6 +5,8 @@ import type { OnboardingAnswers } from "@/features/onboarding/store";
 export type OjtStepProps = {
   answers: OnboardingAnswers;
   errors: OnboardingErrors;
+  isSubmitting?: boolean;
+  isResumeUploaded?: boolean;
   onChange: <Key extends keyof OnboardingAnswers>(
     field: Key,
     value: OnboardingAnswers[Key],

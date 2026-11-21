@@ -30,6 +30,7 @@ export type OnboardingAnswers = {
   workSetup: string;
   preferredLocations: string[];
   resumeFile: File | null;
+  resumeUploadedFileName: string | null;
   coverLetterFile: File | null;
   resumeSkipped: boolean;
 };
@@ -41,6 +42,9 @@ export type OnboardingState = {
   isSubmitting: boolean;
   isComplete: boolean;
   accountCreated: boolean;
+  onboardingToken: string | null;
+  uploadProgress: number | null;
+  resumeUploadFingerprint: string | null;
   completionMessage: string | null;
   submitError: string | null;
 };
@@ -72,6 +76,7 @@ const initialState: OnboardingState = {
     workSetup: "",
     preferredLocations: [],
     resumeFile: null,
+    resumeUploadedFileName: null,
     coverLetterFile: null,
     resumeSkipped: false,
   },
@@ -80,11 +85,15 @@ const initialState: OnboardingState = {
   isSubmitting: false,
   isComplete: false,
   accountCreated: false,
+  onboardingToken: null,
+  uploadProgress: null,
+  resumeUploadFingerprint: null,
   completionMessage: null,
   submitError: null,
 };
 
 const draftStorageKey = "careerconnect-onboarding-draft";
+const onboardingTokenStorageKey = "careerconnect-onboarding-resume-token";
 const stepIds = new Set<string>([
   "goal",
   "create-account",
@@ -140,6 +149,8 @@ function isOnboardingAnswers(
     typeof value.acceptedTerms === "boolean" &&
     typeof value.requiresMoa === "boolean" &&
     typeof value.resumeSkipped === "boolean" &&
+    (value.resumeUploadedFileName === null ||
+      typeof value.resumeUploadedFileName === "string") &&
     value.resumeFile === null &&
     value.coverLetterFile === null &&
     (value.role === "applicant" || value.role === "employer") &&
@@ -171,15 +182,29 @@ function readSavedDraft(): OnboardingState {
     };
   }
 
+  if (!isRecord(draft) || !isRecord(draft.answers)) {
+    return {
+      ...initialState,
+      submitError:
+        "Your saved progress has an invalid format. You can start again or continue from the beginning.",
+    };
+  }
+
+  const draftAnswers = {
+    ...draft.answers,
+    resumeUploadedFileName:
+      typeof draft.answers.resumeUploadedFileName === "string"
+        ? draft.answers.resumeUploadedFileName
+        : null,
+  };
+
   if (
-    !isRecord(draft) ||
-    !isRecord(draft.answers) ||
-    !isOnboardingAnswers(draft.answers) ||
-    draft.version !== 1 ||
+    !isOnboardingAnswers(draftAnswers) ||
+    (draft.version !== 1 && draft.version !== 2) ||
     draft.accountCreated !== true ||
     typeof draft.currentStep !== "string" ||
     !stepIds.has(draft.currentStep) ||
-    !getOnboardingSteps(draft.answers.goal).some(
+    !getOnboardingSteps(draftAnswers.goal).some(
       (step) => step.id === draft.currentStep,
     )
   ) {
@@ -194,7 +219,7 @@ function readSavedDraft(): OnboardingState {
     ...initialState,
     answers: {
       ...initialState.answers,
-      ...draft.answers,
+      ...draftAnswers,
       password: "",
       passwordConfirmation: "",
       resumeFile: null,
@@ -205,7 +230,19 @@ function readSavedDraft(): OnboardingState {
   };
 }
 
-let state = readSavedDraft();
+function readOnboardingToken(): string | null {
+  try {
+    return sessionStorage.getItem(onboardingTokenStorageKey);
+  } catch {
+    return null;
+  }
+}
+
+function resumeFileFingerprint(file: File): string {
+  return `${file.name}:${file.size}:${file.lastModified}`;
+}
+
+let state = { ...readSavedDraft(), onboardingToken: readOnboardingToken() };
 const listeners = new Set<() => void>();
 
 function publish(nextState: OnboardingState) {
@@ -231,6 +268,10 @@ export const onboardingStore = {
       ...state,
       currentStep: field === "goal" ? "goal" : state.currentStep,
       answers: { ...state.answers, [field]: value },
+      resumeUploadFingerprint:
+        field === "resumeFile" && value !== state.answers.resumeFile
+          ? null
+          : state.resumeUploadFingerprint,
       errors,
       submitError: null,
     });
@@ -293,6 +334,57 @@ export const onboardingStore = {
     publish({ ...state, isSubmitting });
   },
 
+  setUploadProgress(uploadProgress: number | null) {
+    publish({ ...state, uploadProgress });
+  },
+
+  setOnboardingToken(onboardingToken: string) {
+    let submitError: string | null = null;
+    try {
+      sessionStorage.setItem(onboardingTokenStorageKey, onboardingToken);
+    } catch {
+      submitError =
+        "Your resume upload session could not be saved. Keep this tab open until setup is complete.";
+    }
+    publish({ ...state, onboardingToken, submitError });
+  },
+
+  clearOnboardingToken() {
+    try {
+      sessionStorage.removeItem(onboardingTokenStorageKey);
+    } catch {
+      publish({
+        ...state,
+        onboardingToken: null,
+        submitError:
+          "The temporary resume upload session could not be cleared from this browser.",
+      });
+      return;
+    }
+    publish({ ...state, onboardingToken: null });
+  },
+
+  isResumeUploaded(file: File | null) {
+    return file !== null && state.resumeUploadFingerprint === resumeFileFingerprint(file);
+  },
+
+  markResumeUploaded(fileName: string) {
+    publish({
+      ...state,
+      answers: {
+        ...state.answers,
+        resumeUploadedFileName: fileName,
+        resumeSkipped: false,
+      },
+      resumeUploadFingerprint: state.answers.resumeFile
+        ? resumeFileFingerprint(state.answers.resumeFile)
+        : null,
+      uploadProgress: null,
+      isSubmitting: false,
+      submitError: null,
+    });
+  },
+
   markAccountCreated() {
     publish({
       ...state,
@@ -313,7 +405,7 @@ export const onboardingStore = {
 
   saveDraft() {
     const draft = JSON.stringify({
-      version: 1,
+      version: 2,
       answers: {
         ...state.answers,
         password: "",
@@ -356,6 +448,16 @@ export const onboardingStore = {
   },
 
   reset() {
+    try {
+      sessionStorage.removeItem(onboardingTokenStorageKey);
+    } catch {
+      publish({
+        ...initialState,
+        submitError:
+          "The temporary resume upload session could not be cleared from this browser.",
+      });
+      return;
+    }
     publish(initialState);
   },
 };

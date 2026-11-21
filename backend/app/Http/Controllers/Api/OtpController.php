@@ -54,6 +54,7 @@ class OtpController extends Controller
 
             return $user;
         });
+        $user->tokens()->where('name', 'careerconnect-onboarding-resume')->delete();
 
         return response()->json([
             'message' => 'Email verified successfully.',

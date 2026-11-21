@@ -64,7 +64,12 @@ export default function JobStep7({ answers, onEdit }: JobStep7Props) {
       title: "Resume",
       step: "resume",
       rows: [
-        ["File", answers.resumeFile ?? (answers.resumeSkipped ? "Skipped for now" : null)],
+        [
+          "File",
+          answers.resumeFile ??
+            answers.resumeUploadedFileName ??
+            (answers.resumeSkipped ? "Skipped for now" : null),
+        ],
       ],
     },
   ];

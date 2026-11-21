@@ -5,6 +5,7 @@ import JobStep4 from "@/components/features/onboarding/tracks/job/steps/jobStep4
 import JobStep5 from "@/components/features/onboarding/tracks/job/steps/jobStep5";
 import JobStep6 from "@/components/features/onboarding/tracks/job/steps/jobStep6";
 import JobStep7 from "@/components/features/onboarding/tracks/job/steps/jobStep7";
+import OjtStep6 from "@/components/features/onboarding/tracks/ojt/steps/ojtStep6";
 import OjtStep3 from "@/components/features/onboarding/tracks/ojt/steps/ojtStep3";
 import OjtStep4 from "@/components/features/onboarding/tracks/ojt/steps/ojtStep4";
 import OjtStep5 from "@/components/features/onboarding/tracks/ojt/steps/ojtStep5";
@@ -18,6 +19,8 @@ type OnboardingStepContentProps = {
   answers: OnboardingAnswers;
   errors: OnboardingErrors;
   accountCreated: boolean;
+  isSubmitting: boolean;
+  isResumeUploaded: boolean;
   onChange: <Key extends keyof OnboardingAnswers>(
     field: Key,
     value: OnboardingAnswers[Key],
@@ -40,6 +43,8 @@ export default function OnboardingStepContent({
   answers,
   errors,
   accountCreated,
+  isSubmitting,
+  isResumeUploaded,
   onChange,
   onToggleList,
   onEdit,
@@ -108,9 +113,20 @@ export default function OnboardingStepContent({
         />
       );
     case "resume":
-      return (
+      return answers.goal === "ojt-seeker" ? (
+        <OjtStep6
+          answers={answers}
+          errors={errors}
+          isSubmitting={isSubmitting}
+          isResumeUploaded={isResumeUploaded}
+          onChange={onChange}
+          onToggleList={onToggleList}
+        />
+      ) : (
         <JobStep6
           answers={answers}
+          isSubmitting={isSubmitting}
+          isResumeUploaded={isResumeUploaded}
           onChange={onChange}
         />
       );

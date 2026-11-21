@@ -28,6 +28,7 @@ type RegistrationResponse = {
   message: string;
   user?: AuthUser;
   resume_verification?: boolean;
+  onboarding_token?: string;
 };
 
 type LoginResponse = {

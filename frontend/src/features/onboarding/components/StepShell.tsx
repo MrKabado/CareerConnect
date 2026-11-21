@@ -12,6 +12,7 @@ type StepShellProps = {
   isFirstStep: boolean;
   isLastStep: boolean;
   isSubmitting: boolean;
+  submitLabel: string;
   submitError: string | null;
   onBack: () => void;
   onSaveLater?: () => void;
@@ -26,6 +27,7 @@ export default function StepShell({
   isFirstStep,
   isLastStep,
   isSubmitting,
+  submitLabel,
   submitError,
   onBack,
   onSaveLater,
@@ -66,6 +68,7 @@ export default function StepShell({
             canGoBack={!isFirstStep}
             isLastStep={isLastStep}
             isSubmitting={isSubmitting}
+            submitLabel={submitLabel}
             onBack={onBack}
             onSaveLater={onSaveLater}
             onSkip={onSkip}

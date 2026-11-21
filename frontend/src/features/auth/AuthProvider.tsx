@@ -12,6 +12,7 @@ import {
   type LoginCredentials,
 } from "@/features/auth/api";
 import { AuthContext, type AuthContextValue } from "@/features/auth/AuthContext";
+import { onboardingStore } from "@/features/onboarding/store";
 
 const TOKEN_STORAGE_KEY = "careerconnect-token";
 
@@ -130,6 +131,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const verifyEmail = useCallback(async (email: string, code: string) => {
     const response = await authApi.verifyEmail(email, code);
+    onboardingStore.clearOnboardingToken();
     clearStoredToken();
     sessionStorage.setItem(TOKEN_STORAGE_KEY, response.token);
     setToken(response.token);

@@ -41,6 +41,28 @@ export const applicantFilesApi = {
     return response.data;
   },
 
+  async uploadOnboardingResume(
+    token: string,
+    file: File,
+    onProgress: (progress: number) => void,
+  ): Promise<ApplicantResumeFile> {
+    const formData = new FormData();
+    formData.set("resume", file);
+    const response = await apiRequest<ResumeResponse>(
+      "/onboarding/resume",
+      {
+        method: "POST",
+        data: formData,
+        onUploadProgress: (event) => {
+          if (event.total) onProgress(Math.round((event.loaded / event.total) * 100));
+        },
+      },
+      token,
+    );
+    if (!response.data) throw new Error("The server did not return the uploaded resume.");
+    return response.data;
+  },
+
   async deleteResume(token: string): Promise<void> {
     await apiRequest("/applicant/resume", { method: "DELETE" }, token);
   },
