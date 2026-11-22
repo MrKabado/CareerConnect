@@ -40,36 +40,12 @@ class EmployerVerificationController extends Controller
 
         $verifications = CompanyVerification::query()
             ->with(['company.user:id,name,email'])
-            ->when(isset($validated['status']), fn ($query, string $status) => $query->where('status', $status))
+            ->when(
+                isset($validated['status']),
+                fn ($query) => $query->where('status', $validated['status']),
+            )
             ->latest('updated_at')
             ->paginate(min(max($request->integer('per_page', 15), 1), 50));
-
-        $companyVerification->loadMissing(['company.user']);
-        $employer = $companyVerification->company?->user;
-        if ($employer !== null) {
-            $approved = $companyVerification->fresh()->status === 'verified';
-            $title = $approved ? 'Company verification approved' : 'Company verification needs changes';
-            $message = $approved
-                ? 'Congratulations! '.$companyVerification->company->name.' was approved. You can now access your employer account.'
-                : 'Your company verification was rejected: '.$companyVerification->fresh()->rejection_reason;
-            app(NotificationService::class)->send(
-                $employer,
-                'employer_verification_'.$companyVerification->fresh()->status,
-                $title,
-                $message,
-                [
-                    'dedupe_key' => 'employer_verification_review-'.$companyVerification->id,
-                    'company_id' => $companyVerification->company_id,
-                    'company_name' => $companyVerification->company->name,
-                    'verification_status' => $companyVerification->fresh()->status,
-                ],
-            );
-            Mail::to($employer->email)->send(new RoleNotificationMail(
-                $title,
-                $message,
-                $employer->name,
-            ));
-        }
 
         return response()->json([
             'data' => $verifications->getCollection()->map(fn (CompanyVerification $verification): array => [
@@ -88,6 +64,7 @@ class EmployerVerificationController extends Controller
                 'rejection_note' => $verification->rejection_note,
                 'reviewed_at' => $verification->reviewed_at?->toISOString(),
                 'submitted_at' => $verification->submitted_at?->toISOString(),
+                'registration_date' => $verification->company->user->created_at?->toISOString(),
             ]),
             'links' => $verifications->linkCollection(),
             'meta' => [
@@ -106,10 +83,14 @@ class EmployerVerificationController extends Controller
         $verification = $company?->verification;
         $accessToken = $request->user()->currentAccessToken();
         $tokenAbilities = $accessToken?->abilities ?? [];
+        $profileStrength = $company !== null
+            ? $this->profileStrength($company)
+            : ['percent' => 0, 'missing' => ['Company profile']];
 
         return response()->json([
             'status' => $verification?->status ?? 'incomplete',
             'company_profile_complete' => $company !== null && $this->isProfileComplete($company),
+            'profile_strength' => $profileStrength,
             'requires_reauthentication' => $verification?->status === 'verified'
                 && (
                     in_array(self::REAUTHENTICATION_ABILITY, $tokenAbilities, true)
@@ -147,6 +128,7 @@ class EmployerVerificationController extends Controller
                 'rejection_note' => $companyVerification->rejection_note,
                 'submitted_at' => $companyVerification->submitted_at?->toISOString(),
                 'reviewed_at' => $companyVerification->reviewed_at?->toISOString(),
+                'registration_date' => $company->user->created_at?->toISOString(),
                 'company' => [
                     'id' => $company->id,
                     'name' => $company->name,
@@ -633,6 +615,10 @@ class EmployerVerificationController extends Controller
         if ($companyVerification->status !== 'pending') {
             throw new ConflictHttpException('Only pending company verifications can be reviewed.');
         }
+        if ($validated['status'] === 'verified'
+            && (! $this->hasRequiredDocuments($companyVerification->load('documents')))) {
+            throw new ConflictHttpException('Required verification documents must be submitted before approval.');
+        }
 
         DB::transaction(function () use ($companyVerification, $request, $validated): void {
             $verification = CompanyVerification::query()
@@ -672,17 +658,48 @@ class EmployerVerificationController extends Controller
             ]);
         });
 
+        $reviewedVerification = $companyVerification->fresh(['company.user']);
+        $employer = $reviewedVerification?->company?->user;
+        if ($reviewedVerification !== null && $employer !== null) {
+            $approved = $reviewedVerification->status === 'verified';
+            $title = $approved ? 'Company verification approved' : 'Company verification needs changes';
+            $message = $approved
+                ? 'Congratulations! '.$reviewedVerification->company->name.' was approved. You can now access your employer account.'
+                : 'Your company verification was rejected: '.$reviewedVerification->rejection_reason;
+            app(NotificationService::class)->send(
+                $employer,
+                'employer_verification_'.$reviewedVerification->status,
+                $title,
+                $message,
+                [
+                    'dedupe_key' => 'employer_verification_review-'.$reviewedVerification->id,
+                    'company_id' => $reviewedVerification->company_id,
+                    'company_name' => $reviewedVerification->company->name,
+                    'verification_status' => $reviewedVerification->status,
+                ],
+            );
+            Mail::to($employer->email)->send(new RoleNotificationMail(
+                $title,
+                $message,
+                $employer->name,
+            ));
+        }
+
         return response()->json([
             'message' => 'Company verification review recorded.',
-            'status' => $companyVerification->fresh()->status,
-            'rejection_reason' => $companyVerification->fresh()->rejection_reason,
-            'rejection_note' => $companyVerification->fresh()->rejection_note,
+            'status' => $reviewedVerification?->status,
+            'rejection_reason' => $reviewedVerification?->rejection_reason,
+            'rejection_note' => $reviewedVerification?->rejection_note,
         ]);
     }
 
-    public function documentDownload(VerificationDocument $document): StreamedResponse
+    public function documentDownload(Request $request, VerificationDocument $document): StreamedResponse
     {
-        $user = auth()->user();
+        $user = $request->user();
+        if (! $user instanceof User) {
+            abort(401);
+        }
+
         $company = $document->companyVerification->company;
 
         if ($user->role === 'admin' || $user->id === $company->user_id) {
@@ -715,6 +732,51 @@ class EmployerVerificationController extends Controller
         ]);
     }
 
+    protected function profileStrength(Company $company): array
+    {
+        $fields = [
+            'Company name' => trim((string) $company->name) !== '',
+            'Company description' => trim((string) $company->description) !== '' && strlen(trim((string) $company->description)) >= 100,
+            'Industry' => trim((string) $company->industry) !== '',
+            'Company size' => trim((string) $company->company_size) !== '',
+            'Location' => trim((string) $company->address) !== ''
+                && trim((string) $company->city) !== ''
+                && in_array($company->country, self::isoCountryCodes(), true),
+            'Website' => filter_var($company->website, FILTER_VALIDATE_URL) !== false,
+            'Company logo' => trim((string) $company->logo_path) !== '',
+            'Contact information' => trim((string) $company->contact_name) !== ''
+                && filter_var($company->contact_email, FILTER_VALIDATE_EMAIL) !== false
+                && $company->contact_phone !== null
+                && $this->isValidPhoneNumber($company->contact_phone),
+        ];
+
+        $weights = [
+            'Company name' => 15,
+            'Company description' => 15,
+            'Industry' => 10,
+            'Company size' => 10,
+            'Location' => 15,
+            'Website' => 10,
+            'Company logo' => 15,
+            'Contact information' => 10,
+        ];
+
+        $percent = 0;
+        $missing = [];
+        foreach ($fields as $label => $complete) {
+            if ($complete) {
+                $percent += $weights[$label];
+            } else {
+                $missing[] = $label;
+            }
+        }
+
+        return [
+            'percent' => $percent,
+            'missing' => $missing,
+        ];
+    }
+
     protected function isProfileComplete(Company $company): bool
     {
         return $company->name !== null
@@ -727,7 +789,10 @@ class EmployerVerificationController extends Controller
             && $company->contact_phone !== null
             && $this->isValidPhoneNumber($company->contact_phone)
             && $company->contact_email !== null
-            && $company->description !== null;
+            && $company->description !== null
+            && trim((string) $company->description) !== ''
+            && $company->industry !== null
+            && trim((string) $company->industry) !== '';
     }
 
     protected function hasRequiredDocuments(CompanyVerification $verification): bool
@@ -770,7 +835,11 @@ class EmployerVerificationController extends Controller
             return;
         }
 
-        $verification->status = $this->statusForVerification($company, $verification);
+        if (in_array($verification->status, ['pending', 'verified', 'rejected'], true)) {
+            return;
+        }
+
+        $verification->status = 'incomplete';
         $verification->save();
     }
 

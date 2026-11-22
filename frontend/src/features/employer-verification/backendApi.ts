@@ -90,6 +90,10 @@ export const employerVerificationFilesApi = {
     return apiRequest<{
       status: "incomplete" | "pending" | "verified" | "rejected";
       company_profile_complete: boolean;
+      profile_strength: {
+        percent: number;
+        missing: string[];
+      };
       requires_reauthentication: boolean;
       rejection_reason: string | null;
       rejection_note: string | null;

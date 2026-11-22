@@ -21,6 +21,7 @@ function canAccess(
 ) {
   if (access === "register") return status === null;
   if (access === "verify-email") return status === "email_unverified";
+  if (access === "company-info") return status === "docs_required" || status === "rejected";
   if (access === "verification") return status === "docs_required" || status === "rejected";
   if (access === "under-review") return status === "pending_review";
   return status === "approved";
@@ -49,13 +50,14 @@ export default function RequireEmployerStatus({
   const isAuthenticatedEmployer = user?.role === "employer";
   const usesBackendStatus =
     isAuthenticatedEmployer &&
-    (access === "verification" || access === "under-review" || access === "dashboard");
+    (access === "company-info" || access === "verification" || access === "under-review" || access === "dashboard");
 
   useEffect(() => {
     if (!usesBackendStatus || !token) return;
 
     let active = true;
     const loadStatus = () => {
+      setIsServerStatusLoading(true);
       void employerVerificationFilesApi.status(token)
       .then((response) => {
         if (active) {
@@ -162,6 +164,16 @@ export default function RequireEmployerStatus({
 
     if (serverStatus === "verified" && requiresReauthentication) {
       return <Navigate replace to="/employer/approved" />;
+    }
+
+    if (access === "company-info") {
+      if (serverStatus === "incomplete" || serverStatus === "rejected") return children;
+      return (
+        <Navigate
+          replace
+          to={serverStatus === "pending" ? "/employer/under-review" : "/employer/overview"}
+        />
+      );
     }
 
     if (access === "verification") {

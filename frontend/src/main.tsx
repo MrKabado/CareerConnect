@@ -103,7 +103,7 @@ createRoot(document.getElementById("root")!).render(
             element={
               <RequireAuth>
                 <RequireRole role="employer">
-                  <RequireEmployerStatus access="verification">
+                  <RequireEmployerStatus access="company-info">
                     <EmployerCompanyInformationPage />
                   </RequireEmployerStatus>
                 </RequireRole>

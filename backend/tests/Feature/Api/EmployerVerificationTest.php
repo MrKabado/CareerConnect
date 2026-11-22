@@ -33,6 +33,7 @@ it('allows employers to manage their company profile, logo, and verification sta
         'address' => '123 Main St',
         'country' => 'PH',
         'city' => 'Cebu City',
+        'industry' => 'Information Technology',
         'website' => 'https://acmetech.test',
         'description' => 'A growing software company',
         'contact_name' => 'Jane Doe',
@@ -310,6 +311,27 @@ it('rejects invalid employer verification file types and files above the limit',
         ->assertJsonValidationErrors('document');
 });
 
+it('lets admins list company verification submissions', function (): void {
+    $admin = User::factory()->create(['role' => 'admin']);
+    $employer = User::factory()->create(['role' => 'employer']);
+    $company = Company::create([
+        'user_id' => $employer->id,
+        'name' => 'Listed Company',
+    ]);
+    CompanyVerification::create([
+        'company_id' => $company->id,
+        'status' => 'pending',
+        'submitted_at' => now(),
+    ]);
+
+    $this->withToken($admin->createToken('admin')->plainTextToken)
+        ->getJson('/api/admin/company-verifications')
+        ->assertOk()
+        ->assertJsonPath('data.0.company.name', 'Listed Company')
+        ->assertJsonPath('data.0.status', 'pending')
+        ->assertJsonPath('data.0.company.owner.email', $employer->email);
+});
+
 it('lets admin review company verification submissions and reject them with reasons', function (): void {
     $employer = User::factory()->create(['role' => 'employer']);
     $admin = User::factory()->create(['role' => 'admin']);
@@ -365,6 +387,24 @@ it('requires employers with a pre-approval session to sign in again after approv
         'company_id' => $company->id,
         'status' => 'pending',
         'submitted_at' => now(),
+    ]);
+    VerificationDocument::create([
+        'company_verification_id' => $verification->id,
+        'type' => 'business_registration',
+        'file_path' => 'employer-verifications/1/registration.pdf',
+        'original_filename' => 'registration.pdf',
+        'mime_type' => 'application/pdf',
+        'size_bytes' => 100,
+        'storage_disk' => 'local',
+    ]);
+    VerificationDocument::create([
+        'company_verification_id' => $verification->id,
+        'type' => 'business_permit',
+        'file_path' => 'employer-verifications/1/permit.pdf',
+        'original_filename' => 'permit.pdf',
+        'mime_type' => 'application/pdf',
+        'size_bytes' => 100,
+        'storage_disk' => 'local',
     ]);
     $oldToken = $employer->createToken('employer-before-approval')->plainTextToken;
     $adminToken = $admin->createToken('admin')->plainTextToken;

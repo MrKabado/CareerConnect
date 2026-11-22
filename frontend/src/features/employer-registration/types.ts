@@ -41,6 +41,7 @@ export type EmployerRegistrationInput = Omit<
 export type EmployerRouteAccess =
   | "register"
   | "verify-email"
+  | "company-info"
   | "verification"
   | "under-review"
   | "dashboard";

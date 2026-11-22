@@ -19,6 +19,8 @@ import { useCompanyVerification } from "@/features/company-verification/useCompa
 import { useDialogBehavior } from "@/hooks/useDialogBehavior";
 import { useAuth } from "@/features/auth/useAuth";
 import { employerVerificationFilesApi } from "@/features/employer-verification/backendApi";
+import ProfileStrengthCard from "@/features/company-profile/components/ProfileStrengthCard";
+import { computeProfileStrength } from "@/features/company-profile/strength";
 
 const inputClassName = "w-full rounded-xl border border-[#dfe8e7] bg-white px-3 py-2.5 text-sm text-[#344749] outline-none focus:border-[#078b8d] focus:ring-2 focus:ring-[#078b8d]/15";
 const cardEditButtonClass = "text-[10px] font-semibold text-[#087879] underline underline-offset-2";
@@ -349,6 +351,32 @@ export default function EmployerCompanyProfilePage() {
     }
   }
 
+  const profileStrength = computeProfileStrength(
+    {
+      name: profile.name,
+      industry: profile.industry,
+      teamSize: profile.teamSize,
+      website: serverWebsite,
+      overview: profile.overview,
+      location: profile.location,
+      contactEmail: profile.hiringEmail,
+      contactPhone: profile.contactNumber,
+      locations: profile.locations,
+      benefits: profile.benefits,
+      cultureSummary: profile.cultureSummary,
+      lifeAt: profile.lifeAt,
+    },
+    {
+      logo: employerLogoUrl
+        ? { id: "company-logo", url: employerLogoUrl, altText: `${profile.name} logo` }
+        : null,
+      banner: null,
+      gallery: [],
+      videoUrl: "",
+      coverImageId: null,
+    },
+  );
+
   return (
     <EmployerWorkspaceLayout>
       <main className="mx-auto w-full max-w-[1136px] flex-1 px-10 py-6 max-[920px]:px-6 max-[680px]:px-4 max-[680px]:py-5">
@@ -383,6 +411,10 @@ export default function EmployerCompanyProfilePage() {
                 Preview public profile
               </Link>
               </div>
+            </div>
+
+            <div className="mb-5">
+              <ProfileStrengthCard strength={profileStrength} />
             </div>
 
             <section className="rounded-[18px] border border-[#dfeae8] bg-white p-4 shadow-[0_10px_20px_rgba(27,54,52,0.03)] md:p-5">

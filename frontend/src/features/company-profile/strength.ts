@@ -27,8 +27,11 @@ export const profileStrengthConfig: readonly ProfileStrengthConfigItem[] = [
       profile.industry.trim().length > 0 &&
       profile.teamSize.trim().length > 0 &&
       Boolean(profile.website?.trim()) &&
+      Boolean(profile.location?.trim()) &&
+      Boolean(profile.contactEmail?.trim()) &&
+      Boolean(profile.contactPhone?.trim()) &&
       profile.overview.trim().length >= 100,
-    hint: "Add your company name, industry, size, website, and a description of at least 100 characters.",
+    hint: "Add your company name, industry, size, location, website, contact details, and a description of at least 100 characters.",
   },
   {
     id: "hiring_locations",

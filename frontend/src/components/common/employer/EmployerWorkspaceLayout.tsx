@@ -1,10 +1,8 @@
 import { Menu, X } from "lucide-react";
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Link, useLocation, useNavigate } from "react-router";
 import Footer from "@/components/common/user/userFooter";
 import { useAuth } from "@/features/auth/useAuth";
-import { getEmployerMessagingActor } from "@/features/messaging/api";
-import { useUnreadCount } from "@/features/messaging/hooks";
 import { employerVerificationFilesApi } from "@/features/employer-verification/backendApi";
 import RoleNotificationBell from "@/features/notifications/RoleNotificationBell";
 
@@ -19,9 +17,6 @@ function EmployerHeader() {
   const { pathname } = useLocation();
   const navigate = useNavigate();
   const { user, token, logout } = useAuth();
-  const messagingActor = useMemo(() => getEmployerMessagingActor(user), [user]);
-  const { unreadCount } = useUnreadCount(messagingActor);
-  const messagesActive = pathname === "/employer/messages" || pathname.startsWith("/employer/messages/");
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
   const [logoutError, setLogoutError] = useState<string | null>(null);
@@ -130,23 +125,6 @@ function EmployerHeader() {
           {mobileMenuOpen ? <X size={20} /> : <Menu size={20} />}
         </button>
         <RoleNotificationBell role="employer" />
-        <Link
-          aria-current={messagesActive ? "page" : undefined}
-          aria-label={`Messages${unreadCount > 0 ? `, ${unreadCount} unread` : ""}`}
-          className={`relative inline-flex size-9 items-center justify-center rounded-full transition focus-visible:outline-[3px] focus-visible:outline-[#67c9c1] focus-visible:outline-offset-[3px] ${messagesActive || unreadCount > 0 ? "bg-[#e6f4f0] text-[#087879]" : "text-[#65787a] hover:bg-[#f1f6f5] hover:text-[#087879]"}`}
-          to="/employer/messages"
-          title="Messages"
-        >
-          <svg aria-hidden="true" className="size-[18px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
-            <rect x="3" y="5" width="18" height="14" rx="2" />
-            <path d="m3 7 9 6 9-6" />
-          </svg>
-          {unreadCount > 0 && (
-            <span aria-hidden="true" className="absolute top-0 right-0 grid min-h-4 min-w-4 place-items-center rounded-full bg-[#d94a3d] px-1 text-[9px] font-bold leading-none text-white">
-              {unreadCount > 9 ? "9+" : unreadCount}
-            </span>
-          )}
-        </Link>
         <button
           aria-expanded={accountMenuOpen}
           aria-haspopup="menu"
@@ -207,18 +185,6 @@ function EmployerHeader() {
               </Link>
             );
           })}
-          <Link
-            aria-current={messagesActive ? "page" : undefined}
-            className={`block rounded-lg px-3 py-3 text-sm font-medium ${
-              messagesActive
-                ? "bg-[#eef7f6] text-[#087879]"
-                : "text-[#687b7e] hover:bg-[#f5f8f8]"
-            }`}
-            onClick={() => setMobileMenuOpen(false)}
-            to="/employer/messages"
-          >
-            Messages{unreadCount > 0 ? ` (${unreadCount} unread)` : ""}
-          </Link>
         </nav>
       )}
     </header>

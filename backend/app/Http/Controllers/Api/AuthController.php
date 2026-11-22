@@ -101,7 +101,10 @@ class AuthController extends Controller
             $user = DB::transaction(function () use ($validated, $companyData): User {
                 $user = User::create($validated);
                 if ($companyData !== null) {
-                    $user->company()->create($companyData);
+                    $company = $user->company()->create($companyData);
+                    $company->verification()->create([
+                        'status' => 'incomplete',
+                    ]);
                 }
 
                 return $user;

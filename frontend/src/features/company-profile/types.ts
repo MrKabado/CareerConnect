@@ -18,6 +18,9 @@ export type CompanyProfileStrengthInput = {
   teamSize: string;
   website?: string;
   overview: string;
+  location?: string;
+  contactEmail?: string;
+  contactPhone?: string;
   locations?: ReadonlyArray<{ city: string; label: string }>;
   benefits?: ReadonlyArray<string>;
   cultureSummary?: string;

@@ -26,30 +26,6 @@ class IdentityVerificationController extends Controller
     {
         $verification = $request->user()->identityVerification;
 
-        $identityVerification->loadMissing('user');
-        $applicant = $identityVerification->user;
-        $approved = $reviewedVerification->status === 'verified';
-        $title = $approved ? 'Identity verification approved' : 'Identity verification needs changes';
-        $message = $approved
-            ? 'Congratulations! Your identity verification was approved.'
-            : 'Your identity verification was rejected: '.$reviewedVerification->rejection_reason;
-        app(NotificationService::class)->send(
-            $applicant,
-            'applicant_identity_'.$reviewedVerification->status,
-            $title,
-            $message,
-            [
-                'dedupe_key' => 'applicant_identity_review-'.$reviewedVerification->id,
-                'identity_verification_id' => $reviewedVerification->id,
-                'verification_status' => $reviewedVerification->status,
-            ],
-        );
-        Mail::to($applicant->email)->send(new RoleNotificationMail(
-            $title,
-            $message,
-            $applicant->name,
-        ));
-
         return response()->json([
             'verification' => $verification === null ? null : [
                 'status' => $verification->status,
@@ -299,6 +275,32 @@ class IdentityVerificationController extends Controller
 
             return $verification;
         });
+
+        $reviewedVerification->loadMissing('user');
+        $applicant = $reviewedVerification->user;
+        if ($applicant !== null) {
+            $approved = $reviewedVerification->status === 'verified';
+            $title = $approved ? 'Identity verification approved' : 'Identity verification needs changes';
+            $message = $approved
+                ? 'Congratulations! Your identity verification was approved.'
+                : 'Your identity verification was rejected: '.$reviewedVerification->rejection_reason;
+            app(NotificationService::class)->send(
+                $applicant,
+                'applicant_identity_'.$reviewedVerification->status,
+                $title,
+                $message,
+                [
+                    'dedupe_key' => 'applicant_identity_review-'.$reviewedVerification->id,
+                    'identity_verification_id' => $reviewedVerification->id,
+                    'verification_status' => $reviewedVerification->status,
+                ],
+            );
+            Mail::to($applicant->email)->send(new RoleNotificationMail(
+                $title,
+                $message,
+                $applicant->name,
+            ));
+        }
 
         return response()->json([
             'message' => 'Identity verification review recorded.',
