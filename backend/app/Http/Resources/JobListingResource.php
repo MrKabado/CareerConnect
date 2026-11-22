@@ -25,6 +25,13 @@ class JobListingResource extends JsonResource
             'required_skills' => $this->required_skills ?? [],
             'experience_required' => $this->experience_required ?? false,
             'minimum_experience_years' => $this->minimum_experience_years,
+            'applicant_limit' => $this->applicant_limit,
+            'applicant_count' => $this->relationLoaded('applications') ? $this->applications->count() : $this->applications()->count(),
+            'expires_at' => $this->expires_at?->toISOString(),
+            'custom_category_name' => $this->custom_category_name,
+            'approval_status' => $this->approval_status ?? 'not_required',
+            'approval_reason' => $this->approval_reason,
+            'approval_reviewed_at' => $this->approval_reviewed_at?->toISOString(),
             'category' => $this->whenLoaded('category', fn (): array => [
                 'id' => $this->category->id,
                 'name' => $this->category->name,

@@ -7,6 +7,7 @@ const navItems = [
   { label: "Reports", to: "/admin", icon: null },
   { label: "Verifications", to: "/admin/verifications", icon: BriefcaseBusiness, badge: true },
   { label: "Categories", to: "/admin/categories", icon: Grid2X2 },
+  { label: "Job Approvals", to: "/admin/job-approvals", icon: BriefcaseBusiness },
   { label: "Users", to: "/admin/users", icon: Users },
 ] as const;
 

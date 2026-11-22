@@ -23,6 +23,12 @@ class JobListing extends Model
         'work_setup',
         'experience_required',
         'minimum_experience_years',
+        'applicant_limit',
+        'expires_at',
+        'custom_category_name',
+        'approval_status',
+        'approval_reason',
+        'approval_reviewed_at',
         'employment_type',
         'salary_min',
         'salary_max',
@@ -39,6 +45,9 @@ class JobListing extends Model
             'experience_required' => 'boolean',
             'minimum_experience_years' => 'integer',
             'published_at' => 'datetime',
+            'expires_at' => 'datetime',
+            'applicant_limit' => 'integer',
+            'approval_reviewed_at' => 'datetime',
         ];
     }
 
@@ -77,6 +86,9 @@ class JobListing extends Model
         return $query
             ->where('status', 'open')
             ->whereNotNull('published_at')
+            ->where(function (Builder $query): void {
+                $query->whereNull('expires_at')->orWhere('expires_at', '>', now());
+            })
             ->whereHas('category', fn (Builder $category): Builder => $category->where('is_active', true))
             ->whereHas('company', function (Builder $company): void {
                 $company
@@ -88,8 +100,14 @@ class JobListing extends Model
 
     public function canReceiveApplications(): bool
     {
+        $limit = $this->applicant_limit
+            ?? ($this->listing_type === 'ojt' ? $this->ojtDetails?->slots : null);
+        $atLimit = $limit !== null && $this->applications()->count() >= (int) $limit;
+
         return $this->status === 'open'
             && $this->published_at !== null
+            && ! $atLimit
+            && ($this->expires_at === null || $this->expires_at->isFuture())
             && $this->company?->is_verified === true
             && $this->company?->user?->account_status === 'active'
             && $this->company?->verification?->status === 'verified'

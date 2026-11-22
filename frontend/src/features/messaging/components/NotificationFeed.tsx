@@ -1,5 +1,12 @@
 import { Link } from "react-router";
 import type { NotificationItem } from "@/features/messaging/types";
+import { BriefcaseBusiness, CalendarCheck, Mail } from "lucide-react";
+
+function notificationIcon(item: NotificationItem) {
+  if (item.event?.startsWith("interview")) return CalendarCheck;
+  if (item.event === "applicant_hired") return BriefcaseBusiness;
+  return Mail;
+}
 
 function relativeTime(value: string): string {
   const elapsedSeconds = Math.max(0, Math.floor((Date.now() - new Date(value).getTime()) / 1000));
@@ -61,6 +68,9 @@ export default function NotificationFeed({
           </p>
         )}
         {!error && !loading && items.map((item) => (
+          (() => {
+            const Icon = notificationIcon(item);
+            return (
           <Link
             className="flex gap-3 border-b border-[#f0f3f3] px-5 py-4 transition hover:bg-[#f7fbfa] focus-visible:outline-[3px] focus-visible:outline-inset focus-visible:outline-[#67c9c1]"
             key={item.id}
@@ -68,15 +78,19 @@ export default function NotificationFeed({
               onNotificationOpen?.(item);
               onClose();
             }}
-            to={item.interviewId || item.applicationId
+            to={item.interviewId || item.applicationId || item.event?.startsWith("application")
               ? "/applications"
               : `/messages/${encodeURIComponent(item.conversationId)}`}
           >
             <span
               aria-hidden="true"
-              className="grid size-10 shrink-0 place-items-center rounded-full bg-[#e6f4f0] text-sm font-bold text-[#087879]"
+              className={`grid size-10 shrink-0 place-items-center rounded-full text-sm font-bold ${
+                item.read
+                  ? "bg-[#f0f4f4] text-[#7b8b8c]"
+                  : "bg-[#e6f4f0] text-[#087879]"
+              }`}
             >
-              {item.companyInitial || item.employerName.slice(0, 1).toUpperCase()}
+              <Icon size={16} />
             </span>
             <span className="min-w-0 flex-1">
               <span className="flex items-center justify-between gap-2">
@@ -92,6 +106,8 @@ export default function NotificationFeed({
               <span aria-label="Unread" className="mt-2 size-2 shrink-0 rounded-full bg-[#078b8d]" />
             )}
           </Link>
+            );
+          })()
         ))}
       </div>
 

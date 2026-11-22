@@ -7,11 +7,25 @@ type OverviewStatsSectionProps = {
   onRetry: () => void;
 };
 
-const cards: Array<{ key: keyof EmployerDashboardStats; label: string; accent: string }> = [
+type NumericEmployerStat =
+  | "total_job_listings"
+  | "active_job_listings"
+  | "total_applications"
+  | "pending_applications"
+  | "closed_listings"
+  | "total_applicants"
+  | "hired_applicants"
+  | "upcoming_interviews";
+
+const cards: Array<{ key: NumericEmployerStat; label: string; accent: string }> = [
   { key: "total_job_listings", label: "Total listings", accent: "text-[#354346]" },
   { key: "active_job_listings", label: "Active listings", accent: "text-[#168b87]" },
   { key: "total_applications", label: "Total applications", accent: "text-[#354346]" },
   { key: "pending_applications", label: "Pending applications", accent: "text-[#31a581]" },
+  { key: "closed_listings", label: "Closed listings", accent: "text-[#687b7e]" },
+  { key: "total_applicants", label: "Total applicants", accent: "text-[#354346]" },
+  { key: "hired_applicants", label: "Hired applicants", accent: "text-[#31a581]" },
+  { key: "upcoming_interviews", label: "Scheduled interviews", accent: "text-[#765cb8]" },
 ];
 
 export default function OverviewStatsSection({
@@ -32,7 +46,7 @@ export default function OverviewStatsSection({
         {cards.map(({ key, label, accent }) => (
           <article className="rounded-[16px] border border-[#edf1f1] bg-white p-4 shadow-[0_8px_24px_rgba(34,66,65,0.05)]" key={key}>
             <p className={`text-[22px] leading-none font-bold ${accent}`}>
-              {isLoading ? "—" : stats[key].toLocaleString()}
+              {isLoading ? "—" : (stats[key] ?? 0).toLocaleString()}
             </p>
             <p className="mt-2 text-[10px] font-medium text-[#829091]">{label}</p>
           </article>

@@ -40,6 +40,7 @@ export default function EmployerJobListingsPageContent() {
     draftListingCount,
     isCreateModalOpen,
     openCreateModal,
+    openEditModal,
     closeCreateModal,
     newListingType,
     handleNewListingTypePick,
@@ -107,6 +108,7 @@ export default function EmployerJobListingsPageContent() {
                 selectedId={selectedId}
                 setSelectedId={setSelectedId}
                 onStatusChange={updateListingStatus}
+                onEdit={openEditModal}
               />
             )}
           </div>

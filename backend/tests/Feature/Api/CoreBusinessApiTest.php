@@ -92,6 +92,7 @@ it('returns role-scoped dashboard totals from persisted records', function (): v
         ->assertJsonPath('data.pending_verifications.total', 2)
         ->assertJsonPath('data.pending_verifications.applicants', 1)
         ->assertJsonPath('data.pending_verifications.employers', 1)
+        ->assertJsonStructure(['data' => ['recommendations']])
         ->assertJsonPath('data.total_job_listings', 3)
         ->assertJsonPath('data.active_job_listings', 1)
         ->assertJsonPath('data.total_applications', 3);
@@ -103,7 +104,8 @@ it('returns role-scoped dashboard totals from persisted records', function (): v
         ->assertJsonPath('data.total_job_listings', 3)
         ->assertJsonPath('data.active_job_listings', 1)
         ->assertJsonPath('data.total_applications', 3)
-        ->assertJsonPath('data.pending_applications', 1);
+        ->assertJsonPath('data.pending_applications', 1)
+        ->assertJsonStructure(['data' => ['recommendations']]);
 
     $this->app['auth']->forgetGuards();
     $this->withToken($applicant->createToken('test')->plainTextToken)
@@ -112,7 +114,8 @@ it('returns role-scoped dashboard totals from persisted records', function (): v
         ->assertJsonPath('data.total_applications', 3)
         ->assertJsonPath('data.pending_applications', 1)
         ->assertJsonPath('data.accepted_applications', 1)
-        ->assertJsonPath('data.rejected_applications', 1);
+        ->assertJsonPath('data.rejected_applications', 1)
+        ->assertJsonStructure(['data' => ['recommendations']]);
 });
 
 it('paginates admin activity newest first with timestamp ties ordered by id', function (): void {

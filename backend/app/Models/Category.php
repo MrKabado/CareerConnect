@@ -12,12 +12,14 @@ class Category extends Model
         'name',
         'description',
         'is_active',
+        'is_custom',
     ];
 
     protected function casts(): array
     {
         return [
             'is_active' => 'boolean',
+            'is_custom' => 'boolean',
         ];
     }
 

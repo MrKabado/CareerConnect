@@ -10,6 +10,7 @@ type CreateListingModalProps = {
   newListingForm: {
     title: string;
     categoryId: string;
+    customCategoryName: string;
     location: string;
     workSetup: string;
     availableSlots: string;
@@ -27,6 +28,8 @@ type CreateListingModalProps = {
     allowanceAmount: string;
     acceptedCourses: string;
     moaAccepted: string;
+    applicantLimit: string;
+    expiresAt: string;
   };
   categories: Array<{ id: number; name: string }>;
   isSaving: boolean;
@@ -152,7 +155,16 @@ export default function CreateListingModal({
                   <select value={newListingForm.categoryId} onChange={(event) => onFieldChange("categoryId", event.target.value)} className="w-full rounded-xl border border-[#dfe8e7] bg-white px-3 py-2.5 text-[12px] text-[#1d3133] outline-none transition focus:border-[#b8dde0]">
                     <option value="">Select a category</option>
                     {categories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}
+                    <option value="other">Other</option>
                   </select>
+                  {newListingForm.categoryId === "other" && (
+                    <input
+                      value={newListingForm.customCategoryName}
+                      onChange={(event) => onFieldChange("customCategoryName", event.target.value)}
+                      placeholder="Specify the category"
+                      className="mt-2 w-full rounded-xl border border-[#dfe8e7] bg-white px-3 py-2.5 text-[12px] text-[#1d3133] outline-none transition focus:border-[#b8dde0]"
+                    />
+                  )}
                 </label>
                 <label className="block text-[11px] font-medium text-[#445a5d]">
                   <span className="mb-1.5 block">Location *</span>
@@ -165,6 +177,14 @@ export default function CreateListingModal({
                     <option value="onsite">On-site</option>
                     <option value="remote">Remote</option>
                   </select>
+                </label>
+                <label className="block text-[11px] font-medium text-[#445a5d]">
+                  <span className="mb-1.5 block">Applicant limit *</span>
+                  <input type="number" min="1" max="65535" value={newListingForm.applicantLimit} onChange={(event) => onFieldChange("applicantLimit", event.target.value)} className="w-full rounded-xl border border-[#dfe8e7] bg-white px-3 py-2.5 text-[12px] text-[#1d3133] outline-none transition focus:border-[#b8dde0]" />
+                </label>
+                <label className="block text-[11px] font-medium text-[#445a5d]">
+                  <span className="mb-1.5 block">Expiration date (optional)</span>
+                  <input type="date" value={newListingForm.expiresAt} onChange={(event) => onFieldChange("expiresAt", event.target.value)} className="w-full rounded-xl border border-[#dfe8e7] bg-white px-3 py-2.5 text-[12px] text-[#1d3133] outline-none transition focus:border-[#b8dde0]" />
                 </label>
                 {newListingType === "ojt" && <label className="block text-[11px] font-medium text-[#445a5d]">
                   <span className="mb-1.5 block">Available slots *</span>

@@ -534,7 +534,14 @@ export async function listNotifications(actor: MessagingActor): Promise<Notifica
     }>("/notifications", { params: { per_page: 50 } }, actor.token);
 
     const server = response.data
-      .filter((item) => ["interview_scheduled", "interview_rescheduled", "interview_cancelled", "applicant_note"].includes(item.event ?? ""))
+      .filter((item) => [
+        "interview_scheduled",
+        "interview_rescheduled",
+        "interview_cancelled",
+        "applicant_note",
+        "applicant_hired",
+        "application_status_changed",
+      ].includes(item.event ?? ""))
       .map((item): NotificationItem => {
         const metadata = item.metadata ?? {};
         const interviewId = typeof metadata.interview_id === "number" ? metadata.interview_id : undefined;
@@ -552,6 +559,7 @@ export async function listNotifications(actor: MessagingActor): Promise<Notifica
           preview: item.message ?? item.title ?? "New notification",
           createdAt: item.created_at ?? new Date().toISOString(),
           read: item.read_at !== null,
+          event: item.event ?? undefined,
           interviewId,
           applicationId,
           meetingUrl: typeof metadata.meeting_url === "string" ? metadata.meeting_url : null,

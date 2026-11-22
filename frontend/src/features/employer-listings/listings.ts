@@ -1,4 +1,4 @@
-export type EmployerListingStatus = "active" | "draft" | "closed" | "deactivated";
+export type EmployerListingStatus = "active" | "draft" | "closed" | "full" | "expired" | "deactivated";
 
 export type EmployerListing = {
   id: string;
@@ -7,9 +7,13 @@ export type EmployerListing = {
   title: string;
   type: "Job" | "OJT";
   category: string;
+  categoryId?: number;
   location: string;
   department: string;
   applicants?: number;
+  applicantLimit?: number;
+  approvalStatus?: "not_required" | "pending" | "approved" | "rejected";
+  approvalReason?: string | null;
   shortlisted?: number;
   status: EmployerListingStatus;
   updated: string;
@@ -18,6 +22,12 @@ export type EmployerListing = {
   salary: string;
   skills: string[];
   experienceRequirement?: string;
+  requiredSkills?: string[];
+  workSetup?: "onsite" | "hybrid" | "remote";
+  salaryMin?: number | null;
+  salaryMax?: number | null;
+  employmentType?: "full_time" | "part_time" | "contract";
+  minimumExperienceYears?: number | null;
   hiring: {
     type: string;
     schedule: string;

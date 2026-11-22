@@ -26,6 +26,12 @@ export type PublicJobListing = {
   } | null;
   status: string;
   published_at: string | null;
+  applicant_limit?: number | null;
+  applicant_count?: number;
+  expires_at?: string | null;
+  custom_category_name?: string | null;
+  approval_status?: "not_required" | "pending" | "approved" | "rejected";
+  approval_reason?: string | null;
   created_at?: string | null;
   updated_at?: string | null;
   company?: { name: string; city: string | null; logo_path: string | null; logo_url: string | null } | null;

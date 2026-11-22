@@ -76,6 +76,7 @@ export type NotificationItem = {
   preview: string;
   createdAt: string;
   read: boolean;
+  event?: string;
   interviewId?: number;
   applicationId?: number;
   meetingUrl?: string | null;

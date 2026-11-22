@@ -7,6 +7,13 @@ export type AdminDashboardStats = {
   total_job_listings: number;
   active_job_listings: number;
   total_applications: number;
+  recommendations?: Array<{
+    id: string;
+    title: string;
+    message: string;
+    priority: "high" | "medium" | "low";
+    action: string;
+  }>;
 };
 
 export type AdminUserRecord = {
@@ -34,6 +41,7 @@ export type AdminCategoryRecord = {
   name: string;
   description: string | null;
   is_active: boolean;
+  is_custom?: boolean;
   job_count: number;
 };
 
@@ -135,6 +143,41 @@ export const adminApi = {
     return apiRequest<{ category: AdminCategoryRecord }>(
       `/admin/categories/${id}`,
       { method: "PUT", data: values },
+      token,
+    );
+  },
+
+  jobs(token: string, filters: { approval_status?: string; status?: string; page?: number } = {}) {
+    return apiRequest<{
+      data: Array<{
+        id: number;
+        title: string;
+        listing_type: "job" | "ojt";
+        status: string;
+        custom_category_name: string | null;
+        approval_status: "not_required" | "pending" | "approved" | "rejected";
+        approval_reason: string | null;
+        category: { id: number; name: string } | null;
+        company: { name: string } | null;
+        created_at: string | null;
+        admin_actions: Array<{ action: string; reason: string | null; created_at: string | null }> | null;
+      }>;
+      meta: { current_page: number; last_page: number; total: number };
+    }>("/admin/jobs", { params: { ...filters, per_page: 50 } }, token);
+  },
+
+  approveJobCategory(token: string, id: number) {
+    return apiRequest<{ message: string }>(
+      `/admin/jobs/${id}/approve-category`,
+      { method: "POST" },
+      token,
+    );
+  },
+
+  rejectJobCategory(token: string, id: number, reason: string) {
+    return apiRequest<{ message: string }>(
+      `/admin/jobs/${id}/reject-category`,
+      { method: "POST", data: { reason } },
       token,
     );
   },

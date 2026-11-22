@@ -53,6 +53,14 @@ export const employerVerificationFilesApi = {
     }>("/employer/company", {}, token);
   },
 
+  updateCompany(token: string, data: Record<string, unknown>) {
+    return apiRequest<{ message: string; company: { website: string | null } }>(
+      "/employer/company",
+      { method: "PUT", data },
+      token,
+    );
+  },
+
   async uploadLogo(
     token: string,
     file: File,

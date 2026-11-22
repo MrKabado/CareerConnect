@@ -243,6 +243,24 @@ export default function ReportsPage() {
         </Card>
 
         <div className="grid content-start gap-4">
+          {stats.recommendations && stats.recommendations.length > 0 ? (
+            <Card className="p-5">
+              <h2 className="text-[15px] font-semibold text-ink">Recommendations</h2>
+              <p className="mt-1 text-xs text-muted">Prioritized from current platform activity</p>
+              <div className="mt-4 space-y-2">
+                {stats.recommendations.map((recommendation) => (
+                  <Link
+                    className="block rounded-lg border border-line p-3 hover:border-brand-100 hover:bg-brand-50"
+                    key={recommendation.id}
+                    to={recommendation.action}
+                  >
+                    <p className="text-xs font-semibold text-ink">{recommendation.title}</p>
+                    <p className="mt-1 text-[11px] leading-4 text-muted">{recommendation.message}</p>
+                  </Link>
+                ))}
+              </div>
+            </Card>
+          ) : null}
           <Card className="p-5">
             <div className="flex items-center justify-between">
               <div>

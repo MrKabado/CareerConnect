@@ -10,6 +10,11 @@ const emptyStats: EmployerDashboardStats = {
   active_job_listings: 0,
   total_applications: 0,
   pending_applications: 0,
+  upcoming_interviews: 0,
+  recommendations: [],
+  closed_listings: 0,
+  total_applicants: 0,
+  hired_applicants: 0,
 };
 
 export function useEmployerOverview() {

@@ -72,7 +72,8 @@ class ApplicationController extends Controller
             ], 422);
         }
 
-        [$application, $isReapplication] = DB::transaction(function () use ($applicant, $jobListing, $validated): array {
+        [$application, $isReapplication, $fullReached] = DB::transaction(function () use ($applicant, $jobListing, $validated): array {
+            $fullReached = false;
             User::query()->whereKey($applicant->id)->lockForUpdate()->firstOrFail();
             $listing = JobListing::query()
                 ->with(['company.user', 'company.verification', 'category'])
@@ -128,6 +129,19 @@ class ApplicationController extends Controller
                 ->where('job_listing_id', $listing->id)
                 ->lockForUpdate()
                 ->first();
+            $applicantLimit = $listing->applicant_limit
+                ?? ($listing->listing_type === 'ojt' ? $listing->ojtDetails?->slots : null);
+            $applicationCount = $listing->applications()->count();
+            if ($existingApplication === null
+                && $applicantLimit !== null
+                && $applicationCount >= (int) $applicantLimit) {
+                $listing->status = 'full';
+                $listing->save();
+                throw new HttpResponseException(response()->json([
+                    'message' => 'This listing has reached its applicant limit.',
+                    'code' => 'listing_full',
+                ], 422));
+            }
             $canReapplyAfterCancellation = $existingApplication?->status === 'interview'
                 && $existingApplication->interviews()->where('status', 'cancelled')->exists()
                 && ! $existingApplication->interviews()->where('status', 'scheduled')->exists();
@@ -180,6 +194,15 @@ class ApplicationController extends Controller
             $application->jobListing()->associate($listing);
             $application->save();
 
+            $newApplicationCount = $listing->applications()->count();
+            if ($listing->status === 'open'
+                && $applicantLimit !== null
+                && $newApplicationCount >= (int) $applicantLimit) {
+                $listing->status = 'full';
+                $listing->save();
+                $fullReached = true;
+            }
+
             $application->statusHistories()->create([
                 'previous_status' => $previousStatus,
                 'new_status' => 'pending',
@@ -201,7 +224,7 @@ class ApplicationController extends Controller
                 ],
             ]);
 
-            return [$application, $existingApplication !== null];
+            return [$application, $existingApplication !== null, $fullReached];
         });
 
         $application->loadMissing(['jobListing.company.user']);
@@ -218,6 +241,19 @@ class ApplicationController extends Controller
                     'job_listing_title' => $application->jobListing->title,
                 ],
             );
+            if ($fullReached) {
+                app(NotificationService::class)->send(
+                    $employer,
+                    'listing_full',
+                    'Job listing reached applicant limit',
+                    $application->jobListing->title.' has reached its applicant limit and is now full.',
+                    [
+                        'job_listing_id' => $application->job_listing_id,
+                        'job_listing_title' => $application->jobListing->title,
+                        'status' => 'full',
+                    ],
+                );
+            }
         }
 
         return response()->json([
@@ -529,20 +565,41 @@ class ApplicationController extends Controller
         });
 
         if ($updated[1]) {
-            $updated[0]->loadMissing(['applicant', 'jobListing']);
-            app(NotificationService::class)->send(
-                $updated[0]->applicant,
-                'application_status_changed',
-                'Application status updated',
-                'Your application for '.$updated[0]->jobListing->title.' is now '.$updated[0]->status.'.',
-                [
-                    'application_id' => $updated[0]->id,
-                    'job_listing_id' => $updated[0]->job_listing_id,
-                    'job_listing_title' => $updated[0]->jobListing->title,
-                    'status' => $updated[0]->status,
-                    'public_reason' => $validated['public_reason'] ?? null,
-                ],
-            );
+            $updated[0]->loadMissing(['applicant', 'jobListing.company']);
+            $companyName = $updated[0]->jobListing?->company?->name ?? 'the company';
+            $jobTitle = $updated[0]->jobListing?->title ?? 'this position';
+
+            if ($updated[0]->status === 'hired') {
+                app(NotificationService::class)->send(
+                    $updated[0]->applicant,
+                    'applicant_hired',
+                    'Congratulations! You have been hired',
+                    'Congratulations! You have been hired for '.$jobTitle.' by '.$companyName.'.',
+                    [
+                        'application_id' => $updated[0]->id,
+                        'job_listing_id' => $updated[0]->job_listing_id,
+                        'job_listing_title' => $jobTitle,
+                        'company_name' => $companyName,
+                        'status' => 'hired',
+                        'public_reason' => $validated['public_reason'] ?? null,
+                    ],
+                );
+            } else {
+                app(NotificationService::class)->send(
+                    $updated[0]->applicant,
+                    'application_status_changed',
+                    'Application status updated',
+                    'Your application for '.$jobTitle.' is now '.$updated[0]->status.'.',
+                    [
+                        'application_id' => $updated[0]->id,
+                        'job_listing_id' => $updated[0]->job_listing_id,
+                        'job_listing_title' => $jobTitle,
+                        'company_name' => $companyName,
+                        'status' => $updated[0]->status,
+                        'public_reason' => $validated['public_reason'] ?? null,
+                    ],
+                );
+            }
         }
 
         return response()->json([

@@ -19,10 +19,12 @@ class JobListingRequest extends FormRequest
             'listing_type' => ['required', Rule::in(['job', 'ojt'])],
             'title' => ['required', 'string', 'max:255'],
             'category_id' => [
-                'required',
+                'required_without:custom_category_name',
+                'nullable',
                 'integer',
                 Rule::exists('categories', 'id')->where(fn ($query) => $query->where('is_active', true)),
             ],
+            'custom_category_name' => ['required_without:category_id', 'nullable', 'string', 'max:100'],
             'description' => ['required', 'string', 'max:10000'],
             'responsibilities' => ['required', 'string', 'max:10000'],
             'requirements' => ['required', 'string', 'max:10000'],
@@ -40,6 +42,8 @@ class JobListingRequest extends FormRequest
             ],
             'salary_min' => ['exclude_unless:listing_type,job', 'sometimes', 'nullable', 'integer', 'min:0'],
             'salary_max' => ['exclude_unless:listing_type,job', 'sometimes', 'nullable', 'integer', 'min:0'],
+            'applicant_limit' => ['sometimes', 'nullable', 'integer', 'min:1', 'max:65535'],
+            'expires_at' => ['sometimes', 'nullable', 'date', 'after_or_equal:today'],
             'duration_hours' => [
                 'exclude_unless:listing_type,ojt',
                 'required_if:listing_type,ojt',

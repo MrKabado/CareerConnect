@@ -5,7 +5,10 @@ export type EmployerCategory = { id: number; name: string };
 export type CreateEmployerListingPayload = {
   listing_type: "job" | "ojt";
   title: string;
-  category_id: number;
+  category_id?: number;
+  custom_category_name?: string;
+  applicant_limit?: number | null;
+  expires_at?: string | null;
   description: string;
   responsibilities: string;
   requirements: string;
@@ -60,6 +63,13 @@ export const employerListingsApi = {
     return apiRequest<{ message: string; listing: PublicJobListing }>(
       `/jobs/${id}/status`,
       { method: "PATCH", data: { status } },
+      token,
+    );
+  },
+  update(token: string, id: number, data: CreateEmployerListingPayload) {
+    return apiRequest<{ data: PublicJobListing }>(
+      `/jobs/${id}`,
+      { method: "PUT", data },
       token,
     );
   },

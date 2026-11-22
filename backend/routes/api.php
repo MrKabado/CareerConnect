@@ -153,6 +153,8 @@ Route::middleware(['auth:sanctum', 'account.active', 'abilities:*', 'throttle:60
         Route::get('/activity', [DashboardController::class, 'adminActivity']);
         Route::get('/jobs', [AdminJobListingController::class, 'index']);
         Route::get('/jobs/{jobListing}', [AdminJobListingController::class, 'show'])->whereNumber('jobListing');
+        Route::post('/jobs/{jobListing}/approve-category', [AdminJobListingController::class, 'approveCategory'])->whereNumber('jobListing');
+        Route::post('/jobs/{jobListing}/reject-category', [AdminJobListingController::class, 'rejectCategory'])->whereNumber('jobListing');
         Route::post('/jobs/{jobListing}/deactivate', [AdminJobListingController::class, 'deactivate'])->whereNumber('jobListing');
         Route::post('/jobs/{jobListing}/restore', [AdminJobListingController::class, 'restore'])->whereNumber('jobListing');
         Route::get('/identity-verifications', [IdentityVerificationController::class, 'index']);

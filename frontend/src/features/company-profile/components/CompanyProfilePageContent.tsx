@@ -1,4 +1,4 @@
-import { useRef, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Link } from "react-router";
 import EmployerWorkspaceLayout from "@/components/common/employer/EmployerWorkspaceLayout";
 import { useEmployerStatus } from "@/features/employer-registration/useEmployerStatus";
@@ -17,6 +17,8 @@ import { CompanyHiringSetupDetails } from "@/components/common/user/companyProfi
 import CompanyMediaManager from "@/features/company-verification/components/CompanyMediaManager";
 import { useCompanyVerification } from "@/features/company-verification/useCompanyVerification";
 import { useDialogBehavior } from "@/hooks/useDialogBehavior";
+import { useAuth } from "@/features/auth/useAuth";
+import { employerVerificationFilesApi } from "@/features/employer-verification/backendApi";
 
 const inputClassName = "w-full rounded-xl border border-[#dfe8e7] bg-white px-3 py-2.5 text-sm text-[#344749] outline-none focus:border-[#078b8d] focus:ring-2 focus:ring-[#078b8d]/15";
 const cardEditButtonClass = "text-[10px] font-semibold text-[#087879] underline underline-offset-2";
@@ -99,11 +101,13 @@ function StringListEditor({
 }
 
 export default function EmployerCompanyProfilePage() {
+  const { token } = useAuth();
   const { employer } = useEmployerStatus();
   const companyName = employer?.companyName ?? "";
   const profileSlug = getCompanyProfileSlug(companyName);
   const profile = useCompanyProfile(companyName);
   const verification = useCompanyVerification();
+  const [serverWebsite, setServerWebsite] = useState(profile.website ?? "");
   const employerLogoUrl = verification.record.media?.logo?.url || profile.logoUrl;
   const [editing, setEditing] = useState(false);
   const editDialogRef = useRef<HTMLElement>(null);
@@ -147,6 +151,20 @@ export default function EmployerCompanyProfilePage() {
   );
   const [locationSaveError, setLocationSaveError] = useState<string | null>(null);
 
+  useEffect(() => {
+    if (!token) return;
+    let active = true;
+    employerVerificationFilesApi.company(token)
+      .then(({ company }) => {
+        if (!active) return;
+        const website = company?.website ?? "";
+        setServerWebsite(website);
+        setContactDraft((current) => ({ ...current, website }));
+      })
+      .catch(() => {});
+    return () => { active = false; };
+  }, [token]);
+
   function openHiringSetupEditor() {
     setHiringSetupDraft({
       title: profile.hiringDefaults?.title ?? "",
@@ -185,8 +203,24 @@ export default function EmployerCompanyProfilePage() {
     setEditingContact(true);
   }
 
-  function saveContactEditor() {
+  async function saveContactEditor() {
     try {
+      if (!token) throw new Error("Sign in to update your company profile.");
+      const normalizedWebsite = contactDraft.website.trim();
+      if (normalizedWebsite) {
+        try {
+          new URL(normalizedWebsite.match(/^https?:\/\//i) ? normalizedWebsite : `https://${normalizedWebsite}`);
+        } catch {
+          throw new Error("Enter a valid website URL.");
+        }
+      }
+      const response = await employerVerificationFilesApi.updateCompany(token, {
+        name: companyName || "Company profile",
+        website: normalizedWebsite || null,
+        contact_email: contactDraft.hiringEmail.trim() || null,
+        contact_phone: contactDraft.contactNumber.trim() || null,
+      });
+      setServerWebsite(response.company.website ?? "");
       updateCompanyProfile(profileSlug, {
         ...toEditableCompanyProfile(profile),
         website: contactDraft.website,
@@ -293,9 +327,18 @@ export default function EmployerCompanyProfilePage() {
     setDraft((current) => ({ ...current, [key]: value }));
   }
 
-  function handleSave(event: FormEvent<HTMLFormElement>) {
+  async function handleSave(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     try {
+      if (token) {
+        await employerVerificationFilesApi.updateCompany(token, {
+          name: draft.name || companyName || "Company profile",
+          website: draft.website.trim() || null,
+          contact_email: draft.hiringEmail.trim() || null,
+          contact_phone: draft.contactNumber.trim() || null,
+        });
+        setServerWebsite(draft.website.trim());
+      }
       updateCompanyProfile(profileSlug, draft);
       companyVerificationApi.setHiringDefaultsComplete(
         Object.values(draft.hiringDefaults).every((value) => value.trim().length > 0),
@@ -322,6 +365,14 @@ export default function EmployerCompanyProfilePage() {
                 </p>
               </div>
 
+              <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                className="inline-flex items-center justify-center rounded-xl border border-[#dfe8e7] bg-white px-4 py-2.5 text-sm font-semibold text-[#1d3133] shadow-sm transition hover:border-[#d1e6e4]"
+                onClick={() => setEditing(true)}
+              >
+                Edit Preferences
+              </button>
               <Link
                 to={getCompanyProfileUrl(profile.name)}
                 className="inline-flex items-center justify-center rounded-xl border border-[#dfe8e7] bg-white px-4 py-2.5 text-sm font-semibold text-[#1d3133] shadow-sm transition hover:border-[#d1e6e4]"
@@ -331,6 +382,7 @@ export default function EmployerCompanyProfilePage() {
                 </svg>
                 Preview public profile
               </Link>
+              </div>
             </div>
 
             <section className="rounded-[18px] border border-[#dfeae8] bg-white p-4 shadow-[0_10px_20px_rgba(27,54,52,0.03)] md:p-5">
@@ -865,7 +917,13 @@ export default function EmployerCompanyProfilePage() {
                     <dl className="mt-4 space-y-3 text-[11px] text-[#5a6970]">
                       <div className="flex items-center justify-between gap-3">
                         <dt>Website</dt>
-                        <dd className="font-medium text-[#1d3133]">{profile.website || "Not provided"}</dd>
+                        <dd className="font-medium text-[#1d3133]">
+                          {serverWebsite ? (
+                            <a className="text-[#078b8d] hover:underline" href={/^https?:\/\//i.test(serverWebsite) ? serverWebsite : `https://${serverWebsite}`} rel="noreferrer" target="_blank">
+                              {serverWebsite}
+                            </a>
+                          ) : "Not provided"}
+                        </dd>
                       </div>
                       <div className="flex items-center justify-between gap-3">
                         <dt>Hiring email</dt>

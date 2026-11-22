@@ -7,9 +7,10 @@ type JobListingsBoardProps = {
   selectedId: string;
   setSelectedId: (value: string) => void;
   onStatusChange: (id: string, status: "draft" | "open" | "closed") => void;
+  onEdit: (listing: EmployerListing) => void;
 };
 
-export default function JobListingsBoard({ listings, selectedId, setSelectedId, onStatusChange }: JobListingsBoardProps) {
+export default function JobListingsBoard({ listings, selectedId, setSelectedId, onStatusChange, onEdit }: JobListingsBoardProps) {
   const selectedListing = listings.find((listing) => listing.id === selectedId) ?? null;
 
   return (
@@ -110,16 +111,50 @@ export default function JobListingsBoard({ listings, selectedId, setSelectedId, 
               <p className="mt-2 text-[11px] leading-5 text-[#4a5d5f]">{selectedListing.hiring.schoolPartnerships}</p>
             </div>
           )}
+          {selectedListing.approvalStatus && selectedListing.approvalStatus !== "not_required" && (
+            <div className="mt-4 rounded-[16px] border border-[#e5eeeb] bg-[#fbfdfd] p-3">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[#62777a]">Custom category approval</p>
+              <p className="mt-2 text-[11px] font-semibold text-[#1d3133]">
+                {selectedListing.approvalStatus === "pending"
+                  ? "Awaiting admin approval"
+                  : selectedListing.approvalStatus === "approved"
+                    ? "Approved"
+                    : "Rejected"}
+              </p>
+              {selectedListing.approvalReason ? (
+                <p className="mt-1 text-[11px] text-[#a2534c]">{selectedListing.approvalReason}</p>
+              ) : null}
+            </div>
+          )}
+          {selectedListing.status !== "deactivated" && (
+            <button
+              className="mt-5 inline-flex w-full items-center justify-center rounded-xl border border-[#dfe8e7] bg-white px-4 py-2.5 text-sm font-semibold text-[#087879]"
+              onClick={() => onEdit(selectedListing)}
+              type="button"
+            >
+              Edit listing
+            </button>
+          )}
           <button
             className="mt-5 inline-flex w-full items-center justify-center rounded-xl bg-[#0e8e9b] px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-[#0a7d8a]"
-            disabled={selectedListing.status === "deactivated"}
+            disabled={["deactivated", "full", "expired"].includes(selectedListing.status)}
             onClick={() => onStatusChange(
               selectedListing.id,
               selectedListing.status === "active" ? "closed" : "open",
             )}
             type="button"
           >
-            {selectedListing.status === "active" ? "Close listing" : selectedListing.status === "draft" ? "Publish listing" : selectedListing.status === "deactivated" ? "Listing deactivated" : "Reopen listing"}
+            {selectedListing.status === "active"
+              ? "Close listing"
+              : selectedListing.status === "draft"
+                ? "Publish listing"
+                : selectedListing.status === "deactivated"
+                  ? "Listing deactivated"
+                  : selectedListing.status === "full"
+                    ? "Listing full"
+                    : selectedListing.status === "expired"
+                      ? "Listing expired"
+                      : "Reopen listing"}
           </button>
         </aside>
       )}

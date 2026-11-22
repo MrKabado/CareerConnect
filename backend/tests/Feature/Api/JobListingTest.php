@@ -96,6 +96,59 @@ function listingTestRecord(
     return $listing;
 }
 
+it('supports custom categories, applicant limits, expiration, manual closure and reopening', function (): void {
+    $employer = User::factory()->create(['role' => 'employer']);
+    $company = listingTestCompany($employer, true);
+    $token = $employer->createToken('employer')->plainTextToken;
+
+    $response = $this->withToken($token)->postJson('/api/jobs', [
+        'listing_type' => 'job',
+        'title' => 'Specialist',
+        'custom_category_name' => 'Creative Robotics',
+        'description' => 'Build creative robots.',
+        'responsibilities' => 'Design prototypes.',
+        'requirements' => 'Robotics experience.',
+        'location' => 'Cebu City',
+        'work_setup' => 'hybrid',
+        'employment_type' => 'full_time',
+        'applicant_limit' => 5,
+        'expires_at' => now()->addMonth()->toDateString(),
+    ])->assertCreated();
+    $listingId = $response->json('data.id');
+    $this->assertDatabaseHas('categories', [
+        'name' => 'Creative Robotics',
+        'is_custom' => true,
+        'is_active' => false,
+    ]);
+    $this->assertDatabaseHas('job_listings', [
+        'id' => $listingId,
+        'custom_category_name' => 'Creative Robotics',
+        'applicant_limit' => 5,
+    ]);
+
+    $this->withToken($token)->patchJson("/api/jobs/{$listingId}/status", ['status' => 'open'])
+        ->assertStatus(422)
+        ->assertJsonPath('code', 'category_pending_approval');
+
+    $listing = JobListing::findOrFail($listingId);
+    $admin = User::factory()->create(['role' => 'admin']);
+    $this->app['auth']->forgetGuards();
+    $this->withToken($admin->createToken('admin')->plainTextToken)
+        ->postJson("/api/admin/jobs/{$listingId}/approve-category")
+        ->assertOk();
+    $this->app['auth']->forgetGuards();
+    $this->withToken($token)->patchJson("/api/jobs/{$listingId}/status", ['status' => 'open'])
+        ->assertOk();
+    $this->withToken($token)->patchJson("/api/jobs/{$listingId}/status", ['status' => 'closed'])
+        ->assertOk()
+        ->assertJsonPath('listing.status', 'closed');
+    $this->withToken($token)->patchJson("/api/jobs/{$listingId}/status", ['status' => 'open'])
+        ->assertOk()
+        ->assertJsonPath('listing.status', 'open');
+
+    expect($company->jobListings()->whereKey($listingId)->exists())->toBeTrue();
+});
+
 it('creates a draft owned by the authenticated employer without trusting client status or company id', function (): void {
     $employer = User::factory()->create(['role' => 'employer']);
     $company = listingTestCompany($employer);

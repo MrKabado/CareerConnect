@@ -41,6 +41,7 @@ class CategoryController extends Controller
                 'name' => $category->name,
                 'description' => $category->description,
                 'is_active' => $category->is_active,
+                'is_custom' => $category->is_custom,
                 'job_count' => (int) $category->active_job_count,
             ]),
         ]);

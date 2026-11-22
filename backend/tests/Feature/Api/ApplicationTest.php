@@ -753,6 +753,65 @@ it('enforces account, listing-type and OJT eligibility when applying', function 
         ->assertJsonPath('data.status', 'pending');
 });
 
+it('creates one hired notification only when an application becomes hired', function (): void {
+    $applicant = phaseFiveApplicant();
+    $employer = User::factory()->create(['role' => 'employer']);
+    $listing = phaseFiveListing($employer, Category::create(['name' => 'Hiring']));
+    phaseFiveApplication($applicant, $listing);
+    $application = $applicant->applications()->where('job_listing_id', $listing->id)->firstOrFail();
+    $application->update(['status' => 'interview']);
+    $application->statusHistories()->create([
+        'previous_status' => 'shortlisted',
+        'new_status' => 'interview',
+        'actor_id' => $employer->id,
+        'created_at' => now(),
+    ]);
+
+    $token = phaseFiveToken($this, $employer);
+    $this->withToken($token)
+        ->patchJson("/api/employer/applications/{$application->id}/status", ['status' => 'hired'])
+        ->assertOk();
+    $this->app['auth']->forgetGuards();
+    $this->withToken($token)
+        ->patchJson("/api/employer/applications/{$application->id}/status", ['status' => 'hired'])
+        ->assertOk();
+
+    expect($applicant->notifications()->count())->toBe(1);
+    expect($applicant->notifications()->first()?->data['event'] ?? null)->toBe('applicant_hired');
+    expect($applicant->notifications()->first()?->data['message'] ?? '')
+        ->toContain('Congratulations');
+});
+
+it('automatically closes listings at the applicant limit and rejects direct over-limit applications', function (): void {
+    Storage::fake('local');
+    $employer = User::factory()->create(['role' => 'employer']);
+    $listing = phaseFiveListing($employer, Category::create(['name' => 'Limited Hiring']), [
+        'applicant_limit' => 1,
+    ]);
+    $firstApplicant = phaseFiveApplicant();
+    $secondApplicant = phaseFiveApplicant();
+    $firstToken = phaseFiveToken($this, $firstApplicant);
+    $secondToken = phaseFiveToken($this, $secondApplicant);
+
+    $this->withToken($firstToken)->postJson('/api/applicant/resume', [
+        'resume' => phaseFivePdf(),
+    ])->assertCreated();
+    $this->app['auth']->forgetGuards();
+    $this->withToken($firstToken)->postJson("/api/jobs/{$listing->id}/applications")
+        ->assertCreated();
+    $listing->refresh();
+    expect($listing->status)->toBe('full');
+
+    $this->app['auth']->forgetGuards();
+    $this->withToken($secondToken)->postJson('/api/applicant/resume', [
+        'resume' => phaseFivePdf(),
+    ])->assertCreated();
+    $this->app['auth']->forgetGuards();
+    $this->withToken($secondToken)->postJson("/api/jobs/{$listing->id}/applications")
+        ->assertUnprocessable()
+        ->assertJsonPath('code', 'listing_not_open');
+});
+
 it('ranks employer applicants by match score before paginating', function (): void {
     $employer = User::factory()->create(['role' => 'employer']);
     $category = Category::create(['name' => 'Engineering']);
@@ -972,6 +1031,22 @@ it('enforces required job skills and experience before an application is created
     $applicant->applicantProfile->update(['experience_level' => '3_5_years']);
     $this->app['auth']->forgetGuards();
     $this->withToken($token)->postJson("/api/jobs/{$listing->id}/applications")
+        ->assertCreated()
+        ->assertJsonPath('data.status', 'pending');
+
+    $experiencedApplicant = phaseFiveApplicant();
+    $experiencedApplicant->applicantProfile->update(['experience_level' => '5_plus_years']);
+    $experiencedToken = phaseFiveToken($this, $experiencedApplicant);
+    $noExperienceEmployer = User::factory()->create(['role' => 'employer']);
+    $noExperienceListing = phaseFiveListing($noExperienceEmployer, Category::create(['name' => 'Flexible Experience']), [
+        'experience_required' => false,
+        'minimum_experience_years' => null,
+    ]);
+    $this->withToken($experiencedToken)->postJson('/api/applicant/resume', [
+        'resume' => phaseFivePdf('experienced.pdf'),
+    ])->assertCreated();
+    $this->app['auth']->forgetGuards();
+    $this->withToken($experiencedToken)->postJson("/api/jobs/{$noExperienceListing->id}/applications")
         ->assertCreated()
         ->assertJsonPath('data.status', 'pending');
 });

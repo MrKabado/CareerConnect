@@ -19,6 +19,7 @@ export type JobFilter = (typeof filterOptions)[number];
 type NewListingFormState = {
   title: string;
   categoryId: string;
+  customCategoryName: string;
   location: string;
   workSetup: string;
   availableSlots: string;
@@ -36,12 +37,15 @@ type NewListingFormState = {
   allowanceAmount: string;
   acceptedCourses: string;
   moaAccepted: string;
+  applicantLimit: string;
+  expiresAt: string;
 };
 
 function emptyForm(location = ""): NewListingFormState {
   return {
     title: "",
     categoryId: "",
+    customCategoryName: "",
     location,
     workSetup: "hybrid",
     availableSlots: "1",
@@ -59,6 +63,8 @@ function emptyForm(location = ""): NewListingFormState {
     allowanceAmount: "",
     acceptedCourses: "",
     moaAccepted: "true",
+    applicantLimit: "25",
+    expiresAt: "",
   };
 }
 
@@ -71,15 +77,26 @@ function toListing(listing: PublicJobListing): EmployerListing {
     publicId: String(listing.id),
     companySlug,
     title: listing.title,
+    applicants: listing.applicant_count ?? 0,
+    applicantLimit: listing.applicant_limit ?? listing.ojt?.slots ?? undefined,
+    approvalStatus: listing.approval_status ?? "not_required",
+    approvalReason: listing.approval_reason ?? null,
     type: listing.listing_type === "ojt" ? "OJT" : "Job",
     category: listing.category?.name ?? "Uncategorized",
+    categoryId: listing.category?.id,
     location: listing.location,
     department: listing.category?.name ?? "",
     status: listing.status === "open"
       ? "active"
       : listing.status === "draft"
         ? "draft"
-        : listing.status === "deactivated" ? "deactivated" : "closed",
+        : listing.status === "deactivated"
+          ? "deactivated"
+          : listing.status === "full"
+            ? "full"
+            : listing.status === "expired"
+              ? "expired"
+              : "closed",
     updated: date && !Number.isNaN(date.getTime())
       ? `Updated ${new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric" }).format(date)}`
       : "Date not available",
@@ -94,6 +111,12 @@ function toListing(listing: PublicJobListing): EmployerListing {
       : listing.experience_required
         ? `At least ${listing.minimum_experience_years ?? 1} years`
         : "Without Experience",
+    requiredSkills: listing.required_skills ?? [],
+    workSetup: listing.work_setup,
+    salaryMin: listing.salary_min,
+    salaryMax: listing.salary_max,
+    employmentType: listing.employment_type ?? undefined,
+    minimumExperienceYears: listing.minimum_experience_years,
     hiring: {
       type: listing.listing_type === "ojt"
         ? "OJT"
@@ -119,7 +142,9 @@ function createPayload(
   const common = {
     listing_type: type,
     title: form.title.trim(),
-    category_id: Number(form.categoryId),
+    ...(form.categoryId && form.categoryId !== "other"
+      ? { category_id: Number(form.categoryId) }
+      : { custom_category_name: form.customCategoryName.trim() }),
     description: form.summary.trim(),
     responsibilities: form.responsibilities.trim(),
     requirements: form.requirements.trim(),
@@ -129,6 +154,8 @@ function createPayload(
       .filter(Boolean),
     location: form.location.trim(),
     work_setup: normalizeWorkSetup(form.workSetup),
+    applicant_limit: form.applicantLimit ? Number(form.applicantLimit) : null,
+    expires_at: form.expiresAt || null,
   };
   if (type === "job") {
     return {
@@ -169,6 +196,7 @@ export function useEmployerJobListings() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [editingListingId, setEditingListingId] = useState<number | null>(null);
 
   const load = useCallback(async () => {
     if (!token) return;
@@ -221,10 +249,13 @@ export function useEmployerJobListings() {
   }, [filter, listings]);
   const activeListingCount = listings.filter((listing) => listing.status === "active").length;
   const draftListingCount = listings.filter((listing) => listing.status === "draft").length;
-  const modalTitle = newListingType === "ojt" ? "Create a new OJT opportunity" : "Create a new job";
+  const modalTitle = editingListingId
+    ? (newListingType === "ojt" ? "Edit OJT opportunity" : "Edit job listing")
+    : (newListingType === "ojt" ? "Create a new OJT opportunity" : "Create a new job");
 
   function openCreateModal() {
     setError(null);
+    setEditingListingId(null);
     setNewListingType(null);
     setNewListingStep(1);
     setNewListingForm(emptyForm(companyProfile.location));
@@ -235,6 +266,32 @@ export function useEmployerJobListings() {
     setIsCreateModalOpen(false);
     setNewListingType(null);
     setNewListingStep(1);
+    setEditingListingId(null);
+  }
+
+  function openEditModal(listing: EmployerListing) {
+    setError(null);
+    setEditingListingId(Number(listing.id));
+    setNewListingType(listing.type === "OJT" ? "ojt" : "job");
+    setNewListingStep(2);
+    setNewListingForm({
+      ...emptyForm(companyProfile.location),
+      title: listing.title,
+      categoryId: listing.categoryId ? String(listing.categoryId) : "",
+      location: listing.location,
+      workSetup: listing.workSetup ?? "hybrid",
+      summary: listing.description,
+      responsibilities: listing.responsibilities.join("\n"),
+      requirements: listing.description,
+      requiredSkills: listing.requiredSkills?.join(", ") ?? "",
+      employmentType: listing.employmentType ?? "full_time",
+      experienceRequirement: listing.minimumExperienceYears ? "with_experience" : "without_experience",
+      minimumExperienceYears: listing.minimumExperienceYears ? String(listing.minimumExperienceYears) : "1",
+      salaryMin: listing.salaryMin ? String(listing.salaryMin) : "",
+      salaryMax: listing.salaryMax ? String(listing.salaryMax) : "",
+      applicantLimit: listing.applicantLimit ? String(listing.applicantLimit) : "25",
+    });
+    setIsCreateModalOpen(true);
   }
 
   function handleNewListingTypePick(type: "job" | "ojt") {
@@ -248,7 +305,10 @@ export function useEmployerJobListings() {
 
   async function saveNewListing(publishAfterSaving: boolean) {
     if (!token || !newListingType) return;
-    if (!newListingForm.title.trim() || !newListingForm.categoryId || !newListingForm.summary.trim()
+    if (!newListingForm.title.trim()
+      || (!newListingForm.categoryId && !newListingForm.customCategoryName.trim())
+      || (newListingForm.categoryId === "other" && !newListingForm.customCategoryName.trim())
+      || !newListingForm.summary.trim()
       || !newListingForm.responsibilities.trim() || !newListingForm.requirements.trim()
       || !newListingForm.location.trim()) {
       setError("Complete the required listing details before saving.");
@@ -266,6 +326,20 @@ export function useEmployerJobListings() {
     setIsSaving(true);
     setError(null);
     try {
+      if (editingListingId) {
+        const response = await employerListingsApi.update(
+          token,
+          editingListingId,
+          createPayload(newListingForm, newListingType),
+        );
+        const updated = toListing(response.data);
+        setListings((current) =>
+          current.map((listing) => listing.id === updated.id ? updated : listing),
+        );
+        setSelectedId(updated.id);
+        closeCreateModal();
+        return;
+      }
       const response = await employerListingsApi.create(token, createPayload(newListingForm, newListingType));
       const created = toListing(response.data);
       setListings((current) => [created, ...current]);
@@ -311,6 +385,9 @@ export function useEmployerJobListings() {
 
   async function updateListingStatus(id: string, status: "draft" | "open" | "closed") {
     if (!token || !/^\d+$/.test(id)) return;
+    if (status === "closed" && !window.confirm("Close this listing? Existing applicants and records will be preserved.")) {
+      return;
+    }
     setError(null);
     try {
       const response = await employerListingsApi.updateStatus(token, Number(id), status);
@@ -334,6 +411,7 @@ export function useEmployerJobListings() {
     draftListingCount,
     isCreateModalOpen,
     openCreateModal,
+    openEditModal,
     closeCreateModal,
     newListingType,
     handleNewListingTypePick,

@@ -5,6 +5,17 @@ export type EmployerDashboardStats = {
   active_job_listings: number;
   total_applications: number;
   pending_applications: number;
+  upcoming_interviews?: number;
+  closed_listings?: number;
+  total_applicants?: number;
+  hired_applicants?: number;
+  recommendations?: Array<{
+    id: string;
+    title: string;
+    message: string;
+    priority: "high" | "medium" | "low";
+    action: string;
+  }>;
 };
 
 export const employerOverviewApi = {
