@@ -28,6 +28,10 @@ class AdminUserController extends Controller
         $users = User::query()
             ->select(['id', 'name', 'email', 'role', 'account_status', 'email_verified_at', 'created_at'])
             ->with('identityVerification:id,user_id,status,rejection_reason,created_at')
+            ->with([
+                'company:id,user_id,name',
+                'company.verification:id,company_id,status,rejection_reason',
+            ])
             ->when(isset($validated['role']), fn ($query) => $query->where('role', $validated['role']))
             ->when(isset($validated['status']), fn ($query) => $query->where('account_status', $validated['status']))
             ->when(isset($validated['search']), function ($query) use ($validated): void {
@@ -39,6 +43,17 @@ class AdminUserController extends Controller
             ->orderByDesc('created_at')
             ->orderByDesc('id')
             ->paginate(min(max($request->integer('per_page', 15), 1), 50));
+
+        $users->getCollection()->each(function (User $user): void {
+            $verification = $user->company?->verification;
+            $user->setAttribute('company_verification', $verification ? [
+                'id' => $verification->id,
+                'company_name' => $user->company->name,
+                'status' => $verification->status,
+                'rejection_reason' => $verification->rejection_reason,
+            ] : null);
+            $user->unsetRelation('company');
+        });
 
         $response = $users->toArray();
         $response['features'] = [

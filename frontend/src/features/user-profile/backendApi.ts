@@ -257,6 +257,8 @@ export const applicantFilesApi = {
       name?: string;
       phone?: string | null;
       city?: string | null;
+      looking_for_jobs?: boolean;
+      looking_for_ojt?: boolean;
       category_ids?: number[];
       other_categories?: string[];
       skills?: string[];

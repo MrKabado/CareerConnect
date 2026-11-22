@@ -7,9 +7,12 @@ export type PublicJobListing = {
   description: string;
   responsibilities: string[] | string | null;
   requirements: string[] | string | null;
+  required_skills?: string[] | null;
   category?: { id: number; name: string } | null;
   location: string;
   work_setup: "onsite" | "hybrid" | "remote";
+  experience_required?: boolean;
+  minimum_experience_years?: number | null;
   employment_type: "full_time" | "part_time" | "contract" | null;
   salary_min: number | null;
   salary_max: number | null;

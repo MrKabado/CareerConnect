@@ -1,5 +1,4 @@
 ﻿import axios, { type AxiosError, type AxiosRequestConfig } from "axios";
-import { toast } from "sonner";
 
 const apiBaseUrl = (import.meta.env.VITE_API_BASE_URL || "http://192.168.254.125:8000/api")
   .replace(/\/+$/, "");
@@ -23,10 +22,6 @@ const apiClient = axios.create({
   },
   validateStatus: (status) => status >= 200 && status < 300,
 });
-
-function isActionRequest(method: string | undefined): boolean {
-  return method !== undefined && !["GET", "HEAD", "OPTIONS"].includes(method.toUpperCase());
-}
 
 function getValidationMessage(payload: unknown): string | null {
   if (
@@ -69,51 +64,13 @@ function getResponseMessage(payload: unknown): string | null {
   return responseMessage ?? validationMessage;
 }
 
-function getActionSuccessMessage(
-  method: string | undefined,
-  payload: unknown,
-): string | null {
-  const responseMessage = getResponseMessage(payload);
-  if (responseMessage) return responseMessage;
-
-  switch (method?.toUpperCase()) {
-    case "POST":
-      return "Action completed successfully.";
-    case "PUT":
-    case "PATCH":
-      return "Changes saved successfully.";
-    case "DELETE":
-      return "Removed successfully.";
-    default:
-      return null;
-  }
-}
-
 apiClient.interceptors.response.use(
-  (response) => {
-    if (isActionRequest(response.config.method)) {
-      const message = getActionSuccessMessage(
-        response.config.method,
-        response.data,
-      );
-      if (message) toast.success(message);
-    }
-
-    return response;
-  },
+  undefined,
   (error: AxiosError<{ code?: string; message?: string }>) => {
     const message =
       getResponseMessage(error.response?.data) ??
       (error.message || "Request failed.");
     const status = error.response?.status ?? 0;
-
-    if (isActionRequest(error.config?.method) && status !== 422) {
-      toast.error(
-        status === 0
-          ? "Unable to reach the server. Check your connection and try again."
-          : message,
-      );
-    }
 
     return Promise.reject(new ApiError(message, status, error.response?.data?.code));
   },

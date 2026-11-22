@@ -21,6 +21,33 @@ function toApplication(record: ApplicantApplicationRecord): Application {
   const rejection = [...record.status_history]
     .reverse()
     .find((history) => history.status === "rejected");
+  const interviewSchedule = record.interview?.scheduled_at
+    ? (() => {
+        const scheduled = new Date(record.interview.scheduled_at);
+        if (Number.isNaN(scheduled.getTime())) return undefined;
+        const date = new Intl.DateTimeFormat("en-CA", {
+          timeZone: record.interview.timezone,
+          year: "numeric",
+          month: "2-digit",
+          day: "2-digit",
+        }).format(scheduled);
+        const time = new Intl.DateTimeFormat("en-GB", {
+          timeZone: record.interview.timezone,
+          hour: "2-digit",
+          minute: "2-digit",
+          hourCycle: "h23",
+        }).format(scheduled);
+        return {
+          date,
+          time,
+          timezone: record.interview.timezone,
+          mode: record.interview.mode,
+          meetingUrl: record.interview.meeting_url,
+          meetingInstructions: record.interview.meeting_instructions,
+          location: record.interview.location,
+        };
+      })()
+    : undefined;
   return {
     id: record.id,
     jobListingId: record.listing ? String(record.listing.id) : undefined,
@@ -36,6 +63,7 @@ function toApplication(record: ApplicantApplicationRecord): Application {
     reapplicationAllowed: record.reapplication_allowed,
     hiredAt: record.hired_at ?? undefined,
     employmentEndedAt: record.employment_ended_at,
+    interviewSchedule,
     resumeFileName: record.resume?.original_filename,
     coverLetterFileName:
       record.cover_letter_document?.original_filename ??

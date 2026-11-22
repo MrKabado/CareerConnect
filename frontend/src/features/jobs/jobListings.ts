@@ -12,8 +12,14 @@ export type JobListing = {
   arrangement: string;
   employmentType: string;
   salary: string;
+  salaryMin?: number | null;
+  salaryMax?: number | null;
   posted: string;
   postedHoursAgo: number;
   description: string;
   skills: string[];
+  requirementsText: string;
+  requiredSkills: string[];
+  experienceRequired: boolean;
+  minimumExperienceYears: number | null;
 };

@@ -118,7 +118,7 @@ export function RecommendedJobCard({
     () => savedOpportunityStore.isSaved("job", job.id),
     () => false,
   );
-  const matchScore = job.matchScore ?? 0;
+  const matchScore = job.matchScore;
   const hasApplied = useSyncExternalStore(
     applicationStore.subscribe,
     () => applicationStore.hasAppliedTo(job.id),
@@ -166,16 +166,18 @@ export function RecommendedJobCard({
               </p>
             </div>
             <div className="flex shrink-0 items-start gap-2">
-              <div
-                aria-label={`${matchScore}% match`}
-                className={`whitespace-nowrap rounded-full px-2 py-1 text-[9px] font-semibold ${
-                  isBestMatch
-                    ? "bg-[#e6f7f3] text-[#087f78]"
-                    : "bg-[#eff6f5] text-[#54797a]"
-                }`}
-              >
-                {matchScore}% match
-              </div>
+              {matchScore !== null && (
+                <div
+                  aria-label={`${matchScore}% match`}
+                  className={`whitespace-nowrap rounded-full px-2 py-1 text-[9px] font-semibold ${
+                    isBestMatch
+                      ? "bg-[#e6f7f3] text-[#087f78]"
+                      : "bg-[#eff6f5] text-[#54797a]"
+                  }`}
+                >
+                  {matchScore}% match
+                </div>
+              )}
               <button
                 aria-label={isSaved ? "Remove saved job" : "Save job"}
                 aria-pressed={isSaved}
@@ -206,6 +208,11 @@ export function RecommendedJobCard({
             </span>
             <span className="font-semibold text-[#1b7776] max-[600px]:basis-full">
               {job.salary}
+            </span>
+            <span>
+              {job.experienceRequired
+                ? `At least ${job.minimumExperienceYears ?? 1} years of experience`
+                : "No experience required"}
             </span>
           </div>
 
@@ -306,8 +313,7 @@ export function MatchingExplainer() {
         How matching works
       </h2>
       <p className="mt-1.5 text-[10px] leading-5 text-[#77888a]">
-        Scores use only the interests, skills, locations, and setup preferences
-        you’ve shared.
+        Each available requirement or profile factor contributes equally. Scores compare required skills, experience, explicit education requirements, job category, desired role, location, work setup, employment type, and salary when both ranges are specified. Missing required qualifications reduce the score.
       </p>
     </section>
   );

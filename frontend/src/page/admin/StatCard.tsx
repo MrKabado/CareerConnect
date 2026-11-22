@@ -37,7 +37,7 @@ const COLUMNS: Column<User>[] = [
   { key: "role", header: "Role" },
   { key: "joined", header: "Joined" },
   { key: "status", header: "Status" },
-  { key: "identity", header: "Identity verification" },
+  { key: "identity", header: "Verification" },
   { key: "access", header: "Access", headerClassName: "text-right" },
 ];
 
@@ -95,7 +95,7 @@ export default function UsersPage() {
     <section>
       <PageHeader
         title="User management"
-        subtitle="Manage account access and review applicant identity submissions."
+        subtitle="Manage account access and review applicant and employer verification."
         actions={
           <div className="flex flex-wrap gap-2">
             <Link

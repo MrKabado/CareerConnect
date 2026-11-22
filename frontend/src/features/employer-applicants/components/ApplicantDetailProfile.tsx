@@ -428,7 +428,7 @@ export function ApplicantSidebar({
         disabled={contactLoading}
         className="inline-flex w-full items-center justify-center rounded-lg bg-[#0e8e9b] px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-[#0a7d8a] disabled:cursor-wait disabled:opacity-70 focus-visible:outline-[3px] focus-visible:outline-[#67c9c1] focus-visible:outline-offset-2"
       >
-        {contactLoading ? "Opening messaging…" : "Contact applicant"}
+        {contactLoading ? "Sending…" : "Send Note to Applicant"}
       </button>
     </aside>
   );

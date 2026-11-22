@@ -60,16 +60,17 @@ export default function ReportsPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [activities, setActivities] = useState<AdminActivityRecord[]>([]);
+  const [activityPage, setActivityPage] = useState(1);
+  const [activityPerPage, setActivityPerPage] = useState(10);
+  const [activityMeta, setActivityMeta] = useState({ current_page: 1, last_page: 1, per_page: 10, total: 0 });
+  const [isActivityLoading, setIsActivityLoading] = useState(true);
+  const [activityError, setActivityError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     if (!token) return;
     try {
-      const [response, activityResponse] = await Promise.all([
-        adminApi.dashboard(token),
-        adminApi.activity(token),
-      ]);
+      const response = await adminApi.dashboard(token);
       setStats(response.data);
-      setActivities(activityResponse.data);
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : "Unable to load platform statistics.");
     } finally {
@@ -77,11 +78,37 @@ export default function ReportsPage() {
     }
   }, [token]);
 
+  const loadActivity = useCallback(async () => {
+    if (!token) return;
+    setIsActivityLoading(true);
+    setActivityError(null);
+    try {
+      const response = await adminApi.activity(token, {
+        page: activityPage,
+        per_page: activityPerPage,
+      });
+      setActivities(response.data);
+      setActivityMeta(response.meta);
+    } catch (requestError) {
+      setActivityError(
+        requestError instanceof Error ? requestError.message : "Unable to load recent activity.",
+      );
+    } finally {
+      setIsActivityLoading(false);
+    }
+  }, [activityPage, activityPerPage, token]);
+
   useEffect(() => {
     // The request updates state only after its promise settles.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void load();
   }, [load]);
+
+  useEffect(() => {
+    // The request updates state only after its promise settles.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void loadActivity();
+  }, [loadActivity]);
 
   const reportStats = [
     ["Applicants", stats.total_applicants],
@@ -132,19 +159,65 @@ export default function ReportsPage() {
           <div className="flex items-center justify-between border-b border-line px-5 py-4">
             <div>
               <h2 className="text-[15px] font-semibold text-ink">Recent activity</h2>
-              <p className="mt-1 text-xs text-muted">Latest platform and administrator events</p>
+              <p className="mt-1 text-xs text-muted">{activityMeta.total.toLocaleString()} platform and administrator events</p>
             </div>
             <Activity size={17} className="text-brand-700" />
           </div>
-          {isLoading ? (
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line px-5 py-3">
+            <label className="flex items-center gap-2 text-[11px] text-muted">
+              Records per page
+              <select
+                aria-label="Recent activity records per page"
+                className="rounded-md border border-line bg-white px-2 py-1 text-[11px] text-ink"
+                onChange={(event) => {
+                  setActivityPerPage(Number(event.target.value));
+                  setActivityPage(1);
+                }}
+                value={activityPerPage}
+              >
+                {[10, 20, 50].map((pageSize) => (
+                  <option key={pageSize} value={pageSize}>{pageSize}</option>
+                ))}
+              </select>
+            </label>
+            <div className="flex items-center gap-2">
+              <span className="text-[11px] text-muted">
+                Page {activityMeta.current_page} of {activityMeta.last_page}
+              </span>
+              <Button
+                className="h-8 px-2.5 text-[11px]"
+                disabled={isActivityLoading || activityPage <= 1}
+                onClick={() => setActivityPage((page) => page - 1)}
+                variant="outline"
+              >
+                Previous
+              </Button>
+              <Button
+                className="h-8 px-2.5 text-[11px]"
+                disabled={isActivityLoading || activityPage >= activityMeta.last_page}
+                onClick={() => setActivityPage((page) => page + 1)}
+                variant="outline"
+              >
+                Next
+              </Button>
+            </div>
+          </div>
+          {activityError && (
+            <div className="flex items-center justify-between gap-3 px-5 py-3 text-xs text-red-800" role="alert">
+              <span>{activityError}</span>
+              <button className="font-semibold underline" onClick={() => void loadActivity()} type="button">Try again</button>
+            </div>
+          )}
+          {isActivityLoading ? (
             <p className="px-5 py-8 text-center text-xs text-muted">Loading recent activity…</p>
-          ) : activities.length === 0 ? (
+          ) : !activityError && activities.length === 0 ? (
             <div className="px-5 py-8 text-center">
               <CheckCircle2 size={22} className="mx-auto text-emerald-600" />
               <p className="mt-2 text-sm font-semibold text-ink">No recent activity</p>
               <p className="mt-1 text-xs text-muted">New platform events will appear here.</p>
             </div>
-          ) : (
+          ) : !activityError ? (
+            <div className="max-h-[28rem] overflow-y-auto">
             <ul className="divide-y divide-line">
               {activities.map((activity) => {
                 const Icon = activityIcon(activity.action);
@@ -165,7 +238,8 @@ export default function ReportsPage() {
                 );
               })}
             </ul>
-          )}
+            </div>
+          ) : null}
         </Card>
 
         <div className="grid content-start gap-4">

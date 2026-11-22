@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import { startConversation } from "@/features/messaging/api";
-import type { Conversation, MessagingActor } from "@/features/messaging/types";
+import { sendApplicantNote } from "@/features/messaging/api";
 
 const templates = [
   {
@@ -18,28 +17,27 @@ const templates = [
 ] as const;
 
 type ContactApplicantDialogProps = {
-  actor: MessagingActor;
+  token: string;
   applicantName: string;
   applicationId: string | number;
   role: string;
   company: string;
   onClose: () => void;
-  onStarted: (conversation: Conversation) => void;
 };
 
 export default function ContactApplicantDialog({
-  actor,
+  token,
   applicantName,
   applicationId,
   role,
   company,
   onClose,
-  onStarted,
 }: ContactApplicantDialogProps) {
   const [body, setBody] = useState("");
   const [templateLabel, setTemplateLabel] = useState("");
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState(false);
   const dialogRef = useRef<HTMLElement>(null);
   const firstFocusRef = useRef<HTMLSelectElement>(null);
   const sendingRef = useRef(false);
@@ -96,9 +94,11 @@ export default function ContactApplicantDialog({
     setSending(true);
     sendingRef.current = true;
     setError(null);
+    setSuccess(false);
     try {
-      const conversation = await startConversation(applicationId, body, actor);
-      onStarted(conversation);
+      await sendApplicantNote(token, applicationId, body.trim());
+      setSuccess(true);
+      window.setTimeout(onClose, 900);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "The conversation could not be started.");
       setSending(false);
@@ -122,9 +122,9 @@ export default function ContactApplicantDialog({
       >
         <header className="flex shrink-0 items-start justify-between gap-4 border-b border-[#edf1f1] px-6 py-5">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[#078b8d]">New conversation</p>
+            <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[#078b8d]">Applicant note</p>
             <h2 className="mt-1 text-lg font-bold text-[#263a3c]" id="contact-applicant-title">
-              Message {applicantName}
+                Send Note to Applicant
             </h2>
             <p className="mt-1 text-sm text-[#687b7e]">{role} · {company}</p>
           </div>
@@ -157,22 +157,23 @@ export default function ContactApplicantDialog({
           </div>
           <div>
             <label className="mb-1.5 block text-xs font-semibold text-[#526365]" htmlFor="contact-first-message">
-              First message
+              Note
             </label>
             <textarea
               autoComplete="off"
               className="min-h-36 w-full resize-y rounded-xl border border-[#dfe8e7] px-3 py-3 text-sm leading-6 text-[#344749] outline-none placeholder:text-[#94a1a2] focus:border-[#078b8d] focus:ring-2 focus:ring-[#078b8d]/15"
               id="contact-first-message"
               onChange={(event) => setBody(event.currentTarget.value)}
-              placeholder={`Introduce yourself and start a conversation with ${applicantName.split(/\s+/)[0] || applicantName}…`}
+              placeholder={`Write a note to ${applicantName.split(/\s+/)[0] || applicantName}…`}
               required
               value={body}
             />
             <p className="mt-1.5 text-xs text-[#829092]">
-              Your first message will create the conversation and notify the applicant.
+              This note will be emailed to the applicant and saved in the messaging conversation.
             </p>
           </div>
           {error && <p className="rounded-lg bg-[#fff4f2] px-3 py-2.5 text-sm text-[#a2534c]" role="alert">{error}</p>}
+          {success && <p className="rounded-lg bg-[#edf7f3] px-3 py-2.5 text-sm font-semibold text-[#287862]" role="status">Note sent successfully to the applicant.</p>}
           <div className="flex justify-end gap-3 border-t border-[#edf1f1] pt-4">
             <button
               className="rounded-xl border border-[#dfe8e7] px-4 py-2.5 text-sm font-semibold text-[#526365] hover:bg-[#f7fbfa] focus-visible:outline-[3px] focus-visible:outline-[#67c9c1]"
@@ -187,7 +188,7 @@ export default function ContactApplicantDialog({
               disabled={sending || !body.trim()}
               type="submit"
             >
-              {sending ? "Starting conversation…" : "Send message"}
+              {sending ? "Sending note…" : "Send Note"}
             </button>
           </div>
         </form>

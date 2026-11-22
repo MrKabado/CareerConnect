@@ -21,6 +21,20 @@ const IDENTITY_LABELS = {
   rejected: "Rejected",
 } as const;
 
+const COMPANY_VERIFICATION_STYLES = {
+  incomplete: "bg-slate-100 text-slate-700",
+  pending: "bg-amber-50 text-amber-700",
+  approved: "bg-emerald-50 text-emerald-700",
+  rejected: "bg-red-50 text-red-700",
+} as const;
+
+const COMPANY_VERIFICATION_LABELS = {
+  incomplete: "Incomplete",
+  pending: "Pending",
+  approved: "Verified",
+  rejected: "Rejected",
+} as const;
+
 interface UserRowProps {
   user: User;
   onToggleAccess: (id: string) => void | Promise<void>;
@@ -71,9 +85,7 @@ export default function UserRow({
         </span>
       </td>
       <td className="px-5 py-3.5">
-        {user.role !== "Applicant" ? (
-          <span className="text-xs text-muted">—</span>
-        ) : user.identityVerification ? (
+        {user.role === "Applicant" && user.identityVerification ? (
           <div className="flex flex-wrap items-center gap-2">
             <span className={`inline-flex rounded-full px-2.5 py-0.5 text-[11px] font-medium ${IDENTITY_STYLES[user.identityVerification.status]}`}>
               {IDENTITY_LABELS[user.identityVerification.status]}
@@ -90,8 +102,29 @@ export default function UserRow({
               {user.identityVerification.status === "pending" ? "Review docs" : "View record"}
             </Link>
           </div>
-        ) : (
+        ) : user.role === "Applicant" ? (
           <span className="text-xs text-muted">Not submitted</span>
+        ) : user.role === "Employer" && user.companyVerification ? (
+          <div className="flex flex-wrap items-center gap-2">
+            <span className={`inline-flex rounded-full px-2.5 py-0.5 text-[11px] font-medium ${COMPANY_VERIFICATION_STYLES[user.companyVerification.status]}`}>
+              {COMPANY_VERIFICATION_LABELS[user.companyVerification.status]}
+            </span>
+            <Link
+              aria-label={`${user.companyVerification.status === "pending" ? "Review" : "View"} ${user.companyVerification.companyName}'s company verification`}
+              className={`inline-flex h-8 items-center rounded-lg px-3 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#078b8d]/30 ${
+                user.companyVerification.status === "pending"
+                  ? "bg-[#078b8d] text-white hover:bg-[#067b7d]"
+                  : "border border-line bg-white text-ink hover:border-[#078b8d] hover:text-[#078b8d]"
+              }`}
+              to={`/admin/verifications?search=${encodeURIComponent(user.companyVerification.companyName)}&status=all`}
+            >
+              {user.companyVerification.status === "pending" ? "Review docs" : "View record"}
+            </Link>
+          </div>
+        ) : user.role === "Employer" ? (
+          <span className="text-xs text-muted">Not submitted</span>
+        ) : (
+          <span className="text-xs text-muted">—</span>
         )}
       </td>
       <td className="px-5 py-3.5 text-right">

@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import type { RecommendedJob } from "@/components/common/user/recommendationComponents";
 import { useAuth } from "@/features/auth/useAuth";
-import { getJobMatch } from "@/features/jobs/jobMatching";
+import { getJobMatch, hasJobMatchingProfile } from "@/features/jobs/jobMatching";
 import type { JobListing } from "@/features/jobs/jobListings";
 import { getOjtMatch } from "@/features/jobs/ojtMatching";
 import type { OjtOpportunity, ScoredOjtOpportunity } from "@/features/jobs/ojtMatching";
 import { formatListingPay, listingText, publicJobsApi, type PublicJobListing } from "@/features/jobs/backendApi";
+import { applicantFilesApi, type ApplicantProfileData } from "@/features/user-profile/backendApi";
 import { onboardingStore } from "@/features/onboarding/store";
 import { savedOpportunityStore } from "@/features/jobs/savedOpportunities";
 
@@ -55,6 +56,8 @@ function toRecommendedListing(listing: PublicJobListing): JobListing {
         ? ({ full_time: "Full-time", part_time: "Part-time", contract: "Contract" } as const)[listing.employment_type]
         : "Not specified",
     salary: formatListingPay(listing),
+    salaryMin: listing.salary_min,
+    salaryMax: listing.salary_max,
     posted: publishedAt && !Number.isNaN(publishedAt.getTime())
       ? new Intl.RelativeTimeFormat("en", { numeric: "auto" }).format(
           -Math.max(1, hoursSincePublished >= 24 ? Math.floor(hoursSincePublished / 24) : hoursSincePublished),
@@ -63,7 +66,13 @@ function toRecommendedListing(listing: PublicJobListing): JobListing {
       : "Date not available",
     postedHoursAgo: hoursSincePublished,
     description: listing.description,
-    skills: listingText(listing.requirements),
+    skills: listing.required_skills?.length
+      ? listing.required_skills
+      : listingText(listing.requirements),
+    requirementsText: listingText(listing.requirements).join(" "),
+    requiredSkills: listing.required_skills ?? [],
+    experienceRequired: listing.experience_required ?? false,
+    minimumExperienceYears: listing.minimum_experience_years ?? null,
   };
 }
 
@@ -120,7 +129,7 @@ function getPostedHoursAgo(posted: string) {
 }
 
 export function useUserRecommendations() {
-  const { user } = useAuth();
+  const { token, user } = useAuth();
   const [noticeDismissed, setNoticeDismissed] = useState(false);
   const [sort, setSort] = useState<RecommendationSort>("best-match");
   const [showSavedOnly, setShowSavedOnly] = useState(
@@ -140,6 +149,38 @@ export function useUserRecommendations() {
   );
   const [apiJobs, setApiJobs] = useState<JobListing[]>([]);
   const [apiOjtOpportunities, setApiOjtOpportunities] = useState<OjtOpportunity[]>([]);
+  const [profileResult, setProfileResult] = useState<{
+    token: string;
+    profile: ApplicantProfileData | null;
+    error: string | null;
+  } | null>(null);
+  const profile = token && profileResult?.token === token ? profileResult.profile : null;
+  const profileError = token && profileResult?.token === token ? profileResult.error : null;
+
+  useEffect(() => {
+    let active = true;
+    if (!token) return;
+
+    void applicantFilesApi.profile(token)
+      .then((response) => {
+        if (!active) return;
+        setProfileResult({ token, profile: response.data, error: null });
+      })
+      .catch((requestError: unknown) => {
+        if (!active) return;
+        setProfileResult({
+          token,
+          profile: null,
+          error: requestError instanceof Error
+            ? requestError.message
+            : "Unable to load your applicant profile for job matching.",
+        });
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [token]);
 
   useEffect(() => {
     let active = true;
@@ -164,20 +205,14 @@ export function useUserRecommendations() {
   }, []);
 
   const hasJobSeekerPreferences =
-    onboarding.isComplete &&
-    answers.goal === "job-seeker" &&
-    (answers.desiredJobTitles.length > 0 ||
-      answers.skills.length > 0 ||
-      answers.jobCategories.length > 0 ||
-      Boolean(answers.workSetup) ||
-      answers.preferredLocations.length > 0);
+    profile !== null && profile.looking_for_jobs && hasJobMatchingProfile(profile);
 
   const recommendations = useMemo(() => {
     const matchingJobs: RecommendedJob[] = apiJobs.map((job) => {
-      const match = hasJobSeekerPreferences ? getJobMatch(job, answers) : null;
+      const match = hasJobSeekerPreferences && profile ? getJobMatch(job, profile) : null;
       return {
         ...job,
-        matchScore: match?.score ?? 0,
+        matchScore: match?.score ?? null,
         matchReasons: match?.reasons ?? [],
       };
     });
@@ -187,7 +222,7 @@ export function useUserRecommendations() {
         ? left.postedHoursAgo - right.postedHoursAgo
         : (right.matchScore ?? -1) - (left.matchScore ?? -1),
     );
-  }, [answers, apiJobs, hasJobSeekerPreferences, sort]);
+  }, [apiJobs, hasJobSeekerPreferences, profile, sort]);
 
   const ojtRecommendations = useMemo(() => {
     return apiOjtOpportunities
@@ -201,7 +236,7 @@ export function useUserRecommendations() {
       ...recommendations.map((job) => ({
         type: "job" as const,
         key: `job-${job.id}`,
-        score: job.matchScore ?? 0,
+        score: job.matchScore ?? -1,
         postedHoursAgo: job.postedHoursAgo,
         job,
       })),
@@ -263,6 +298,7 @@ export function useUserRecommendations() {
     showSavedOnly,
     sort,
     user,
+    profileError,
     verificationEmail,
     visibleRecommendations,
     savedOpportunities,

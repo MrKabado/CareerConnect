@@ -5,6 +5,8 @@ type BackendStatus = "pending" | "reviewing" | "shortlisted" | "interview" | "hi
 type ApplicationRecord = {
   id: number;
   status: BackendStatus;
+  match_score: number;
+  match_reasons: string[];
   cover_letter: string | null;
   cover_letter_document?: {
     original_filename: string;
@@ -147,6 +149,7 @@ function toApplicant(record: ApplicationRecord, interview?: InterviewRecord): Ap
     department: record.listing?.listing_type === "ojt" ? "OJT" : "Job",
     location: record.applicant?.city ?? "Not provided",
     appliedDate: formatDate(record.applied_at),
+    match: record.match_score,
     status: toFrontendStatus(record.status),
     statusHistory,
     ...(record.hired_at ? { hiredAt: record.hired_at } : {}),

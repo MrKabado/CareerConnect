@@ -6,6 +6,7 @@ use App\Models\CompanyVerification;
 use App\Models\IdentityVerification;
 use App\Models\Interview;
 use App\Models\JobListing;
+use App\Models\Skill;
 use App\Models\User;
 use App\Services\CloudinaryMediaGateway;
 use Illuminate\Foundation\Testing\LazilyRefreshDatabase;
@@ -615,6 +616,24 @@ it('blocks reapplication to the rejected listing for 30 days but allows other li
         ->assertJsonPath('data.0.status_history.1.public_reason', 'The role requires more experience.');
 
     $this->app['auth']->forgetGuards();
+    $this->withToken($applicantToken)
+        ->getJson("/api/applicant/job-listing-statuses?listing_ids[]={$listing->id}&listing_ids[]={$otherListing->id}")
+        ->assertOk()
+        ->assertJsonPath('data.0.listing_id', $listing->id)
+        ->assertJsonPath('data.0.status', 'rejected')
+        ->assertJsonPath('data.0.rejected_at', $rejectedAt->toISOString())
+        ->assertJsonPath('data.0.reapply_available_at', $reapplyAvailableAt->toISOString())
+        ->assertJsonPath('data.0.reapplication_allowed', false);
+
+    $otherApplicant = phaseFiveApplicant();
+    $otherToken = phaseFiveToken($this, $otherApplicant);
+    $this->app['auth']->forgetGuards();
+    $this->withToken($otherToken)
+        ->getJson("/api/applicant/job-listing-statuses?listing_ids[]={$listing->id}")
+        ->assertOk()
+        ->assertExactJson(['data' => []]);
+
+    $this->app['auth']->forgetGuards();
     $this->withToken($applicantToken)->postJson("/api/jobs/{$listing->id}/applications")
         ->assertStatus(409)
         ->assertJsonPath('code', 'reapplication_cooldown')
@@ -707,13 +726,81 @@ it('enforces account, listing-type and OJT eligibility when applying', function 
     $verifiedApplicant->applicantProfile->ojtDetails()->create([
         'school' => 'State University',
         'course' => 'Computer Science',
+        'education_status' => 'undergraduate',
         'year_level' => 4,
         'required_hours' => 480,
     ]);
     $this->app['auth']->forgetGuards();
     $this->withToken($token)->postJson("/api/jobs/{$listing->id}/applications")
         ->assertCreated();
+
+    $stalePreferenceApplicant = phaseFiveApplicant();
+    $stalePreferenceApplicant->applicantProfile->ojtDetails()->create([
+        'school' => 'State University',
+        'course' => 'Computer Science',
+        'education_status' => 'graduated',
+        'graduation_year' => 2025,
+        'required_hours' => 480,
+    ]);
+    $stalePreferenceToken = phaseFiveToken($this, $stalePreferenceApplicant);
+    $this->app['auth']->forgetGuards();
+    $this->withToken($stalePreferenceToken)->postJson('/api/applicant/resume', [
+        'resume' => phaseFivePdf(),
+    ])->assertCreated();
+    $this->app['auth']->forgetGuards();
+    $this->withToken($stalePreferenceToken)->postJson("/api/jobs/{$listing->id}/applications")
+        ->assertCreated()
+        ->assertJsonPath('data.status', 'pending');
 });
+
+it('ranks employer applicants by match score before paginating', function (): void {
+    $employer = User::factory()->create(['role' => 'employer']);
+    $category = Category::create(['name' => 'Engineering']);
+    $listing = phaseFiveListing($employer, $category);
+    $matchingApplicant = phaseFiveApplicant();
+    $matchingApplicant->applicantProfile->categories()->attach($category->id);
+    $otherApplicant = phaseFiveApplicant();
+
+    phaseFiveApplication($matchingApplicant, $listing);
+    phaseFiveApplication($otherApplicant, $listing);
+
+    $token = phaseFiveToken($this, $employer);
+    $this->withToken($token)
+        ->getJson("/api/employer/applications?listing_id={$listing->id}&per_page=1&page=1")
+        ->assertOk()
+        ->assertJsonPath('meta.total', 2)
+        ->assertJsonPath('meta.last_page', 2)
+        ->assertJsonPath('data.0.applicant.id', $matchingApplicant->id)
+        ->assertJsonPath('data.0.match_score', 100);
+
+    $this->app['auth']->forgetGuards();
+    $this->withToken($token)
+        ->getJson("/api/employer/applications?listing_id={$listing->id}&per_page=1&page=2")
+        ->assertOk()
+        ->assertJsonPath('data.0.applicant.id', $otherApplicant->id)
+        ->assertJsonPath('data.0.match_score', 0);
+});
+
+function phaseFiveApplication(User $applicant, JobListing $listing): void
+{
+    $resume = $applicant->resumes()->create([
+        'storage_path' => 'test-resumes/'.Str::uuid().'.pdf',
+        'original_filename' => 'resume.pdf',
+        'mime_type' => 'application/pdf',
+        'file_size' => 100,
+        'is_current' => true,
+    ]);
+    $application = $applicant->applications()->make([
+        'resume_id' => $resume->id,
+        'status' => 'pending',
+        'resume_original_filename' => $resume->original_filename,
+        'resume_mime_type' => $resume->mime_type,
+        'resume_file_size' => $resume->file_size,
+        'applied_at' => now(),
+    ]);
+    $application->jobListing()->associate($listing);
+    $application->save();
+}
 
 it('returns only owned application history and retains it when a listing closes', function (): void {
     Storage::fake('local');
@@ -848,4 +935,43 @@ it('serves the exact application resume only to its applicant and listing owner'
         ->assertNotFound();
 
     $this->assertDatabaseHas('job_listings', ['id' => $otherListing->id]);
+});
+
+it('enforces required job skills and experience before an application is created', function (): void {
+    Storage::fake('local');
+    $applicant = phaseFiveApplicant();
+    $applicant->applicantProfile->update(['experience_level' => '1_3_years']);
+    $employer = User::factory()->create(['role' => 'employer']);
+    $listing = phaseFiveListing($employer, Category::create(['name' => 'Backend']), [
+        'required_skills' => ['PHP', 'SQL'],
+        'experience_required' => true,
+        'minimum_experience_years' => 3,
+    ]);
+    $token = phaseFiveToken($this, $applicant);
+
+    $this->withToken($token)->postJson('/api/applicant/resume', [
+        'resume' => phaseFivePdf(),
+    ])->assertCreated();
+
+    $this->app['auth']->forgetGuards();
+    $this->withToken($token)->postJson("/api/jobs/{$listing->id}/applications")
+        ->assertUnprocessable()
+        ->assertJsonPath('code', 'job_qualification_ineligible')
+        ->assertJsonFragment(['message' => "You do not meet this job listing's qualifications. Missing required skills: PHP, SQL. This job requires at least 3 years of experience, but your profile indicates at least 1."]);
+
+    $applicant->applicantProfile->skills()->attach([
+        Skill::create(['name' => 'PHP', 'normalized_name' => 'php'])->id,
+        Skill::create(['name' => 'SQL', 'normalized_name' => 'sql'])->id,
+    ]);
+    $this->app['auth']->forgetGuards();
+    $this->withToken($token)->postJson("/api/jobs/{$listing->id}/applications")
+        ->assertUnprocessable()
+        ->assertJsonPath('code', 'job_qualification_ineligible')
+        ->assertJsonFragment(['message' => "You do not meet this job listing's qualifications. This job requires at least 3 years of experience, but your profile indicates at least 1."]);
+
+    $applicant->applicantProfile->update(['experience_level' => '3_5_years']);
+    $this->app['auth']->forgetGuards();
+    $this->withToken($token)->postJson("/api/jobs/{$listing->id}/applications")
+        ->assertCreated()
+        ->assertJsonPath('data.status', 'pending');
 });

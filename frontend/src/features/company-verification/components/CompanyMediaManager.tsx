@@ -54,6 +54,9 @@ export default function CompanyMediaManager() {
         if (!active) return;
         const backendLogoUrl = company?.logo_url ?? null;
         setLogoUrl(backendLogoUrl);
+        window.dispatchEvent(new CustomEvent("careerconnect-employer-logo-changed", {
+          detail: backendLogoUrl,
+        }));
         if ((savedMedia.logo?.url ?? null) !== backendLogoUrl) {
           try {
             companyVerificationApi.setCompanyMedia({
@@ -155,6 +158,9 @@ export default function CompanyMediaManager() {
         setLogoUploadProgress,
       );
       setLogoUrl(uploadedUrl);
+      window.dispatchEvent(new CustomEvent("careerconnect-employer-logo-changed", {
+        detail: uploadedUrl,
+      }));
       setDraft((current) => ({
         ...current,
         logo: {
@@ -193,6 +199,9 @@ export default function CompanyMediaManager() {
     try {
       await employerVerificationFilesApi.deleteLogo(token);
       setLogoUrl(null);
+      window.dispatchEvent(new CustomEvent("careerconnect-employer-logo-changed", {
+        detail: null,
+      }));
       setDraft((current) => ({ ...current, logo: null }));
       try {
         companyVerificationApi.setCompanyMedia({

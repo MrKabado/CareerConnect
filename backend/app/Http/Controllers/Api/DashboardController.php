@@ -14,15 +14,21 @@ use Illuminate\Http\Request;
 
 class DashboardController extends Controller
 {
-    public function adminActivity(): JsonResponse
+    public function adminActivity(Request $request): JsonResponse
     {
+        $filters = $request->validate([
+            'page' => ['sometimes', 'integer', 'min:1'],
+            'per_page' => ['sometimes', 'integer', 'min:1', 'max:50'],
+        ]);
+
         $logs = ActivityLog::query()
             ->with(['user:id,name,email', 'actor:id,name,email'])
-            ->latest('created_at')
-            ->limit(10)
-            ->get();
+            ->orderByDesc('created_at')
+            ->orderByDesc('id')
+            ->paginate($filters['per_page'] ?? 10)
+            ->withQueryString();
 
-        $data = $logs->map(function (ActivityLog $log): array {
+        $data = $logs->getCollection()->map(function (ActivityLog $log): array {
             $labels = [
                 'admin.user_status_updated' => 'Account access changed',
                 'admin.user_updated' => 'User account updated',
@@ -52,7 +58,16 @@ class DashboardController extends Controller
             ];
         });
 
-        return response()->json(['data' => $data]);
+        return response()->json([
+            'data' => $data,
+            'links' => $logs->linkCollection(),
+            'meta' => [
+                'current_page' => $logs->currentPage(),
+                'last_page' => $logs->lastPage(),
+                'per_page' => $logs->perPage(),
+                'total' => $logs->total(),
+            ],
+        ]);
     }
 
     public function admin(): JsonResponse

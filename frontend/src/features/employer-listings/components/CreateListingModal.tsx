@@ -17,7 +17,10 @@ type CreateListingModalProps = {
     summary: string;
     responsibilities: string;
     requirements: string;
+    requiredSkills: string;
     employmentType: string;
+    experienceRequirement: "with_experience" | "without_experience";
+    minimumExperienceYears: string;
     salaryMin: string;
     salaryMax: string;
     allowanceType: string;
@@ -181,6 +184,32 @@ export default function CreateListingModal({
                     </select>
                   </label>
                   <label className="block text-[11px] font-medium text-[#445a5d]">
+                    <span className="mb-1.5 block">Work experience *</span>
+                    <select
+                      value={newListingForm.experienceRequirement}
+                      onChange={(event) => onFieldChange("experienceRequirement", event.target.value)}
+                      className="w-full rounded-xl border border-[#dfe8e7] bg-white px-3 py-2.5 text-[12px]"
+                    >
+                      <option value="without_experience">Without Experience</option>
+                      <option value="with_experience">With Experience</option>
+                    </select>
+                  </label>
+                  {newListingForm.experienceRequirement === "with_experience" && (
+                    <label className="block text-[11px] font-medium text-[#445a5d]">
+                      <span className="mb-1.5 block">Minimum years of experience *</span>
+                      <input
+                        type="number"
+                        min="1"
+                        max="50"
+                        step="1"
+                        required
+                        value={newListingForm.minimumExperienceYears}
+                        onChange={(event) => onFieldChange("minimumExperienceYears", event.target.value)}
+                        className="w-full rounded-xl border border-[#dfe8e7] bg-white px-3 py-2.5 text-[12px]"
+                      />
+                    </label>
+                  )}
+                  <label className="block text-[11px] font-medium text-[#445a5d]">
                     <span className="mb-1.5 block">Minimum salary</span>
                     <input type="number" min="0" value={newListingForm.salaryMin} onChange={(event) => onFieldChange("salaryMin", event.target.value)} className="w-full rounded-xl border border-[#dfe8e7] bg-white px-3 py-2.5 text-[12px]" />
                   </label>
@@ -224,6 +253,17 @@ export default function CreateListingModal({
                 <span className="mb-1.5 block">Requirements *</span>
                 <textarea value={newListingForm.requirements} onChange={(event) => onFieldChange("requirements", event.target.value)} rows={3} className="w-full resize-y rounded-xl border border-[#dfe8e7] bg-white px-3 py-2.5 text-[12px]" />
               </label>
+              {newListingType === "job" && (
+                <label className="mt-4 block text-[11px] font-medium text-[#445a5d]">
+                  <span className="mb-1.5 block">Required skills (comma-separated)</span>
+                  <input
+                    value={newListingForm.requiredSkills}
+                    onChange={(event) => onFieldChange("requiredSkills", event.target.value)}
+                    placeholder="e.g. PHP, SQL, REST APIs"
+                    className="w-full rounded-xl border border-[#dfe8e7] bg-white px-3 py-2.5 text-[12px] text-[#1d3133] placeholder:text-[#8a9b9d]"
+                  />
+                </label>
+              )}
 
               <div className="mt-3 rounded-[10px] border border-[#dfeae8] bg-[#edf9f6] px-3 py-2 text-[10px] leading-5 text-[#476368]">
                 <span className="mr-2 text-[#0d8fa2]">•</span>

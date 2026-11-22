@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router";
 import { useAuth } from "@/features/auth/useAuth";
-import { getConversationForApplication, getEmployerMessagingActor } from "@/features/messaging/api";
+import { getEmployerMessagingActor } from "@/features/messaging/api";
 import type { Conversation } from "@/features/messaging/types";
 import {
   downloadEmployerApplicantCoverLetter,
@@ -9,10 +9,7 @@ import {
 } from "@/features/employer-applicants/api";
 import { useApplicantStatus } from "@/features/employer-applicants/useApplicantStatus";
 import type { ApplicantDocument } from "@/features/employer-applicants/types";
-import {
-  getApplicationId,
-  getExternalDocumentUrl,
-} from "@/features/employer-applicants/utils";
+import { getExternalDocumentUrl } from "@/features/employer-applicants/utils";
 
 export function useApplicantDetail() {
   const { applicantId } = useParams();
@@ -97,14 +94,7 @@ export function useApplicantDetail() {
         throw new Error("Sign in as an employer to contact this applicant.");
       }
 
-      const applicationId = getApplicationId(applicant.id);
-      const conversation = await getConversationForApplication(applicationId, messagingActor);
-
-      if (conversation) {
-        navigate(`/employer/messages/${encodeURIComponent(conversation.conversationId)}`);
-      } else {
-        setShowContactDialog(true);
-      }
+      setShowContactDialog(true);
     } catch (caught) {
       setContactError(
         caught instanceof Error ? caught.message : "Could not open messaging for this applicant.",

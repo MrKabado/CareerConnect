@@ -13,8 +13,10 @@ import { useApplicantDetail } from "@/features/employer-applicants/hooks/useAppl
 import type { ApplicantDocument } from "@/features/employer-applicants/types";
 import { getApplicationId, getExternalDocumentUrl } from "@/features/employer-applicants/utils";
 import ContactApplicantDialog from "@/features/messaging/components/ContactApplicantDialog";
+import { useAuth } from "@/features/auth/useAuth";
 
 export default function ApplicantDetailPageContent() {
+  const { token } = useAuth();
   const {
     applicant,
     applicantStage,
@@ -30,7 +32,6 @@ export default function ApplicantDetailPageContent() {
     contactError,
     messagingActor,
     handleContactApplicant,
-    handleConversationStarted,
     documentLoading,
     documentError,
     handleDownloadDocument,
@@ -123,13 +124,12 @@ export default function ApplicantDetailPageContent() {
 
       {showContactDialog && applicant && messagingActor ? (
         <ContactApplicantDialog
-          actor={messagingActor}
+          token={token ?? ""}
           applicantName={applicant.name}
           applicationId={getApplicationId(applicant.id)}
           company={messagingActor.companyName ?? "your company"}
           role={applicant.role}
           onClose={() => setShowContactDialog(false)}
-          onStarted={handleConversationStarted}
         />
       ) : null}
     </EmployerWorkspaceLayout>

@@ -268,6 +268,7 @@ class ApplicantProfileController extends Controller
                 $profile->ojtDetails()->updateOrCreate([], [
                     'school' => trim($validated['school']),
                     'course' => trim($validated['course']),
+                    'education_status' => 'undergraduate',
                     'year_level' => (int) $validated['year_level'][0],
                     'required_hours' => $validated['required_ojt_hours'],
                     'preferred_start_date' => $validated['preferred_start_date'],
@@ -540,10 +541,21 @@ class ApplicantProfileController extends Controller
         }
 
         if ($profile->looking_for_ojt) {
-            foreach (['school', 'course', 'year_level', 'required_hours'] as $field) {
+            foreach (['school', 'course', 'required_hours'] as $field) {
                 if ($details === null || blank($details->{$field})) {
                     $missing[] = 'ojt_details.'.$field;
                 }
+            }
+
+            $educationStatus = $details?->education_status
+                ?? (filled($details?->year_level) ? 'undergraduate' : null);
+
+            if (blank($educationStatus)) {
+                $missing[] = 'ojt_details.education_status';
+            } elseif ($educationStatus === 'undergraduate' && blank($details?->year_level)) {
+                $missing[] = 'ojt_details.year_level';
+            } elseif ($educationStatus === 'graduated' && blank($details?->graduation_year)) {
+                $missing[] = 'ojt_details.graduation_year';
             }
         }
 

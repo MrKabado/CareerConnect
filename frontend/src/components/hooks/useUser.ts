@@ -23,6 +23,16 @@ function mapUser(record: AdminUserRecord): User {
           rejectionReason: record.identity_verification.rejection_reason,
         }
       : null,
+    companyVerification: record.company_verification
+      ? {
+          id: String(record.company_verification.id),
+          companyName: record.company_verification.company_name,
+          status: record.company_verification.status === "verified"
+            ? "approved"
+            : record.company_verification.status,
+          rejectionReason: record.company_verification.rejection_reason,
+        }
+      : null,
   };
 }
 

@@ -26,8 +26,12 @@ class JobListingRequest extends FormRequest
             'description' => ['required', 'string', 'max:10000'],
             'responsibilities' => ['required', 'string', 'max:10000'],
             'requirements' => ['required', 'string', 'max:10000'],
+            'required_skills' => ['exclude_unless:listing_type,job', 'sometimes', 'nullable', 'array', 'max:30'],
+            'required_skills.*' => ['required', 'string', 'max:60', 'distinct:ignore_case'],
             'location' => ['required', 'string', 'max:255'],
             'work_setup' => ['required', Rule::in(['onsite', 'hybrid', 'remote'])],
+            'experience_required' => ['exclude_unless:listing_type,job', 'sometimes', 'boolean'],
+            'minimum_experience_years' => ['exclude_unless:listing_type,job', 'sometimes', 'nullable', 'integer', 'min:1', 'max:50'],
             'employment_type' => [
                 'exclude_unless:listing_type,job',
                 'required_if:listing_type,job',
@@ -85,6 +89,15 @@ class JobListingRequest extends FormRequest
                 && $this->filled('salary_max')
                 && (int) $this->input('salary_max') < (int) $this->input('salary_min')) {
                 $validator->errors()->add('salary_max', 'The maximum salary must be at least the minimum salary.');
+            }
+
+            if ($this->input('listing_type') === 'job'
+                && $this->boolean('experience_required')
+                && ! $this->filled('minimum_experience_years')) {
+                $validator->errors()->add(
+                    'minimum_experience_years',
+                    'Enter the minimum years of experience required for this job.',
+                );
             }
 
             if ($this->input('listing_type') === 'ojt'

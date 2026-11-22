@@ -459,7 +459,7 @@ class InterviewController extends Controller
 
     private function notifyApplicant(Interview $interview, string $event, string $title, string $message): void
     {
-        $interview->loadMissing(['applicant', 'application.jobListing']);
+        $interview->loadMissing(['applicant', 'application.jobListing.company']);
         $application = $interview->application;
         $listing = $application?->jobListing;
 
@@ -473,6 +473,7 @@ class InterviewController extends Controller
                 'application_id' => $interview->application_id,
                 'job_listing_id' => $listing?->id,
                 'job_listing_title' => $listing?->title,
+                'company_name' => $listing?->company?->name,
                 'scheduled_at' => $interview->scheduled_at?->toISOString(),
                 'timezone' => $interview->timezone,
                 'mode' => $interview->mode,

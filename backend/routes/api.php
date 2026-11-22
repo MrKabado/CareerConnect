@@ -55,6 +55,7 @@ Route::middleware(['auth:sanctum', 'account.active', 'abilities:*', 'throttle:60
 
     Route::middleware('role:applicant')->prefix('applicant')->group(function (): void {
         Route::get('/dashboard', [DashboardController::class, 'applicant']);
+        Route::get('/job-listing-statuses', [ApplicationController::class, 'applicantListingStatuses']);
         Route::get('/resume', [ApplicantResumeController::class, 'show']);
         Route::post('/resume', [ApplicantResumeController::class, 'store']);
         Route::delete('/resume', [ApplicantResumeController::class, 'destroy']);
@@ -113,6 +114,8 @@ Route::middleware(['auth:sanctum', 'account.active', 'abilities:*', 'throttle:60
         Route::get('/applications', [ApplicationController::class, 'employerIndex']);
         Route::get('/applications/{application}', [ApplicationController::class, 'employerShow'])->whereNumber('application');
         Route::patch('/applications/{application}/status', [ApplicationController::class, 'updateStatus'])
+            ->whereNumber('application');
+        Route::post('/applications/{application}/note', [ApplicationController::class, 'sendNote'])
             ->whereNumber('application');
         Route::patch('/applications/{application}/employment/end', [ApplicationController::class, 'endEmployment'])
             ->whereNumber('application');

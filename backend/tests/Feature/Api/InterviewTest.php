@@ -1,5 +1,6 @@
 <?php
 
+use App\Mail\ApplicantNoteMail;
 use App\Models\Application;
 use App\Models\Category;
 use App\Models\Company;
@@ -10,6 +11,7 @@ use Illuminate\Database\QueryException;
 use Illuminate\Foundation\Testing\LazilyRefreshDatabase;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Mail;
 
 uses(LazilyRefreshDatabase::class)->group('api');
 
@@ -111,6 +113,26 @@ function phaseSixInterview(Application $application, string $status, $scheduledA
     return $interview;
 }
 
+it('allows an employer to send a branded note to the applicant email', function (): void {
+    Mail::fake();
+    $applicant = User::factory()->create(['role' => 'applicant', 'email' => 'applicant-note@example.test']);
+    $employer = User::factory()->create(['role' => 'employer']);
+    $application = phaseSixApplication($employer, $applicant);
+
+    $this->withToken(phaseSixToken($employer))
+        ->postJson("/api/employer/applications/{$application->id}/note", [
+            'note' => 'Please bring a copy of your resume.',
+        ])
+        ->assertOk()
+        ->assertJsonPath('message', 'Note sent to the applicant.');
+
+    Mail::assertSent(ApplicantNoteMail::class, function (ApplicantNoteMail $mail) use ($applicant): bool {
+        return $mail->hasTo($applicant->email)
+            && $mail->note === 'Please bring a copy of your resume.';
+    });
+    expect($applicant->notifications()->count())->toBe(1);
+});
+
 it('allows an employer to schedule an interview and atomically moves shortlisted applications to interview', function (): void {
     $applicant = User::factory()->create(['role' => 'applicant']);
     $employer = User::factory()->create(['role' => 'employer']);
@@ -130,6 +152,9 @@ it('allows an employer to schedule an interview and atomically moves shortlisted
         ->and($interview->applicant_id)->toBe($applicant->id)
         ->and($interview->employer_id)->toBe($employer->id)
         ->and($interview->status)->toBe('scheduled');
+    expect($applicant->notifications()->count())->toBe(1);
+    expect((int) ($applicant->notifications()->first()?->data['metadata']['interview_id'] ?? 0))
+        ->toBe($interview->id);
 
     $this->assertDatabaseHas('application_status_histories', [
         'application_id' => $application->id,
@@ -271,6 +296,9 @@ it('reschedules interviews with history and does not duplicate application statu
         'interview_id' => $interview->id,
         'event_type' => 'rescheduled',
     ]);
+    expect($applicant->notifications()->count())->toBe(1);
+    expect($applicant->notifications()->first()?->data['event'] ?? null)
+        ->toBe('interview_rescheduled');
 });
 
 it('cancels without changing the application pipeline and prevents repeated cancellation or rescheduling', function (): void {

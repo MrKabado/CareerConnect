@@ -26,7 +26,10 @@ type NewListingFormState = {
   summary: string;
   responsibilities: string;
   requirements: string;
+  requiredSkills: string;
   employmentType: string;
+  experienceRequirement: "with_experience" | "without_experience";
+  minimumExperienceYears: string;
   salaryMin: string;
   salaryMax: string;
   allowanceType: string;
@@ -40,13 +43,16 @@ function emptyForm(location = ""): NewListingFormState {
     title: "",
     categoryId: "",
     location,
-    workSetup: "Hybrid",
+    workSetup: "hybrid",
     availableSlots: "1",
     requiredHours: "480",
     summary: "",
     responsibilities: "",
     requirements: "",
+    requiredSkills: "",
     employmentType: "full_time",
+    experienceRequirement: "without_experience",
+    minimumExperienceYears: "1",
     salaryMin: "",
     salaryMax: "",
     allowanceType: "paid",
@@ -80,7 +86,14 @@ function toListing(listing: PublicJobListing): EmployerListing {
     description: listing.description,
     responsibilities: listingText(listing.responsibilities),
     salary: formatListingPay(listing),
-    skills: listingText(listing.requirements),
+    skills: listing.required_skills?.length
+      ? listing.required_skills
+      : listingText(listing.requirements),
+    experienceRequirement: listing.listing_type !== "job"
+      ? undefined
+      : listing.experience_required
+        ? `At least ${listing.minimum_experience_years ?? 1} years`
+        : "Without Experience",
     hiring: {
       type: listing.listing_type === "ojt"
         ? "OJT"
@@ -110,6 +123,10 @@ function createPayload(
     description: form.summary.trim(),
     responsibilities: form.responsibilities.trim(),
     requirements: form.requirements.trim(),
+    required_skills: form.requiredSkills
+      .split(/[,\n]/)
+      .map((skill) => skill.trim())
+      .filter(Boolean),
     location: form.location.trim(),
     work_setup: normalizeWorkSetup(form.workSetup),
   };
@@ -117,6 +134,10 @@ function createPayload(
     return {
       ...common,
       employment_type: form.employmentType as "full_time" | "part_time" | "contract",
+      experience_required: form.experienceRequirement === "with_experience",
+      minimum_experience_years: form.experienceRequirement === "with_experience"
+        ? Number(form.minimumExperienceYears)
+        : null,
       salary_min: form.salaryMin ? Number(form.salaryMin) : null,
       salary_max: form.salaryMax ? Number(form.salaryMax) : null,
     };
@@ -231,6 +252,14 @@ export function useEmployerJobListings() {
       || !newListingForm.responsibilities.trim() || !newListingForm.requirements.trim()
       || !newListingForm.location.trim()) {
       setError("Complete the required listing details before saving.");
+      return;
+    }
+    if (newListingType === "job"
+      && newListingForm.experienceRequirement === "with_experience"
+      && (!/^\d+$/.test(newListingForm.minimumExperienceYears)
+        || Number(newListingForm.minimumExperienceYears) < 1
+        || Number(newListingForm.minimumExperienceYears) > 50)) {
+      setError("Enter a minimum experience requirement between 1 and 50 years.");
       return;
     }
 

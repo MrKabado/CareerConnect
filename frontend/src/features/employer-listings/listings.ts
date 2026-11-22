@@ -17,6 +17,7 @@ export type EmployerListing = {
   responsibilities: string[];
   salary: string;
   skills: string[];
+  experienceRequirement?: string;
   hiring: {
     type: string;
     schedule: string;

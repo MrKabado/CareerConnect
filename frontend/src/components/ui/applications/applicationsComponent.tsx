@@ -227,6 +227,36 @@ export function ApplicationDetailPanel({
           </p>
         </section>
 
+        {application.status === "Interview Scheduled" && application.interviewSchedule ? (
+          <section aria-label="Interview details" className="rounded-[10px] border border-[#ded5f2] bg-[#faf7ff] p-3">
+            <h3 className="text-[8px] font-bold uppercase tracking-[0.04em] text-[#765cb8]">
+              Interview details
+            </h3>
+            <p className="mt-1.5 text-[10px] font-semibold text-[#354749]">
+              {formatInterviewSchedule(application.interviewSchedule)}
+            </p>
+            {application.interviewSchedule.mode === "online" && application.interviewSchedule.meetingUrl ? (
+              <a
+                className="mt-2 inline-flex break-all text-[9px] font-semibold text-[#078b8d] underline underline-offset-2"
+                href={application.interviewSchedule.meetingUrl}
+                rel="noreferrer"
+                target="_blank"
+              >
+                Join Google Meet
+              </a>
+            ) : application.interviewSchedule.location ? (
+              <p className="mt-1.5 text-[9px] text-[#647779]">
+                Location: {application.interviewSchedule.location}
+              </p>
+            ) : null}
+            {application.interviewSchedule.meetingInstructions ? (
+              <p className="mt-2 whitespace-pre-wrap text-[9px] leading-4 text-[#647779]">
+                {application.interviewSchedule.meetingInstructions}
+              </p>
+            ) : null}
+          </section>
+        ) : null}
+
         {application.status === "Hired" && application.hiredAt ? (
           <section aria-label="Employment duration" className="rounded-[10px] border border-[#d1eadf] bg-[#f3faf6] p-3">
             <h3 className="text-[8px] font-bold uppercase tracking-[0.04em] text-[#187850]">

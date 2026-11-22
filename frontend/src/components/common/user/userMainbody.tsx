@@ -3,9 +3,16 @@ import isoCountries from "i18n-iso-countries";
 import { Skeleton } from "@/components/ui/skeleton";
 import englishCountryNames from "i18n-iso-countries/langs/en.json";
 import { useNavigate } from "react-router";
+import { useAuth } from "@/features/auth/useAuth";
 import { onboardingStore } from "@/features/onboarding/store";
-import { getJobMatch, textSimilarity } from "@/features/jobs/jobMatching";
+import { getJobMatch, hasJobMatchingProfile, textSimilarity } from "@/features/jobs/jobMatching";
 import type { JobListing } from "@/features/jobs/jobListings";
+import { applicantFilesApi, type ApplicantProfileData } from "@/features/user-profile/backendApi";
+import {
+  applicantApplicationsApi,
+  applicationStatusLabel,
+  type ApplicantListingStatus,
+} from "@/features/user-applications/backendApi";
 import {
   formatListingPay,
   listingText,
@@ -65,6 +72,8 @@ function toFrontendListing(listing: PublicJobListing): ApiJobListing {
       ? ({ full_time: "Full-time", part_time: "Part-time", contract: "Contract" } as const)[listing.employment_type]
       : listing.listing_type === "ojt" ? "Internship" : "Not specified",
     salary: formatListingPay(listing),
+    salaryMin: listing.salary_min,
+    salaryMax: listing.salary_max,
     posted: !publishedAt || Number.isNaN(publishedAt.getTime())
       ? "Date not available"
       : new Intl.RelativeTimeFormat("en", { numeric: "auto" }).format(
@@ -73,7 +82,13 @@ function toFrontendListing(listing: PublicJobListing): ApiJobListing {
         ),
     postedHoursAgo: hoursSincePublished,
     description: listing.description,
-    skills: listingText(listing.requirements),
+    skills: listing.required_skills?.length
+      ? listing.required_skills
+      : listingText(listing.requirements),
+    requirementsText: listingText(listing.requirements).join(" "),
+    requiredSkills: listing.required_skills ?? [],
+    experienceRequired: listing.experience_required ?? false,
+    minimumExperienceYears: listing.minimum_experience_years ?? null,
   };
 }
 
@@ -84,6 +99,21 @@ function formatListingPosted(publishedAt: string | null): string {
   const hours = Math.max(0, Math.floor((Date.now() - date.getTime()) / 3_600_000));
   const amount = hours >= 24 ? Math.max(1, Math.floor(hours / 24)) : Math.max(1, hours);
   return new Intl.RelativeTimeFormat("en", { numeric: "auto" }).format(-amount, hours >= 24 ? "day" : "hour");
+}
+
+function formatStatusDate(value: string | null): string {
+  if (!value) return "date unavailable";
+  const date = new Date(value);
+  return Number.isNaN(date.getTime())
+    ? "date unavailable"
+    : new Intl.DateTimeFormat("en", { dateStyle: "medium" }).format(date);
+}
+
+function getCooldownDaysRemaining(value: string | null): number {
+  if (!value) return 0;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return 0;
+  return Math.max(0, Math.ceil((date.getTime() - Date.now()) / 86_400_000));
 }
 
 function toOjtOpportunity(listing: PublicJobListing): OjtOpportunity {
@@ -169,6 +199,7 @@ export default function MainBody({
   audience,
 }: MainBodyProps) {
   const navigate = useNavigate();
+  const { token, user } = useAuth();
   const [activeTab, setActiveTab] = useState("For you");
   const [showSavedOnly, setShowSavedOnly] = useState(false);
   const [employmentTypes, setEmploymentTypes] = useState<string[]>([]);
@@ -183,6 +214,16 @@ export default function MainBody({
   const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
   const [apiJobs, setApiJobs] = useState<ApiJobListing[]>([]);
   const [apiOjtOpportunities, setApiOjtOpportunities] = useState<OjtOpportunity[]>([]);
+  const [profileResult, setProfileResult] = useState<{
+    token: string;
+    profile: ApplicantProfileData | null;
+    error: string | null;
+  } | null>(null);
+  const [listingStatusesResult, setListingStatusesResult] = useState<{
+    key: string;
+    statuses: Record<number, ApplicantListingStatus>;
+    error: string | null;
+  } | null>(null);
   const [jobsLoading, setJobsLoading] = useState(true);
   const [jobsError, setJobsError] = useState<string | null>(null);
   const [jobsPage, setJobsPage] = useState(1);
@@ -205,14 +246,30 @@ export default function MainBody({
     () => [],
   );
   const answers = onboarding.answers;
+  const applicantProfile = token
+    && audience === "job-seeker"
+    && user?.role === "applicant"
+    && profileResult?.token === token
+    ? profileResult.profile
+    : null;
+  const profileError = token && profileResult?.token === token ? profileResult.error : null;
+  const listingIds = useMemo(() => apiJobs.map((job) => job.listingId), [apiJobs]);
+  const listingStatusKey = token
+    && audience === "job-seeker"
+    && user?.role === "applicant"
+    && listingIds.length > 0
+    ? `${token}:${listingIds.join(",")}`
+    : null;
+  const listingStatuses = listingStatusKey && listingStatusesResult?.key === listingStatusKey
+    ? listingStatusesResult.statuses
+    : {};
+  const listingStatusesError = listingStatusKey && listingStatusesResult?.key === listingStatusKey
+    ? listingStatusesResult.error
+    : null;
   const hasJobSeekerPreferences =
-    onboarding.isComplete &&
-    answers.goal === "job-seeker" &&
-    (answers.desiredJobTitles.length > 0 ||
-      answers.skills.length > 0 ||
-      answers.jobCategories.length > 0 ||
-      Boolean(answers.workSetup) ||
-      answers.preferredLocations.length > 0);
+    applicantProfile !== null
+    && applicantProfile.looking_for_jobs
+    && hasJobMatchingProfile(applicantProfile);
   const hasOjtPreferences =
     onboarding.isComplete &&
     answers.goal === "ojt-seeker" &&
@@ -236,6 +293,60 @@ export default function MainBody({
       .filter((city) => city.toLocaleLowerCase().includes(query))
       .slice(0, cityResultLimit);
   }, [cityList, citySearch]);
+
+  useEffect(() => {
+    let active = true;
+    if (!token || audience !== "job-seeker" || user?.role !== "applicant") return;
+
+    void applicantFilesApi.profile(token)
+      .then((response) => {
+        if (!active) return;
+        setProfileResult({ token, profile: response.data, error: null });
+      })
+      .catch((requestError: unknown) => {
+        if (!active) return;
+        setProfileResult({
+          token,
+          profile: null,
+          error: requestError instanceof Error
+            ? requestError.message
+            : "Unable to load your applicant profile for job matching.",
+        });
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [audience, token, user?.role]);
+
+  useEffect(() => {
+    let active = true;
+    if (!token || !listingStatusKey || listingIds.length === 0) return;
+
+    void applicantApplicationsApi.listingStatuses(token, listingIds)
+      .then((response) => {
+        if (!active) return;
+        setListingStatusesResult({
+          key: listingStatusKey,
+          statuses: Object.fromEntries(response.data.map((status) => [status.listing_id, status])),
+          error: null,
+        });
+      })
+      .catch((requestError: unknown) => {
+        if (!active) return;
+        setListingStatusesResult({
+          key: listingStatusKey,
+          statuses: {},
+          error: requestError instanceof Error
+            ? requestError.message
+            : "Unable to load your application status for these listings.",
+        });
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [listingIds, listingStatusKey, token]);
 
   useEffect(() => {
     const requestId = ++jobsRequestId.current;
@@ -344,8 +455,8 @@ export default function MainBody({
     const matchingJobs = apiJobs
       .map((job) => ({
         ...job,
-        matchScore: hasJobSeekerPreferences
-          ? getJobMatch(job, answers)?.score ?? null
+        matchScore: hasJobSeekerPreferences && applicantProfile
+          ? getJobMatch(job, applicantProfile)?.score ?? null
           : null,
       }))
       .filter((job) => {
@@ -402,6 +513,7 @@ export default function MainBody({
   }, [
     activeTab,
     apiJobs,
+    applicantProfile,
     answers,
     audience,
     hasJobSeekerPreferences,
@@ -891,6 +1003,16 @@ export default function MainBody({
           </div>
         ) : (
         <div className="flex flex-col gap-[22px] max-[680px]:gap-[10px]">
+          {profileError && (
+            <p className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-xs text-red-800" role="alert">
+              Job match percentages are unavailable: {profileError}
+            </p>
+          )}
+          {listingStatusesError && (
+            <p className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-xs text-red-800" role="alert">
+              Application status could not be loaded: {listingStatusesError}
+            </p>
+          )}
           {jobsError && (
             <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-xs text-red-800" role="alert">
               <span>{jobsError}</span>
@@ -911,7 +1033,16 @@ export default function MainBody({
               Loading current listings…
             </p>
           )}
-          {visibleJobs.map((job) => (
+          {visibleJobs.map((job) => {
+            const applicationStatus = listingStatuses[job.listingId];
+            const isRejected = applicationStatus?.status === "rejected";
+            const cooldownDays = isRejected
+              ? getCooldownDaysRemaining(applicationStatus?.reapply_available_at ?? null)
+              : 0;
+            const isCooldownActive = Boolean(isRejected && applicationStatus && !applicationStatus.reapplication_allowed);
+            const hasActiveApplication = applicationStatus !== undefined && !isRejected;
+
+            return (
             <article
               aria-label={`View ${job.company} company profile`}
               className={`cursor-pointer overflow-hidden rounded-[13px] border bg-white shadow-[0_3px_10px_rgba(39,85,82,0.025)] transition-[border-color,box-shadow] duration-150 motion-reduce:transition-none hover:border-[#b9dcda] hover:shadow-[0_7px_18px_rgba(39,85,82,0.07)] focus-visible:outline-[3px] focus-visible:outline-[#67c9c1] focus-visible:outline-offset-2 ${bestMatch?.id === job.id ? "border-[#078b8d] ring-2 ring-[#078b8d]/10" : "border-[#dcebea]"}`}
@@ -959,23 +1090,42 @@ export default function MainBody({
                   <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-[7px] text-[13px] text-[#778789] max-[680px]:text-[9px]">
                     <span className="inline-flex items-center gap-1"><Icon name="pin" size={15} />{job.location}</span>
                     <span className="inline-flex items-center gap-1"><Icon name="briefcase" size={15} />{job.arrangement}</span>
+                    <span>{job.experienceRequired ? `At least ${job.minimumExperienceYears ?? 1} years experience` : "No experience required"}</span>
                     <span className="font-semibold text-[#1b7776] max-[680px]:basis-full">{job.salary}</span>
                   </div>
                   <p className="my-2 text-[12px] leading-[1.45] text-[#748385]">{job.description}</p>
+                  {applicationStatus && (
+                    <div className={`mb-2 rounded-lg border px-3 py-2 text-[10px] ${isRejected ? "border-amber-200 bg-amber-50 text-amber-900" : "border-[#dcebea] bg-[#f5f9f8] text-[#526c6e]"}`}>
+                      <p className="font-semibold">
+                        {isRejected ? "Previously rejected for this listing" : `Application ${applicationStatusLabel(applicationStatus.status).toLowerCase()}`}
+                      </p>
+                      {isRejected ? (
+                        <p className="mt-1">
+                          Rejected on {formatStatusDate(applicationStatus.rejected_at)}.
+                          {isCooldownActive
+                            ? ` You can apply again on ${formatStatusDate(applicationStatus.reapply_available_at)}${cooldownDays > 0 ? ` (${cooldownDays} ${cooldownDays === 1 ? "day" : "days"} remaining)` : ""}.`
+                            : " The 30-day restriction has ended; you may apply again."}
+                        </p>
+                      ) : (
+                        <p className="mt-1">You already have an application for this specific listing.</p>
+                      )}
+                    </div>
+                  )}
                   <div className="flex flex-wrap gap-[5px]">
                     {job.skills.map((skill) => <span className="rounded-[4px] bg-[#eff6f5] px-[7px] py-1 text-[12px] font-medium text-[#54797a] max-[680px]:text-[9px]" key={skill}>{skill}</span>)}
                   </div>
                   <div className="mt-[9px] flex items-center justify-between gap-3">
                     <div className="flex items-center gap-3">
                       <button
-                        className="rounded-lg bg-[#078b8d] px-3 py-1.5 text-[10px] font-semibold text-white hover:bg-[#067476]"
+                        className="rounded-lg bg-[#078b8d] px-3 py-1.5 text-[10px] font-semibold text-white hover:bg-[#067476] disabled:cursor-not-allowed disabled:bg-[#9aa6a7]"
+                        disabled={hasActiveApplication || isCooldownActive}
                         onClick={(event) => {
                           event.stopPropagation();
                           navigate(`/apply/${job.listingId}`);
                         }}
                         type="button"
                       >
-                        Apply
+                        {hasActiveApplication ? "Applied" : isCooldownActive ? "Reapply unavailable" : "Apply"}
                       </button>
                       <span className="whitespace-nowrap text-[9px] text-[#9aa6a7]">{job.posted}</span>
                     </div>
@@ -983,7 +1133,8 @@ export default function MainBody({
                 </div>
               </div>
             </article>
-          ))}
+            );
+          })}
           {visibleJobs.length === 0 && !jobsLoading && !jobsError ? (
             <div className="rounded-[13px] border border-dashed border-[#cadbda] bg-white px-5 py-[50px] text-center">
               <span className="inline-grid size-[42px] place-items-center rounded-[13px] bg-[#e6f4f1] text-[#188b8a]"><Icon name="search" size={22} /></span>

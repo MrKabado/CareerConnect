@@ -21,6 +21,12 @@ export type AdminUserRecord = {
     rejection_reason: string | null;
     created_at: string | null;
   } | null;
+  company_verification: {
+    id: number;
+    company_name: string;
+    status: "incomplete" | "pending" | "verified" | "rejected";
+    rejection_reason: string | null;
+  } | null;
 };
 
 export type AdminCategoryRecord = {
@@ -39,6 +45,12 @@ export type AdminActivityRecord = {
   actor_name: string | null;
   subject_name: string | null;
   created_at: string | null;
+};
+
+export type AdminActivityPage = {
+  data: AdminActivityRecord[];
+  links: { first: string | null; last: string | null; prev: string | null; next: string | null };
+  meta: { current_page: number; last_page: number; per_page: number; total: number };
 };
 
 export type AdminIdentityVerificationRecord = {
@@ -71,8 +83,12 @@ export const adminApi = {
     return apiRequest<{ data: AdminDashboardStats }>("/admin/dashboard", {}, token);
   },
 
-  activity(token: string) {
-    return apiRequest<{ data: AdminActivityRecord[] }>("/admin/activity", {}, token);
+  activity(token: string, filters: { page?: number; per_page?: number } = {}) {
+    return apiRequest<AdminActivityPage>(
+      "/admin/activity",
+      { params: filters },
+      token,
+    );
   },
 
   users(token: string, filters: { search?: string; role?: string; status?: string; page?: number }) {

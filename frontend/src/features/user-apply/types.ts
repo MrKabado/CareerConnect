@@ -12,4 +12,6 @@ export type ApplicationOpportunity = {
   arrangement: string;
   salary: string;
   track: ApplicationOpportunityTrack;
+  experienceRequirement: string;
+  requiredSkills: string[];
 };

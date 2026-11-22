@@ -242,6 +242,49 @@ it('shows the newest accounts first in admin user management', function (): void
         ->assertJsonPath('data.1.id', $olderApplicant->id);
 });
 
+it('includes company verification status in admin user records for employers', function (): void {
+    $pendingEmployer = User::factory()->create(['role' => 'employer']);
+    $pendingCompany = $pendingEmployer->company()->create([
+        'name' => 'Northwind Logistics',
+    ]);
+    $pendingVerification = $pendingCompany->verification()->create([
+        'status' => 'pending',
+        'submitted_at' => now(),
+    ]);
+
+    $verifiedEmployer = User::factory()->create(['role' => 'employer']);
+    $verifiedCompany = $verifiedEmployer->company()->create([
+        'name' => 'Contoso Studio',
+    ]);
+    $verifiedVerification = $verifiedCompany->verification()->create([
+        'status' => 'verified',
+    ]);
+
+    $unsubmittedEmployer = User::factory()->create(['role' => 'employer']);
+    $admin = User::factory()->create(['role' => 'admin']);
+    $adminToken = $admin->createToken('admin')->plainTextToken;
+
+    $response = $this->withToken($adminToken)
+        ->getJson('/api/admin/users?role=employer')
+        ->assertOk();
+    $usersById = collect($response->json('data'))->keyBy('id');
+
+    expect($usersById[$pendingEmployer->id]['company_verification'])
+        ->toMatchArray([
+            'id' => $pendingVerification->id,
+            'company_name' => 'Northwind Logistics',
+            'status' => 'pending',
+        ])
+        ->and($usersById[$verifiedEmployer->id]['company_verification'])
+        ->toMatchArray([
+            'id' => $verifiedVerification->id,
+            'company_name' => 'Contoso Studio',
+            'status' => 'verified',
+        ])
+        ->and($usersById[$unsubmittedEmployer->id]['company_verification'])
+        ->toBeNull();
+});
+
 it('keeps Cloudinary identity documents private and prunes them after retention', function (): void {
     Config::set('careerconnect.media_storage_disk', 'cloudinary');
     $applicant = User::factory()->create(['role' => 'applicant']);

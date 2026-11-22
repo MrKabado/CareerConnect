@@ -1,5 +1,6 @@
 <?php
 
+use App\Models\ActivityLog;
 use App\Models\Application;
 use App\Models\Category;
 use App\Models\Company;
@@ -112,6 +113,52 @@ it('returns role-scoped dashboard totals from persisted records', function (): v
         ->assertJsonPath('data.pending_applications', 1)
         ->assertJsonPath('data.accepted_applications', 1)
         ->assertJsonPath('data.rejected_applications', 1);
+});
+
+it('paginates admin activity newest first with timestamp ties ordered by id', function (): void {
+    $admin = User::factory()->create(['role' => 'admin']);
+    $actor = User::factory()->create(['role' => 'applicant']);
+    $older = ActivityLog::create([
+        'user_id' => $actor->id,
+        'actor_id' => $actor->id,
+        'action' => 'account.registered',
+        'payload' => ['description' => 'Older activity'],
+    ]);
+    $newest = ActivityLog::create([
+        'user_id' => $actor->id,
+        'actor_id' => $actor->id,
+        'action' => 'account.registered',
+        'payload' => ['description' => 'Newest activity'],
+    ]);
+    $tiedNewest = ActivityLog::create([
+        'user_id' => $actor->id,
+        'actor_id' => $actor->id,
+        'action' => 'account.registered',
+        'payload' => ['description' => 'Tied newest activity'],
+    ]);
+    $older->created_at = now()->subMinute();
+    $older->save();
+    $tiedAt = now();
+    $newest->created_at = $tiedAt;
+    $newest->save();
+    $tiedNewest->created_at = $tiedAt;
+    $tiedNewest->save();
+
+    $token = $admin->createToken('test')->plainTextToken;
+    $this->withToken($token)
+        ->getJson('/api/admin/activity?per_page=1&page=1')
+        ->assertOk()
+        ->assertJsonPath('data.0.id', $tiedNewest->id)
+        ->assertJsonPath('meta.current_page', 1)
+        ->assertJsonPath('meta.last_page', 3)
+        ->assertJsonPath('meta.total', 3);
+
+    $this->app['auth']->forgetGuards();
+    $this->withToken($token)
+        ->getJson('/api/admin/activity?per_page=1&page=3')
+        ->assertOk()
+        ->assertJsonPath('data.0.id', $older->id)
+        ->assertJsonPath('meta.current_page', 3);
 });
 
 it('authorizes admin user detail and updates while auditing and revoking tokens on identity changes', function (): void {

@@ -16,6 +16,7 @@ type NotificationFeedProps = {
   error: string | null;
   onMarkAllRead: () => void;
   onClose: () => void;
+  onNotificationOpen?: (item: NotificationItem) => void;
 };
 
 export default function NotificationFeed({
@@ -24,6 +25,7 @@ export default function NotificationFeed({
   error,
   onMarkAllRead,
   onClose,
+  onNotificationOpen,
 }: NotificationFeedProps) {
   const unreadCount = items.filter((item) => !item.read).length;
 
@@ -62,8 +64,13 @@ export default function NotificationFeed({
           <Link
             className="flex gap-3 border-b border-[#f0f3f3] px-5 py-4 transition hover:bg-[#f7fbfa] focus-visible:outline-[3px] focus-visible:outline-inset focus-visible:outline-[#67c9c1]"
             key={item.id}
-            onClick={onClose}
-            to={`/messages/${encodeURIComponent(item.conversationId)}`}
+            onClick={() => {
+              onNotificationOpen?.(item);
+              onClose();
+            }}
+            to={item.interviewId || item.applicationId
+              ? "/applications"
+              : `/messages/${encodeURIComponent(item.conversationId)}`}
           >
             <span
               aria-hidden="true"

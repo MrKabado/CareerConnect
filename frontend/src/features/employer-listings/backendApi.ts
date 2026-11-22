@@ -9,8 +9,11 @@ export type CreateEmployerListingPayload = {
   description: string;
   responsibilities: string;
   requirements: string;
+  required_skills?: string[];
   location: string;
   work_setup: "onsite" | "hybrid" | "remote";
+  experience_required?: boolean;
+  minimum_experience_years?: number | null;
   employment_type?: "full_time" | "part_time" | "contract";
   salary_min?: number | null;
   salary_max?: number | null;

@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Link, useOutletContext } from "react-router";
+import { Link, useOutletContext, useSearchParams } from "react-router";
 import VerificationRow from "../../components/admin/VerificationRow";
 import DocumentPreviewModal from "../../components/admin/modals/DocumentPreviewModal";
 import { PageHeader, SearchBar, Select } from "../../components/common";
@@ -23,8 +23,14 @@ export default function VerificationPage() {
   const { verifications, pendingCount, updateVerification, isLoading, error, retry } =
     useOutletContext<AdminOutletContext>();
   const { token } = useAuth();
-  const [query, setQuery] = useState("");
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  const [searchParams] = useSearchParams();
+  const [query, setQuery] = useState(() => searchParams.get("search") ?? "");
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>(() => {
+    const status = searchParams.get("status");
+    return status === "incomplete" || status === "pending" || status === "approved" || status === "rejected"
+      ? status
+      : "all";
+  });
   const [preview, setPreview] = useState<PreviewState | null>(null);
   const [previewItem, setPreviewItem] = useState<EmployerVerification | null>(null);
   const [previewError, setPreviewError] = useState<string | null>(null);

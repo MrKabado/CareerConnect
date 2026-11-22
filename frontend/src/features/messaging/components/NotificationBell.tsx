@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "@/features/auth/useAuth";
-import { getApplicantMessagingActor, markAllNotificationsRead } from "@/features/messaging/api";
+import { getApplicantMessagingActor, markAllNotificationsRead, markNotificationRead } from "@/features/messaging/api";
 import { useNotifications, useUnreadCount } from "@/features/messaging/hooks";
 import NotificationFeed from "@/features/messaging/components/NotificationFeed";
 
 export default function NotificationBell() {
-  const { user } = useAuth();
-  const actor = useMemo(() => getApplicantMessagingActor(user), [user]);
+  const { user, token } = useAuth();
+  const actor = useMemo(() => getApplicantMessagingActor(user, token ?? undefined), [token, user]);
   const { notifications, loading, error: feedError, refresh: refreshNotifications } = useNotifications(actor);
   const { unreadCount, error: countError, refresh: refreshUnread } = useUnreadCount(actor);
   const [open, setOpen] = useState(false);
@@ -104,6 +104,11 @@ export default function NotificationBell() {
               bellRef.current?.focus();
             }}
             onMarkAllRead={() => void handleMarkAllRead()}
+            onNotificationOpen={(item) => {
+              void markNotificationRead(applicantActor, item.id).then(() => {
+                void Promise.all([refreshNotifications(), refreshUnread()]);
+              }).catch(() => {});
+            }}
           />
         </div>
       )}

@@ -31,6 +31,7 @@ type UserRecommendationsPageContentProps = {
   hasJobSeekerPreferences: boolean;
   noticeDismissed: boolean;
   ojtRecommendations: ScoredOjtOpportunity[];
+  profileError: string | null;
   savedOpportunities: string[];
   setNoticeDismissed: (value: boolean) => void;
   setShowSavedOnly: (value: boolean | ((current: boolean) => boolean)) => void;
@@ -48,6 +49,7 @@ export default function UserRecommendationsPageContent({
   hasJobSeekerPreferences,
   noticeDismissed,
   ojtRecommendations,
+  profileError,
   savedOpportunities,
   setNoticeDismissed,
   setShowSavedOnly,
@@ -82,6 +84,12 @@ export default function UserRecommendationsPageContent({
                     : " · complete your profile for personalized matches"}
                 </p>
               </div>
+
+              {profileError && (
+                <p className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-800" role="alert">
+                  Job matches could not be calculated: {profileError}
+                </p>
+              )}
 
               <RecommendationsToolbar
                 savedOpportunitiesCount={savedOpportunities.length}

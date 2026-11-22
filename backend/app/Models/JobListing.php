@@ -18,8 +18,11 @@ class JobListing extends Model
         'description',
         'responsibilities',
         'requirements',
+        'required_skills',
         'location',
         'work_setup',
+        'experience_required',
+        'minimum_experience_years',
         'employment_type',
         'salary_min',
         'salary_max',
@@ -32,6 +35,9 @@ class JobListing extends Model
         return [
             'salary_min' => 'integer',
             'salary_max' => 'integer',
+            'required_skills' => 'array',
+            'experience_required' => 'boolean',
+            'minimum_experience_years' => 'integer',
             'published_at' => 'datetime',
         ];
     }

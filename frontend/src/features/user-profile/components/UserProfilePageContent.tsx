@@ -702,6 +702,8 @@ export default function ProfilePage() {
           name: preferences.name.trim(),
           phone: preferences.phone.trim() || null,
           city: preferences.city.trim() || null,
+          looking_for_jobs: !isOjtSeeker,
+          looking_for_ojt: isOjtSeeker,
           category_ids: categoryIds,
           other_categories: preferences.otherCategories,
           skills: preferences.skills,

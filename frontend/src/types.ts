@@ -54,6 +54,12 @@ export interface User {
     status: "pending" | "verified" | "rejected";
     rejectionReason: string | null;
   } | null;
+  companyVerification?: {
+    id: string;
+    companyName: string;
+    status: VerificationStatus;
+    rejectionReason: string | null;
+  } | null;
 }
 
 export interface Category {

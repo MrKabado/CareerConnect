@@ -77,6 +77,14 @@ export default function JobApplicationPageContent() {
           <p className="mt-1 text-[11px] text-[#829091]">
             {opportunity.location || "Location not specified"} · {opportunity.category || "OJT"} · {opportunity.arrangement || "Work setup not specified"}
           </p>
+          {opportunity.track === "Job" && (
+            <div className="mt-2 text-[10px] text-[#617779]">
+              <p>Experience: {opportunity.experienceRequirement}</p>
+              {opportunity.requiredSkills.length > 0 && (
+                <p className="mt-1">Required skills: {opportunity.requiredSkills.join(", ")}</p>
+              )}
+            </div>
+          )}
         </header>
 
         <ApplicationStepIndicator currentStep={step} track={opportunity.track} />

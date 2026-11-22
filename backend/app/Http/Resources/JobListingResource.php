@@ -22,6 +22,9 @@ class JobListingResource extends JsonResource
             'description' => $this->description,
             'responsibilities' => $this->responsibilities,
             'requirements' => $this->requirements,
+            'required_skills' => $this->required_skills ?? [],
+            'experience_required' => $this->experience_required ?? false,
+            'minimum_experience_years' => $this->minimum_experience_years,
             'category' => $this->whenLoaded('category', fn (): array => [
                 'id' => $this->category->id,
                 'name' => $this->category->name,

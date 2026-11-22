@@ -10,6 +10,7 @@ export type MessagingActor = {
   companyId?: string;
   companyName?: string;
   employerVerified?: boolean;
+  token?: string;
 };
 
 export type MessageAttachment = {
@@ -75,6 +76,10 @@ export type NotificationItem = {
   preview: string;
   createdAt: string;
   read: boolean;
+  interviewId?: number;
+  applicationId?: number;
+  meetingUrl?: string | null;
+  scheduledAt?: string | null;
 };
 
 export type SendMessagePayload = {

@@ -3,21 +3,27 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Mail\ApplicantNoteMail;
 use App\Models\ActivityLog;
 use App\Models\ApplicantDocument;
+use App\Models\ApplicantOjtDetail;
 use App\Models\Application;
 use App\Models\ApplicationStatusHistory;
 use App\Models\JobListing;
 use App\Models\User;
+use App\Services\ApplicantJobMatcher;
 use App\Services\MediaStorage;
 use App\Services\NotificationService;
 use App\Services\ResumeStorage;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Http\Exceptions\HttpResponseException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Symfony\Component\HttpFoundation\StreamedResponse;
@@ -27,6 +33,7 @@ class ApplicationController extends Controller
     public function __construct(
         private readonly ResumeStorage $resumeStorage,
         private readonly MediaStorage $mediaStorage,
+        private readonly ApplicantJobMatcher $applicantJobMatcher,
     ) {}
 
     public function store(Request $request, JobListing $jobListing): JsonResponse
@@ -45,20 +52,22 @@ class ApplicationController extends Controller
             [],
             ['looking_for_jobs' => true, 'looking_for_ojt' => false],
         );
+        $ojtDetails = $profile->ojtDetails;
+        $hasCompleteOjtDetails = $this->hasCompleteOjtDetails($ojtDetails);
         $lookingForType = $jobListing->listing_type === 'ojt'
             ? $profile->looking_for_ojt
             : $profile->looking_for_jobs;
 
-        if (! $lookingForType) {
+        if (! $lookingForType && ! ($jobListing->listing_type === 'ojt' && $hasCompleteOjtDetails)) {
             return response()->json([
                 'message' => 'Your seeker preferences do not include this listing type.',
                 'code' => 'listing_type_ineligible',
             ], 422);
         }
 
-        if ($jobListing->listing_type === 'ojt' && ! $profile->ojtDetails()->exists()) {
+        if ($jobListing->listing_type === 'ojt' && ! $hasCompleteOjtDetails) {
             return response()->json([
-                'message' => 'OJT details are required before applying to OJT listings.',
+                'message' => 'Complete your school, course, education status, academic year or graduation year, and required OJT hours before applying.',
                 'code' => 'ojt_details_required',
             ], 422);
         }
@@ -74,6 +83,14 @@ class ApplicationController extends Controller
                 throw new HttpResponseException(response()->json([
                     'message' => 'This listing is not currently accepting applications.',
                     'code' => 'listing_not_open',
+                ], 422));
+            }
+
+            $qualificationFailure = $this->jobQualificationFailure($listing, $applicant);
+            if ($qualificationFailure !== null) {
+                throw new HttpResponseException(response()->json([
+                    'message' => $qualificationFailure,
+                    'code' => 'job_qualification_ineligible',
                 ], 422));
             }
 
@@ -223,7 +240,7 @@ class ApplicationController extends Controller
         ]);
 
         $applications = $request->user()->applications()
-            ->with(['jobListing.company', 'resume', 'coverLetterDocument', 'statusHistories'])
+            ->with(['jobListing.company', 'resume', 'coverLetterDocument', 'statusHistories', 'interviews'])
             ->when(isset($filters['status']), fn (Builder $query): Builder => $query->where('status', $filters['status']))
             ->orderByDesc('applied_at')
             ->orderByDesc('id')
@@ -244,10 +261,42 @@ class ApplicationController extends Controller
         ]);
     }
 
+    public function applicantListingStatuses(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'listing_ids' => ['required', 'array', 'min:1', 'max:100'],
+            'listing_ids.*' => ['required', 'integer', 'min:1', 'distinct'],
+        ]);
+
+        $applications = $request->user()->applications()
+            ->whereIn('job_listing_id', $validated['listing_ids'])
+            ->with(['statusHistories' => fn (HasMany $query): HasMany => $query
+                ->orderBy('created_at')
+                ->orderBy('id')])
+            ->orderBy('job_listing_id')
+            ->get(['id', 'job_listing_id', 'status', 'updated_at']);
+
+        return response()->json([
+            'data' => $applications->map(function (Application $application): array {
+                $rejectedAt = $this->rejectionDate($application);
+                $reapplyAvailableAt = $rejectedAt?->addDays(30);
+
+                return [
+                    'listing_id' => $application->job_listing_id,
+                    'status' => $application->status,
+                    'rejected_at' => $rejectedAt?->toISOString(),
+                    'reapply_available_at' => $reapplyAvailableAt?->toISOString(),
+                    'reapplication_allowed' => $reapplyAvailableAt !== null
+                        && now()->greaterThanOrEqualTo($reapplyAvailableAt),
+                ];
+            })->values(),
+        ]);
+    }
+
     public function applicantShow(Request $request, int $application): JsonResponse
     {
         $application = $request->user()->applications()
-            ->with(['jobListing.company', 'resume', 'coverLetterDocument', 'statusHistories'])
+            ->with(['jobListing.company', 'resume', 'coverLetterDocument', 'statusHistories', 'interviews'])
             ->findOrFail($application);
 
         return response()->json(['data' => $this->applicantApplicationData($application)]);
@@ -289,7 +338,16 @@ class ApplicationController extends Controller
 
         $company = $request->user()->company;
         if ($company === null) {
-            return response()->json(['data' => [], 'meta' => ['total' => 0]]);
+            return response()->json([
+                'data' => [],
+                'links' => ['first' => null, 'last' => null, 'prev' => null, 'next' => null],
+                'meta' => [
+                    'current_page' => $filters['page'] ?? 1,
+                    'last_page' => 1,
+                    'per_page' => $filters['per_page'] ?? 15,
+                    'total' => 0,
+                ],
+            ]);
         }
 
         if (isset($filters['listing_id']) && ! $company->jobListings()->whereKey($filters['listing_id'])->exists()) {
@@ -298,32 +356,126 @@ class ApplicationController extends Controller
 
         $applications = Application::query()
             ->whereHas('jobListing', fn (Builder $query): Builder => $query->where('company_id', $company->id))
-            ->with(['applicant.applicantProfile.skills', 'applicant.applicantProfile.categories', 'jobListing', 'resume', 'coverLetterDocument', 'statusHistories'])
+            ->with([
+                'applicant.applicantProfile.skills',
+                'applicant.applicantProfile.categories',
+                'applicant.applicantProfile.ojtDetails',
+                'jobListing.category',
+                'jobListing.company',
+                'resume',
+                'coverLetterDocument',
+                'statusHistories',
+            ])
             ->when(isset($filters['listing_id']), fn (Builder $query): Builder => $query->where('job_listing_id', $filters['listing_id']))
             ->when(isset($filters['status']), fn (Builder $query): Builder => $query->where('status', $filters['status']))
             ->orderByDesc('applied_at')
             ->orderByDesc('id')
-            ->paginate($filters['per_page'] ?? 15)
-            ->withQueryString();
+            ->get()
+            ->map(fn (Application $application): array => [
+                'application' => $application,
+                'match_score' => $this->applicantJobMatcher
+                    ->match($application->applicant?->applicantProfile, $application->jobListing)['score'],
+            ])
+            ->sort(function (array $left, array $right): int {
+                $scoreOrder = $right['match_score'] <=> $left['match_score'];
+                if ($scoreOrder !== 0) {
+                    return $scoreOrder;
+                }
+
+                $leftAppliedAt = $left['application']->applied_at?->getTimestamp() ?? 0;
+                $rightAppliedAt = $right['application']->applied_at?->getTimestamp() ?? 0;
+
+                return ($rightAppliedAt <=> $leftAppliedAt)
+                    ?: ($right['application']->id <=> $left['application']->id);
+            })
+            ->values();
+
+        $perPage = $filters['per_page'] ?? 15;
+        $currentPage = $filters['page'] ?? 1;
+        $pagedApplications = new LengthAwarePaginator(
+            $applications->forPage($currentPage, $perPage)->values(),
+            $applications->count(),
+            $perPage,
+            $currentPage,
+            ['path' => $request->url(), 'query' => $request->query()],
+        );
 
         return response()->json([
-            'data' => $applications->getCollection()
-                ->map(fn (Application $application): array => $this->employerApplicationData($application))
+            'data' => $pagedApplications->getCollection()
+                ->map(fn (array $row): array => $this->employerApplicationData($row['application']))
                 ->values(),
-            'links' => $applications->linkCollection(),
+            'links' => $pagedApplications->linkCollection(),
             'meta' => [
-                'current_page' => $applications->currentPage(),
-                'last_page' => $applications->lastPage(),
-                'per_page' => $applications->perPage(),
-                'total' => $applications->total(),
+                'current_page' => $pagedApplications->currentPage(),
+                'last_page' => $pagedApplications->lastPage(),
+                'per_page' => $pagedApplications->perPage(),
+                'total' => $pagedApplications->total(),
             ],
+        ]);
+    }
+
+    public function sendNote(Request $request, int $application): JsonResponse
+    {
+        $validated = $request->validate([
+            'note' => ['required', 'string', 'min:1', 'max:5000'],
+        ]);
+
+        $applicationRecord = $this->employerApplicationQuery($request->user())
+            ->with(['applicant', 'jobListing.company'])
+            ->findOrFail($application);
+        $applicant = $applicationRecord->applicant;
+
+        if ($applicant === null || blank($applicant->email)) {
+            throw ValidationException::withMessages([
+                'note' => ['The applicant’s registered email address is unavailable.'],
+            ]);
+        }
+
+        $note = trim($validated['note']);
+        $companyName = $applicationRecord->jobListing?->company?->name
+            ?? $request->user()->company?->name
+            ?? 'CareerConnect employer';
+        $jobTitle = $applicationRecord->jobListing?->title ?? 'this position';
+
+        Mail::to($applicant->email)->send(new ApplicantNoteMail(
+            applicantName: $applicant->name,
+            employerName: $request->user()->name,
+            companyName: $companyName,
+            jobTitle: $jobTitle,
+            note: $note,
+        ));
+
+        app(NotificationService::class)->send(
+            $applicant,
+            'applicant_note',
+            'Message from '.$companyName,
+            $note,
+            [
+                'application_id' => $applicationRecord->id,
+                'job_listing_id' => $applicationRecord->job_listing_id,
+                'job_listing_title' => $jobTitle,
+                'company_name' => $companyName,
+            ],
+        );
+
+        return response()->json([
+            'message' => 'Note sent to the applicant.',
         ]);
     }
 
     public function employerShow(Request $request, int $application): JsonResponse
     {
         $application = $this->employerApplicationQuery($request->user())
-            ->with(['applicant.applicantProfile.skills', 'applicant.applicantProfile.categories', 'jobListing', 'resume', 'coverLetterDocument', 'statusHistories'])
+            ->with([
+                'applicant.applicantProfile.skills',
+                'applicant.applicantProfile.categories',
+                'applicant.applicantProfile.ojtDetails',
+                'jobListing.category',
+                'jobListing.company',
+                'resume',
+                'coverLetterDocument',
+                'statusHistories',
+            ])
             ->findOrFail($application);
 
         return response()->json(['data' => $this->employerApplicationData($application)]);
@@ -398,7 +550,9 @@ class ApplicationController extends Controller
             'data' => $this->employerApplicationData($updated[0]->load([
                 'applicant.applicantProfile.skills',
                 'applicant.applicantProfile.categories',
-                'jobListing',
+                'applicant.applicantProfile.ojtDetails',
+                'jobListing.category',
+                'jobListing.company',
                 'resume',
                 'statusHistories',
             ])),
@@ -504,6 +658,16 @@ class ApplicationController extends Controller
     private function applicantApplicationData(Application $application): array
     {
         $rejectedAt = $this->rejectionDate($application);
+        $interview = $application->relationLoaded('interviews')
+            ? $application->interviews
+                ->where('status', 'scheduled')
+                ->sortByDesc('scheduled_at')
+                ->first()
+            : $application->interviews()
+                ->where('status', 'scheduled')
+                ->orderByDesc('scheduled_at')
+                ->orderByDesc('id')
+                ->first();
 
         return [
             'id' => $application->id,
@@ -524,6 +688,18 @@ class ApplicationController extends Controller
                 && now()->greaterThanOrEqualTo($rejectedAt->addDays(30)),
             'hired_at' => $application->hired_at?->toISOString(),
             'employment_ended_at' => $application->employment_ended_at?->toDateString(),
+            'interview' => $interview ? [
+                'id' => $interview->id,
+                'status' => $interview->status,
+                'scheduled_at' => $interview->scheduled_at?->toISOString(),
+                'end_at' => $interview->end_at?->toISOString(),
+                'timezone' => $interview->timezone,
+                'mode' => $interview->mode,
+                'location' => $interview->location,
+                'meeting_url' => $interview->meeting_url,
+                'meeting_instructions' => $interview->meeting_instructions,
+                'applicant_notes' => $interview->applicant_notes,
+            ] : null,
             'listing' => $this->listingSummary($application->jobListing),
             'status_history' => $application->statusHistories
                 ->map(fn (ApplicationStatusHistory $history): array => [
@@ -558,13 +734,68 @@ class ApplicationController extends Controller
         return CarbonImmutable::instance($date);
     }
 
+    private function jobQualificationFailure(JobListing $listing, User $applicant): ?string
+    {
+        if ($listing->listing_type !== 'job') {
+            return null;
+        }
+
+        $profile = $applicant->applicantProfile()->with('skills')->first();
+        $failures = [];
+
+        $requiredSkills = collect($listing->required_skills ?? []);
+        if ($requiredSkills->isNotEmpty()) {
+            $applicantSkills = $profile?->skills
+                ->pluck('name')
+                ->map(fn (string $skill): string => $this->normalizeSkill($skill))
+                ->all() ?? [];
+            $missingSkills = $requiredSkills->reject(
+                fn (string $skill): bool => in_array($this->normalizeSkill($skill), $applicantSkills, true),
+            )->values();
+
+            if ($missingSkills->isNotEmpty()) {
+                $failures[] = 'Missing required skills: '.$missingSkills->implode(', ').'.';
+            }
+        }
+
+        if ($listing->experience_required) {
+            $minimumYears = $listing->minimum_experience_years ?? 1;
+            $experienceLevel = $profile?->experience_level;
+            $reportedMinimumYears = match ($experienceLevel) {
+                '1_3_years' => 1,
+                '3_5_years' => 3,
+                '5_plus_years' => 5,
+                'fresh_graduate' => 0,
+                default => null,
+            };
+
+            if ($reportedMinimumYears === null) {
+                $failures[] = "Add your work experience to your profile. This job requires at least {$minimumYears} years of experience.";
+            } elseif ($reportedMinimumYears < $minimumYears) {
+                $failures[] = "This job requires at least {$minimumYears} years of experience, but your profile indicates at least {$reportedMinimumYears}.";
+            }
+        }
+
+        return $failures === []
+            ? null
+            : 'You do not meet this job listing\'s qualifications. '.implode(' ', $failures);
+    }
+
+    private function normalizeSkill(string $skill): string
+    {
+        return trim(preg_replace('/[^a-z0-9]+/i', ' ', mb_strtolower($skill)) ?? '');
+    }
+
     private function employerApplicationData(Application $application): array
     {
         $profile = $application->applicant?->applicantProfile;
+        $match = $this->applicantJobMatcher->match($profile, $application->jobListing);
 
         return [
             'id' => $application->id,
             'status' => $application->status,
+            'match_score' => $match['score'],
+            'match_reasons' => $match['reasons'],
             'cover_letter' => $application->cover_letter,
             'cover_letter_document' => $application->coverLetterDocument
                 ? $this->applicantDocumentData($application->coverLetterDocument)
@@ -598,6 +829,25 @@ class ApplicationController extends Controller
                     'created_at' => $history->created_at?->toISOString(),
                 ])->values(),
         ];
+    }
+
+    private function hasCompleteOjtDetails(?ApplicantOjtDetail $details): bool
+    {
+        if ($details === null
+            || blank($details->school)
+            || blank($details->course)
+            || blank($details->required_hours)) {
+            return false;
+        }
+
+        $educationStatus = $details->education_status
+            ?? (filled($details->year_level) ? 'undergraduate' : null);
+
+        return match ($educationStatus) {
+            'undergraduate' => ! blank($details->year_level),
+            'graduated' => ! blank($details->graduation_year),
+            default => false,
+        };
     }
 
     private function listingSummary(?JobListing $listing): ?array

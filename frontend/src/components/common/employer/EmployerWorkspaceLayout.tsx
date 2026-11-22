@@ -5,6 +5,7 @@ import Footer from "@/components/common/user/userFooter";
 import { useAuth } from "@/features/auth/useAuth";
 import { getEmployerMessagingActor } from "@/features/messaging/api";
 import { useUnreadCount } from "@/features/messaging/hooks";
+import { employerVerificationFilesApi } from "@/features/employer-verification/backendApi";
 
 const navigationItems = [
   { label: "Overview", to: "/employer/overview" },
@@ -16,7 +17,7 @@ const navigationItems = [
 function EmployerHeader() {
   const { pathname } = useLocation();
   const navigate = useNavigate();
-  const { user, logout } = useAuth();
+  const { user, token, logout } = useAuth();
   const messagingActor = useMemo(() => getEmployerMessagingActor(user), [user]);
   const { unreadCount } = useUnreadCount(messagingActor);
   const messagesActive = pathname === "/employer/messages" || pathname.startsWith("/employer/messages/");
@@ -24,6 +25,29 @@ function EmployerHeader() {
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
   const [logoutError, setLogoutError] = useState<string | null>(null);
   const accountAreaRef = useRef<HTMLDivElement>(null);
+  const [companyLogoUrl, setCompanyLogoUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!token || user?.role !== "employer") return;
+    let active = true;
+    employerVerificationFilesApi.company(token)
+      .then(({ company }) => {
+        if (active) setCompanyLogoUrl(company?.logo_url ?? null);
+      })
+      .catch(() => {
+        if (active) setCompanyLogoUrl(null);
+      });
+
+    const handleLogoChanged = (event: Event) => {
+      const customEvent = event as CustomEvent<string | null>;
+      if (active) setCompanyLogoUrl(customEvent.detail);
+    };
+    window.addEventListener("careerconnect-employer-logo-changed", handleLogoChanged);
+    return () => {
+      active = false;
+      window.removeEventListener("careerconnect-employer-logo-changed", handleLogoChanged);
+    };
+  }, [token, user?.role]);
 
   useEffect(() => {
     if (!accountMenuOpen) return;
@@ -129,8 +153,12 @@ function EmployerHeader() {
           onClick={() => setAccountMenuOpen((open) => !open)}
           type="button"
         >
-          <span aria-hidden="true" className="grid size-8 place-items-center rounded-full bg-[#d8ede7] text-[10px] font-bold text-[#36706c]">
-            MP
+          <span aria-hidden="true" className="grid size-8 place-items-center overflow-hidden rounded-full bg-[#d8ede7] text-[10px] font-bold text-[#36706c]">
+            {companyLogoUrl ? (
+              <img alt="" className="size-full object-cover" src={companyLogoUrl} />
+            ) : (
+              (user?.name?.trim().split(/\s+/).slice(0, 2).map((part) => part[0]).join("").toUpperCase() || "MP")
+            )}
           </span>
           <svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
             <path d="m6 9 6 6 6-6" />

@@ -13,6 +13,7 @@ import type {
 } from "@/features/messaging/types";
 import { MessagingError } from "@/features/messaging/types";
 import { publish } from "@/features/messaging/realtime";
+import { apiRequest } from "@/lib/axios";
 
 const STORAGE_KEY = "careerconnect.messaging.v1";
 const MAX_DAILY_CONVERSATIONS = 20;
@@ -358,6 +359,18 @@ export async function getConversationForApplication(
   return conversation;
 }
 
+export async function sendApplicantNote(
+  token: string,
+  applicationId: string | number,
+  note: string,
+): Promise<void> {
+  await apiRequest<{ message: string }>(
+    `/employer/applications/${getApplicationId(applicationId)}/note`,
+    { method: "POST", data: { note } },
+    token,
+  );
+}
+
 export async function startConversation(
   applicationId: string | number,
   firstMessage: string,
@@ -498,17 +511,72 @@ export async function markRead(conversationId: string, actor: MessagingActor): P
 }
 
 export async function listNotifications(actor: MessagingActor): Promise<NotificationItem[]> {
-  await wait();
   requireActor(actor);
   const participantId = canonicalParticipantId(actor);
   const state = readState();
-  return state.notifications
+  const local = state.notifications
     .filter((notification) => notification.recipientId === participantId)
     .sort((left, right) => right.createdAt.localeCompare(left.createdAt));
+
+  if (!actor.token) return local;
+
+  try {
+    const response = await apiRequest<{
+      data: Array<{
+        id: string;
+        event: string | null;
+        title: string | null;
+        message: string | null;
+        metadata: Record<string, unknown>;
+        read_at: string | null;
+        created_at: string | null;
+      }>;
+    }>("/notifications", { params: { per_page: 50 } }, actor.token);
+
+    const server = response.data
+      .filter((item) => ["interview_scheduled", "interview_rescheduled", "interview_cancelled", "applicant_note"].includes(item.event ?? ""))
+      .map((item): NotificationItem => {
+        const metadata = item.metadata ?? {};
+        const interviewId = typeof metadata.interview_id === "number" ? metadata.interview_id : undefined;
+        const applicationId = typeof metadata.application_id === "number" ? metadata.application_id : undefined;
+        return {
+          id: item.id,
+          recipientId: participantId,
+          conversationId: "",
+          type: item.event?.startsWith("interview") ? "interview" : "status",
+          employerName: typeof metadata.company_name === "string" ? metadata.company_name : "CareerConnect",
+          companyInitial: typeof metadata.company_name === "string"
+            ? metadata.company_name.slice(0, 1).toUpperCase()
+            : "C",
+          role: typeof metadata.job_listing_title === "string" ? metadata.job_listing_title : "Application update",
+          preview: item.message ?? item.title ?? "New notification",
+          createdAt: item.created_at ?? new Date().toISOString(),
+          read: item.read_at !== null,
+          interviewId,
+          applicationId,
+          meetingUrl: typeof metadata.meeting_url === "string" ? metadata.meeting_url : null,
+          scheduledAt: typeof metadata.scheduled_at === "string" ? metadata.scheduled_at : null,
+        };
+      });
+
+    return [...server, ...local]
+      .sort((left, right) => right.createdAt.localeCompare(left.createdAt));
+  } catch {
+    return local;
+  }
+}
+
+export async function markNotificationRead(actor: MessagingActor, notificationId: string): Promise<void> {
+  if (actor.token && !notificationId.startsWith("notification-")) {
+    await apiRequest<{ data: unknown }>(
+      `/notifications/${encodeURIComponent(notificationId)}/read`,
+      { method: "PATCH" },
+      actor.token,
+    );
+  }
 }
 
 export async function markAllNotificationsRead(actor: MessagingActor): Promise<void> {
-  await wait();
   requireActor(actor);
   const participantId = canonicalParticipantId(actor);
   const state = readState();
@@ -519,6 +587,12 @@ export async function markAllNotificationsRead(actor: MessagingActor): Promise<v
   state.conversations
     .filter((conversation) => conversation.employerId === participantId || conversation.applicantId === participantId)
     .forEach((conversation) => notifyUpdatedConversation(conversation, "notification_updated"));
+
+  if (actor.token) {
+    await apiRequest<{ updated: number }>("/notifications/read-all", {
+      method: "PATCH",
+    }, actor.token);
+  }
 }
 
 export async function getUnreadCount(actor: MessagingActor): Promise<number> {
@@ -664,9 +738,9 @@ export function getMessagingActor(user: {
   name: string;
   email: string;
   role: "applicant" | "employer";
-}): MessagingActor {
+}, token?: string): MessagingActor {
   if (user.role === "applicant") {
-    return { id: String(user.id), name: user.name, email: user.email, role: "applicant" };
+    return { id: String(user.id), name: user.name, email: user.email, role: "applicant", token };
   }
   const employer = employerRegistrationApi.getSnapshot();
   return {
@@ -692,8 +766,9 @@ type AuthenticatedMessagingUser = {
 
 export function getApplicantMessagingActor(
   user: AuthenticatedMessagingUser | null,
+  token?: string,
 ): MessagingActor | null {
-  if (user && user.role === "applicant") return getMessagingActor(user);
+  if (user && user.role === "applicant") return getMessagingActor(user, token);
   return null;
 }
 

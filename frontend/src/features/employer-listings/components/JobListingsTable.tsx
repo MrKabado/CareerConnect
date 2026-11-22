@@ -85,6 +85,12 @@ export default function JobListingsBoard({ listings, selectedId, setSelectedId, 
               <span>Type</span>
               <EmployerOpportunityTypeBadge>{selectedListing.hiring.type}</EmployerOpportunityTypeBadge>
             </div>
+            {selectedListing.experienceRequirement && (
+              <div className="flex items-center justify-between gap-3 rounded-xl bg-[#f6faf9] px-3 py-2">
+                <span>Experience</span>
+                <span className="font-medium text-[#1d3133]">{selectedListing.experienceRequirement}</span>
+              </div>
+            )}
           </div>
           <div className="mt-5 rounded-[16px] border border-[#e5eeeb] bg-[#fbfdfd] p-3">
             <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[#62777a]">About this role</p>

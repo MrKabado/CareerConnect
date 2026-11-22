@@ -15,6 +15,18 @@ export type ApplicantApplicationRecord = {
   reapplication_allowed: boolean;
   hired_at: string | null;
   employment_ended_at: string | null;
+  interview: {
+    id: number;
+    status: "scheduled" | "completed" | "cancelled";
+    scheduled_at: string | null;
+    end_at: string | null;
+    timezone: string;
+    mode: "onsite" | "online" | "phone";
+    location: string | null;
+    meeting_url: string | null;
+    meeting_instructions: string | null;
+    applicant_notes: string | null;
+  } | null;
   listing: {
     id: number;
     title: string;
@@ -39,11 +51,27 @@ export type ApplicantApplicationsPage = {
   meta: { current_page: number; last_page: number; per_page: number; total: number };
 };
 
+export type ApplicantListingStatus = {
+  listing_id: number;
+  status: ApplicantApplicationRecord["status"];
+  rejected_at: string | null;
+  reapply_available_at: string | null;
+  reapplication_allowed: boolean;
+};
+
 export const applicantApplicationsApi = {
   list(token: string, page = 1) {
     return apiRequest<ApplicantApplicationsPage>(
       "/applicant/applications",
       { params: { page, per_page: 50 } },
+      token,
+    );
+  },
+
+  listingStatuses(token: string, listingIds: number[]) {
+    return apiRequest<{ data: ApplicantListingStatus[] }>(
+      "/applicant/job-listing-statuses",
+      { params: { listing_ids: listingIds } },
       token,
     );
   },

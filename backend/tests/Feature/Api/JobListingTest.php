@@ -121,6 +121,39 @@ it('creates a draft owned by the authenticated employer without trusting client 
     ]);
 });
 
+it('stores structured job experience and skill requirements', function (): void {
+    $employer = User::factory()->create(['role' => 'employer']);
+    listingTestCompany($employer);
+    $category = Category::create(['name' => 'Software Engineering']);
+    $token = $employer->createToken('employer')->plainTextToken;
+
+    $this->withToken($token)->postJson('/api/jobs', listingTestPayload($category, [
+        'work_setup' => 'hybrid',
+        'required_skills' => ['PHP', 'SQL'],
+        'experience_required' => true,
+        'minimum_experience_years' => 3,
+    ]))->assertCreated()
+        ->assertJsonPath('data.work_setup', 'hybrid')
+        ->assertJsonPath('data.required_skills.0', 'PHP')
+        ->assertJsonPath('data.required_skills.1', 'SQL')
+        ->assertJsonPath('data.experience_required', true)
+        ->assertJsonPath('data.minimum_experience_years', 3);
+
+    $this->assertDatabaseHas('job_listings', [
+        'listing_type' => 'job',
+        'work_setup' => 'hybrid',
+        'experience_required' => true,
+        'minimum_experience_years' => 3,
+    ]);
+
+    $this->app['auth']->forgetGuards();
+    $this->withToken($token)->postJson('/api/jobs', listingTestPayload($category, [
+        'experience_required' => true,
+        'required_skills' => ['PHP'],
+    ]))->assertUnprocessable()
+        ->assertJsonValidationErrors('minimum_experience_years');
+});
+
 it('validates listing fields and stores OJT allowance separately from job salary', function (): void {
     $employer = User::factory()->create(['role' => 'employer']);
     listingTestCompany($employer);

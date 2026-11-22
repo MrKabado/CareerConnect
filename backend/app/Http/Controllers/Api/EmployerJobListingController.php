@@ -182,7 +182,7 @@ class EmployerJobListingController extends Controller
 
     private function listingAttributes(array $validated): array
     {
-        return Arr::only($validated, [
+        $attributes = Arr::only($validated, [
             'category_id',
             'listing_type',
             'title',
@@ -195,6 +195,16 @@ class EmployerJobListingController extends Controller
             'salary_min',
             'salary_max',
         ]);
+
+        if ($validated['listing_type'] === 'job') {
+            $attributes['required_skills'] = array_values($validated['required_skills'] ?? []);
+            $attributes['experience_required'] = (bool) ($validated['experience_required'] ?? false);
+            $attributes['minimum_experience_years'] = $attributes['experience_required']
+                ? (int) $validated['minimum_experience_years']
+                : null;
+        }
+
+        return $attributes;
     }
 
     private function ojtAttributes(array $validated): array
