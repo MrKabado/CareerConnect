@@ -3,7 +3,7 @@ import { Plus, Search } from "lucide-react";
 import CategoryCard from "../../components/admin/CategoryCard";
 import CreateCategoryModal from "../../components/admin/modals/CreateCategoryModal";
 import EditCategoryModal from "../../components/admin/modals/EditCategoryModal";
-import { Button, PageHeader } from "../../components/common";
+import { Button, Modal, PageHeader } from "../../components/common";
 import { useCategories } from "../../hooks/useCategories";
 import type { Category } from "../../types";
 
@@ -12,6 +12,9 @@ type ModalState = { mode: "create" } | { mode: "edit"; category: Category } | nu
 export default function CategoriesPage() {
   const { categories, addCategory, updateCategory, deleteCategory, isLoading, error, retry } = useCategories();
   const [modal, setModal] = useState<ModalState>(null);
+  const [categoryToDelete, setCategoryToDelete] = useState<Category | null>(null);
+  const [isDeletingCategory, setIsDeletingCategory] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
 
   const closeModal = () => setModal(null);
@@ -66,9 +69,9 @@ export default function CategoriesPage() {
             key={category.id}
             category={category}
             onEdit={(c) => setModal({ mode: "edit", category: c })}
-            onDelete={async (c) => {
-              if (!window.confirm(`Delete category "${c.name}"?`)) return;
-              await deleteCategory(c.id);
+            onDelete={(c) => {
+              setDeleteError(null);
+              setCategoryToDelete(c);
             }}
           />
         ))}
@@ -94,6 +97,51 @@ export default function CategoriesPage() {
             closeModal();
           }}
         />
+      )}
+      {categoryToDelete && (
+        <Modal
+          title="Delete category?"
+          subtitle={`This will remove "${categoryToDelete.name}" from CareerConnect.`}
+          onClose={() => {
+            if (!isDeletingCategory) setCategoryToDelete(null);
+          }}
+        >
+          <div className="space-y-4 px-6 pb-6">
+            <p className="text-sm leading-6 text-muted">
+              This action cannot be undone. Existing listings may no longer be grouped under this category.
+            </p>
+            {deleteError && <p className="text-sm text-red-700" role="alert">{deleteError}</p>}
+            <div className="flex flex-wrap justify-end gap-3 border-t border-line pt-4">
+              <Button
+                variant="outline"
+                disabled={isDeletingCategory}
+                onClick={() => setCategoryToDelete(null)}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="danger"
+                disabled={isDeletingCategory}
+                onClick={async () => {
+                  setIsDeletingCategory(true);
+                  setDeleteError(null);
+                  try {
+                    await deleteCategory(categoryToDelete.id);
+                    setCategoryToDelete(null);
+                  } catch (caught) {
+                    setDeleteError(
+                      caught instanceof Error ? caught.message : "Unable to delete this category.",
+                    );
+                  } finally {
+                    setIsDeletingCategory(false);
+                  }
+                }}
+              >
+                {isDeletingCategory ? "Deleting…" : "Delete category"}
+              </Button>
+            </div>
+          </div>
+        </Modal>
       )}
     </section>
   );

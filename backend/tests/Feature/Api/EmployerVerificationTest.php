@@ -31,6 +31,7 @@ it('allows employers to manage their company profile, logo, and verification sta
         'category_id' => $category->id,
         'company_size' => '11-50',
         'address' => '123 Main St',
+        'country' => 'PH',
         'city' => 'Cebu City',
         'website' => 'https://acmetech.test',
         'description' => 'A growing software company',
@@ -61,6 +62,10 @@ it('allows employers to manage their company profile, logo, and verification sta
     ])->assertCreated();
 
     $this->withToken($token)->postJson('/api/employer/verification/submit')->assertOk();
+    $this->app['auth']->forgetGuards();
+    $this->withToken($token)->postJson('/api/employer/verification/submit')
+        ->assertConflict()
+        ->assertJsonPath('message', 'Company verification is already pending approval.');
 
     $verification = CompanyVerification::query()->where('company_id', $company->id)->firstOrFail();
     expect($verification->status)->toBe('pending')
@@ -69,6 +74,55 @@ it('allows employers to manage their company profile, logo, and verification sta
     $this->withToken($token)->getJson('/api/employer/verification')
         ->assertOk()
         ->assertJsonPath('status', 'pending');
+
+    $this->app['auth']->forgetGuards();
+    $this->withToken($token)->postJson('/api/logout')->assertOk();
+    $newToken = $employer->createToken('employer-after-logout')->plainTextToken;
+
+    $this->app['auth']->forgetGuards();
+    $this->withToken($newToken)->getJson('/api/employer/verification')
+        ->assertOk()
+        ->assertJsonPath('status', 'pending');
+    $this->app['auth']->forgetGuards();
+    $this->withToken($newToken)->postJson('/api/employer/verification/submit')
+        ->assertConflict()
+        ->assertJsonPath('message', 'Company verification is already pending approval.');
+});
+
+it('rejects invalid company countries and phone numbers', function (): void {
+    $employer = User::factory()->create(['role' => 'employer']);
+    $token = $employer->createToken('employer')->plainTextToken;
+
+    $this->withToken($token)->putJson('/api/employer/company', [
+        'name' => 'Invalid Company',
+        'country' => 'Philippines1',
+        'contact_phone' => '+63 not-a-number',
+    ])->assertUnprocessable()
+        ->assertJsonValidationErrors(['country', 'contact_phone']);
+
+    $this->app['auth']->forgetGuards();
+    $this->withToken($token)->putJson('/api/employer/company', [
+        'name' => 'Valid Company',
+        'country' => 'PH',
+        'contact_phone' => '+63 (917) 123-4567',
+    ])->assertOk();
+
+    $this->assertDatabaseHas('companies', [
+        'user_id' => $employer->id,
+        'country' => 'PH',
+        'contact_phone' => '+63 (917) 123-4567',
+    ]);
+
+    $this->app['auth']->forgetGuards();
+    $this->withToken($token)->putJson('/api/employer/company', [
+        'name' => 'Valid Company',
+        'country' => 'GB',
+    ])->assertOk();
+
+    $this->assertDatabaseHas('companies', [
+        'user_id' => $employer->id,
+        'country' => 'GB',
+    ]);
 });
 
 it('creates a company shell when an employer uploads documents before completing company information', function (): void {
@@ -298,4 +352,38 @@ it('lets admin review company verification submissions and reject them with reas
         ->assertOk()
         ->assertJsonPath('status', 'rejected')
         ->assertJsonPath('rejection_reason', 'expired_permit');
+});
+
+it('requires employers with a pre-approval session to sign in again after approval', function (): void {
+    $employer = User::factory()->create(['role' => 'employer']);
+    $admin = User::factory()->create(['role' => 'admin']);
+    $company = Company::create([
+        'user_id' => $employer->id,
+        'name' => 'Approved Company',
+    ]);
+    $verification = CompanyVerification::create([
+        'company_id' => $company->id,
+        'status' => 'pending',
+        'submitted_at' => now(),
+    ]);
+    $oldToken = $employer->createToken('employer-before-approval')->plainTextToken;
+    $adminToken = $admin->createToken('admin')->plainTextToken;
+
+    $this->withToken($adminToken)->postJson(
+        "/api/admin/company-verifications/{$verification->id}/review",
+        ['status' => 'verified'],
+    )->assertOk()
+        ->assertJsonMissingPath('token');
+
+    $this->app['auth']->forgetGuards();
+    $this->withToken($oldToken)->getJson('/api/employer/verification')
+        ->assertOk()
+        ->assertJsonPath('requires_reauthentication', true);
+
+    $this->app['auth']->forgetGuards();
+    $newToken = $employer->createToken('employer-after-approval')->plainTextToken;
+    $this->withToken($newToken)->getJson('/api/employer/verification')
+        ->assertOk()
+        ->assertJsonPath('status', 'verified')
+        ->assertJsonPath('requires_reauthentication', false);
 });

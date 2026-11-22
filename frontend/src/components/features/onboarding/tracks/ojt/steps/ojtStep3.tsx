@@ -75,22 +75,28 @@ export default function OjtStep3({ answers, errors, onChange }: OjtStepProps) {
             We’ll prioritize employers with an active Memorandum of Agreement.
           </p>
         </div>
-        <button
-          aria-checked={answers.requiresMoa}
-          aria-label="School requires an MOA"
-          className={`relative mt-0.5 h-6 w-11 shrink-0 rounded-full transition ${
-            answers.requiresMoa ? "bg-[#078b8d]" : "bg-[#cbd6d6]"
-          }`}
-          onClick={() => onChange("requiresMoa", !answers.requiresMoa)}
-          role="switch"
-          type="button"
-        >
-          <span
-            className={`absolute top-1 size-4 rounded-full bg-white transition ${
-              answers.requiresMoa ? "left-6" : "left-1"
-            }`}
-          />
-        </button>
+        <fieldset className="flex shrink-0 flex-wrap gap-3">
+          <legend className="sr-only">Does your school require an MOA?</legend>
+          {[
+            { label: "Yes", value: true },
+            { label: "No", value: false },
+            { label: "Not provided", value: null },
+          ].map((option) => (
+            <label
+              className="inline-flex items-center gap-1.5 text-xs text-[#526365]"
+              key={option.label}
+            >
+              <input
+                checked={answers.requiresMoa === option.value}
+                className="size-4 accent-[#078b8d]"
+                name="onboarding-requires-moa"
+                onChange={() => onChange("requiresMoa", option.value)}
+                type="radio"
+              />
+              {option.label}
+            </label>
+          ))}
+        </fieldset>
       </div>
     </div>
   );

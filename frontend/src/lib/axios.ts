@@ -1,7 +1,7 @@
 ﻿import axios, { type AxiosError, type AxiosRequestConfig } from "axios";
 import { toast } from "sonner";
 
-const apiBaseUrl = (import.meta.env.VITE_API_BASE_URL || "http://localhost:8000/api")
+const apiBaseUrl = (import.meta.env.VITE_API_BASE_URL || "http://192.168.254.125:8000/api")
   .replace(/\/+$/, "");
 
 export class ApiError extends Error {
@@ -28,18 +28,45 @@ function isActionRequest(method: string | undefined): boolean {
   return method !== undefined && !["GET", "HEAD", "OPTIONS"].includes(method.toUpperCase());
 }
 
-function getResponseMessage(payload: unknown): string | null {
+function getValidationMessage(payload: unknown): string | null {
   if (
+    typeof payload !== "object" ||
+    payload === null ||
+    !("errors" in payload) ||
+    typeof payload.errors !== "object" ||
+    payload.errors === null
+  ) {
+    return null;
+  }
+
+  for (const messages of Object.values(payload.errors)) {
+    if (Array.isArray(messages)) {
+      const firstMessage = messages.find(
+        (message): message is string =>
+          typeof message === "string" && message.trim() !== "",
+      );
+      if (firstMessage) return firstMessage;
+    }
+  }
+
+  return null;
+}
+
+function getResponseMessage(payload: unknown): string | null {
+  const responseMessage =
     typeof payload === "object" &&
     payload !== null &&
     "message" in payload &&
     typeof payload.message === "string" &&
     payload.message.trim() !== ""
-  ) {
-    return payload.message;
-  }
+      ? payload.message
+      : null;
+  const validationMessage = getValidationMessage(payload);
 
-  return null;
+  if (responseMessage && validationMessage) {
+    return `${responseMessage} ${validationMessage}`;
+  }
+  return responseMessage ?? validationMessage;
 }
 
 function getActionSuccessMessage(
@@ -76,11 +103,8 @@ apiClient.interceptors.response.use(
   },
   (error: AxiosError<{ code?: string; message?: string }>) => {
     const message =
-      typeof error.response?.data === "object" &&
-      error.response.data !== null &&
-      typeof error.response.data.message === "string"
-        ? error.response.data.message
-        : error.message || "Request failed.";
+      getResponseMessage(error.response?.data) ??
+      (error.message || "Request failed.");
     const status = error.response?.status ?? 0;
 
     if (isActionRequest(error.config?.method) && status !== 422) {

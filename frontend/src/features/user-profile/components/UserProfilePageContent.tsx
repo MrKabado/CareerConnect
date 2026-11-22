@@ -23,13 +23,17 @@ import {
 } from "@/components/common/user/profileComponents";
 import { useAuth } from "@/features/auth/useAuth";
 import { onboardingStore } from "@/features/onboarding/store";
-import { ojtProfileExample as ojtSeekerExample } from "@/features/onboarding/ojtProfileExample";
 import {
   applicantFilesApi,
   downloadApplicantFile,
   type ApplicantProfileData,
+  type ApplicantCategory,
+  type ApplicantDocumentType,
+  type ApplicantIdentityVerification,
   type ApplicantResumeFile,
+  type ApplicantStoredDocument,
 } from "@/features/user-profile/backendApi";
+import { useDialogBehavior } from "@/hooks/useDialogBehavior";
 
 const maxResumeSize = 10 * 1024 * 1024;
 const allowedResumeName = /\.(pdf|doc|docx)$/i;
@@ -40,8 +44,9 @@ type ProfileDocument = {
   title: string;
   fileName: string;
   file?: File;
+  blob?: Blob;
+  mimeType?: string;
   url?: string;
-  content?: string;
 };
 
 function ProfileDocumentCard({
@@ -49,24 +54,16 @@ function ProfileDocumentCard({
   file,
   fileName,
   details,
-  sampleContent,
   onPreview,
-  onPreviewSample,
   onDownload,
-  onDownloadSample,
 }: {
   title: string;
-  file: File | null;
+  file: File;
   fileName: string;
   details: string;
-  sampleContent?: string;
   onPreview: (file: File, title: string) => void;
-  onPreviewSample: (title: string, fileName: string, content: string) => void;
   onDownload: (file: File) => void;
-  onDownloadSample: (fileName: string, content: string) => void;
 }) {
-  const canPreview = Boolean(file || sampleContent);
-
   return (
     <div className="rounded-lg bg-[#f2f8f7] p-2">
       <div className="flex items-center gap-2">
@@ -74,15 +71,9 @@ function ProfileDocumentCard({
           <ProfileResumeIcon />
         </ProfileIconBadge>
         <button
-          aria-label={`${canPreview ? "Preview" : title}: ${fileName}`}
+          aria-label={`Preview ${title}: ${fileName}`}
           className="min-w-0 flex-1 text-left focus-visible:outline-[3px] focus-visible:outline-[#67c9c1] focus-visible:outline-offset-2 disabled:cursor-default"
-          disabled={!canPreview}
-          onClick={() => {
-            if (file) onPreview(file, title);
-            else if (sampleContent) {
-              onPreviewSample(title, fileName, sampleContent);
-            }
-          }}
+          onClick={() => onPreview(file, title)}
           type="button"
         >
           <span className="block text-[8px] font-semibold text-[#078b8d]">
@@ -91,28 +82,19 @@ function ProfileDocumentCard({
           <span className="block truncate text-[9px] font-semibold text-[#526365]">
             {fileName}
           </span>
-          <span className="mt-0.5 block text-[8px] text-[#93a0a1]">
+          <span className="mt-0.5 block text-[8px] text-[#667779]">
             {details}
           </span>
         </button>
         <button
           aria-label={`Download ${title}`}
           className="rounded p-1 text-[#728385] hover:bg-white hover:text-[#078b8d] focus-visible:outline-[3px] focus-visible:outline-[#67c9c1] focus-visible:outline-offset-1 disabled:cursor-not-allowed disabled:opacity-40"
-          disabled={!canPreview}
-          onClick={() => {
-            if (file) onDownload(file);
-            else if (sampleContent) onDownloadSample(fileName, sampleContent);
-          }}
+          onClick={() => onDownload(file)}
           type="button"
         >
           ↓
         </button>
       </div>
-      {!file && (
-        <p className="mt-1 pl-10 text-[8px] text-[#93a0a1]">
-          Sample document
-        </p>
-      )}
     </div>
   );
 }
@@ -125,86 +107,6 @@ function getStoredProfilePicture() {
     return null;
   }
 }
-
-const sampleResumeContent = `JAMIE DELA CRUZ
-Frontend Developer
-Quezon City, Metro Manila | jamie.delacruz@example.com | +63 917 456 2038
-
-PROFESSIONAL SUMMARY
-Frontend developer experienced in building responsive customer portals and reusable React components for Philippine SMEs. Enjoys turning product requirements into accessible, reliable user experiences.
-
-SKILLS
-React · JavaScript · Figma · Git · Responsive Design · Communication
-
-WORK EXPERIENCE
-Junior Frontend Developer | Pixelwave Studio
-2024 – Present
-Build responsive customer portals and reusable React components for Philippine SMEs.
-
-Web Development Intern | Cloudstaff Philippines
-2023 · 5 months
-Supported the development and testing of web application features.
-
-EDUCATION
-BS Information Technology
-Polytechnic University of the Philippines | 2020 – 2024`;
-
-const sampleCoverLetterContent = `JAMIE DELA CRUZ
-Quezon City, Metro Manila
-jamie.delacruz@example.com | +63 917 456 2038
-
-October 31, 2026
-
-Dear Hiring Manager,
-
-I am writing to express my interest in the Frontend Developer opportunity. I have hands-on experience building responsive customer portals and reusable React components, and I would be excited to bring that experience to your team.
-
-At Pixelwave Studio, I work on customer-facing interfaces for Philippine SMEs, with a focus on clear, responsive layouts. My background in React, JavaScript, and collaborative product work has helped me deliver practical improvements while continuing to grow as a developer.
-
-Thank you for considering my application. I would welcome the opportunity to discuss how my experience and enthusiasm could contribute to your team.
-
-Sincerely,
-Jamie Dela Cruz`;
-
-const jobSeekerExample = {
-  name: "Jamie Dela Cruz",
-  email: "jamie.delacruz@example.com",
-  location: "Quezon City, Metro Manila",
-  phone: "+63 917 456 2038",
-  title: "Frontend Developer",
-  workExperience: [
-    {
-      title: "Junior Frontend Developer",
-      company: "Pixelwave Studio · Full-time",
-      period: "2024 – Present",
-      description:
-        "Build responsive customer portals and reusable React components for Philippine SMEs.",
-    },
-    {
-      title: "Web Development Intern",
-      company: "Cloudstaff Philippines · Internship",
-      period: "2023 · 5 months",
-      description: "",
-    },
-  ],
-  education: {
-    course: "BS Information Technology",
-    school: "Polytechnic University of the Philippines",
-    period: "2020 – 2024",
-  },
-  skills: ["React", "JavaScript", "Figma", "Communication", "Git", "Responsive Design"],
-  jobCategories: ["Information Technology"],
-  employmentTypes: ["Full-time"],
-  workSetups: ["Hybrid", "Remote"],
-  locations: ["Metro Manila"],
-  minimumSalary: "45,000",
-  maximumSalary: "65,000",
-  experienceLevel: "1–3 years",
-  resumeName: "Jamie_Dela_Cruz_Resume.txt",
-  resumeDetails: "Sample profile document",
-  coverLetterName: "Jamie_Dela_Cruz_Cover_Letter.txt",
-  coverLetterDetails: "Sample profile document",
-};
 
 function getInitials(name: string) {
   return name
@@ -234,10 +136,42 @@ function formatDate(value: string) {
       }).format(date);
 }
 
+function normalizeProfileLink(value: string): string | null {
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  return /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+}
+
+const workSetupLabels: Record<string, string> = {
+  onsite: "Onsite",
+  hybrid: "Hybrid",
+  remote: "Remote",
+};
+
+const employmentTypeLabels: Record<string, string> = {
+  full_time: "Full-time",
+  part_time: "Part-time",
+  contract: "Contract",
+};
+
+const experienceLevelLabels: Record<string, string> = {
+  fresh_graduate: "Fresh graduate",
+  "1_3_years": "1–3 years",
+  "3_5_years": "3–5 years",
+  "5_plus_years": "5+ years",
+};
+
+const allowancePreferenceLabels: Record<string, string> = {
+  paid_only: "Paid only",
+  no_preference: "No preference",
+  unpaid_ok: "Unpaid OK",
+};
+
 export default function ProfilePage() {
   const { user, token, logout } = useAuth();
   const navigate = useNavigate();
   const [resumeError, setResumeError] = useState<string | null>(null);
+  const [resumePreviewLoading, setResumePreviewLoading] = useState(false);
   const [coverLetterError, setCoverLetterError] = useState<string | null>(null);
   const [profilePictureError, setProfilePictureError] = useState<string | null>(null);
   const [profilePicture, setProfilePicture] = useState<string | null>(
@@ -246,14 +180,31 @@ export default function ProfilePage() {
   const [applicantProfile, setApplicantProfile] =
     useState<ApplicantProfileData | null>(null);
   const [serverResume, setServerResume] = useState<ApplicantResumeFile | null>(null);
+  const [applicantDocuments, setApplicantDocuments] = useState<ApplicantStoredDocument[]>([]);
+  const [documentsLoading, setDocumentsLoading] = useState(user?.role === "applicant" && Boolean(token));
+  const [documentsError, setDocumentsError] = useState<string | null>(null);
+  const [identityVerification, setIdentityVerification] =
+    useState<ApplicantIdentityVerification | null>(null);
+  const [identityVerificationLoading, setIdentityVerificationLoading] =
+    useState(user?.role === "applicant" && Boolean(token));
+  const [identityVerificationError, setIdentityVerificationError] = useState<string | null>(null);
+  const [identityUploadProgress, setIdentityUploadProgress] = useState<number | null>(null);
   const [resumeLoading, setResumeLoading] = useState(user?.role === "applicant" && Boolean(token));
+  const [profileLoading, setProfileLoading] = useState(user?.role === "applicant" && Boolean(token));
+  const [profileError, setProfileError] = useState<string | null>(null);
+  const [isSavingPreferences, setIsSavingPreferences] = useState(false);
+  const [preferencesSaveError, setPreferencesSaveError] = useState<string | null>(null);
+  const [availableCategories, setAvailableCategories] = useState<ApplicantCategory[]>([]);
+  const [categoriesLoading, setCategoriesLoading] = useState(false);
+  const [categoriesError, setCategoriesError] = useState<string | null>(null);
   const [resumeUploadProgress, setResumeUploadProgress] = useState<number | null>(null);
+  const [documentUploadProgress, setDocumentUploadProgress] = useState<number | null>(null);
+  const [supportingDocumentType, setSupportingDocumentType] =
+    useState<Exclude<ApplicantDocumentType, "cover_letter">>("certificate");
   const [photoUploadProgress, setPhotoUploadProgress] = useState<number | null>(null);
-  const [sampleResumeRemoved, setSampleResumeRemoved] = useState(false);
-  const [sampleCoverLetterRemoved, setSampleCoverLetterRemoved] =
-    useState(false);
   const [isPreferencesEditorOpen, setIsPreferencesEditorOpen] = useState(false);
   const [isBookmarksModalOpen, setIsBookmarksModalOpen] = useState(false);
+  const [profileMode, setProfileMode] = useState<"job-seeker" | "ojt-seeker" | null>(null);
   const [isActionMenuOpen, setIsActionMenuOpen] = useState(false);
   const [isProfilePictureMenuOpen, setIsProfilePictureMenuOpen] = useState(false);
   const [isProfilePicturePreviewOpen, setIsProfilePicturePreviewOpen] = useState(false);
@@ -262,6 +213,14 @@ export default function ProfilePage() {
   const actionMenuRef = useRef<HTMLDivElement>(null);
   const profilePictureMenuRef = useRef<HTMLDivElement>(null);
   const profilePictureInputRef = useRef<HTMLInputElement>(null);
+  const profilePictureDialogRef = useRef<HTMLElement>(null);
+  const documentPreviewDialogRef = useRef<HTMLElement>(null);
+  useDialogBehavior(
+    profilePictureDialogRef,
+    isProfilePicturePreviewOpen && Boolean(profilePicture),
+    () => setIsProfilePicturePreviewOpen(false),
+  );
+  useDialogBehavior(documentPreviewDialogRef, documentPreview !== null, closeDocumentPreview);
   const onboarding = useSyncExternalStore(
     onboardingStore.subscribe,
     onboardingStore.getSnapshot,
@@ -269,104 +228,190 @@ export default function ProfilePage() {
   );
   const answers = onboarding.answers;
   const isBackendApplicant = user?.role === "applicant" && Boolean(token);
-  const isOjtSeeker = answers.goal === "ojt-seeker";
-  const useJobSeekerExample = !isOjtSeeker;
+  const isOjtSeeker =
+    profileMode === "ojt-seeker" ||
+    (profileMode === null &&
+      (isBackendApplicant
+        ? Boolean(
+            applicantProfile?.looking_for_ojt &&
+              !applicantProfile.looking_for_jobs,
+          )
+        : answers.goal === "ojt-seeker"));
   const providedName = (user?.name || answers.name).trim();
-  const name =
-    providedName ||
-    (isOjtSeeker || useJobSeekerExample
-      ? jobSeekerExample.name
-      : "Complete your profile");
-  const email =
-    user?.email ||
-    answers.email ||
-    (isOjtSeeker || useJobSeekerExample
-      ? jobSeekerExample.email
-      : "Not provided");
-  const location =
-    isBackendApplicant
-      ? applicantProfile?.city ||
-        applicantProfile?.preferred_locations?.join(", ") ||
-        "No location provided"
-      : answers.preferredLocations.join(", ") ||
-        (isOjtSeeker
-          ? "Quezon City, Metro Manila"
-          : useJobSeekerExample
-            ? jobSeekerExample.location
-            : "Not provided");
+  const name = applicantProfile?.name || providedName || "Name not provided";
+  const email = user?.email || answers.email || "Not provided";
+  const location = isBackendApplicant
+    ? applicantProfile?.city ||
+      applicantProfile?.preferred_locations?.join(", ") ||
+      "Not provided"
+    : answers.preferredLocations.join(", ") || "Not provided";
   const resume = isBackendApplicant ? null : answers.resumeFile;
   const coverLetter = isBackendApplicant ? null : answers.coverLetterFile;
-  const showSampleResume =
-    !isBackendApplicant && !resume && !sampleResumeRemoved;
-  const showSampleCoverLetter =
-    !isBackendApplicant && !coverLetter && !sampleCoverLetterRemoved;
-  const skills =
-    answers.skills.length > 0
-      ? answers.skills
-      : isOjtSeeker
-        ? ojtSeekerExample.skills
-        : jobSeekerExample.skills;
-  const isProfileOjtSeeker = isOjtSeeker;
+  const savedCoverLetter = applicantDocuments.find(
+    (document) => document.document_type === "cover_letter",
+  ) ?? null;
+  const supportingDocuments = applicantDocuments.filter(
+    (document) => document.document_type !== "cover_letter",
+  );
+  const skills = isBackendApplicant
+    ? applicantProfile?.skills ?? []
+    : answers.skills;
   const otherProfileLink =
     typeof applicantProfile?.profile_links?.other === "object"
       ? applicantProfile.profile_links.other
       : null;
-  const profileChecks = isProfileOjtSeeker
+  const sharedProfileChecks = [
+    { label: "Add your name", complete: Boolean(providedName) },
+    { label: "Add your email", complete: Boolean(user?.email || answers.email) },
+    {
+      label: "Add a phone number",
+      complete: Boolean(isBackendApplicant && applicantProfile?.phone),
+    },
+    {
+      label: "Add your location",
+      complete: Boolean(
+        isBackendApplicant
+          ? applicantProfile?.city || applicantProfile?.preferred_locations?.length
+          : answers.preferredLocations.length,
+      ),
+    },
+    { label: "Add a profile photo", complete: Boolean(profilePicture) },
+    { label: "Upload your resume", complete: Boolean(serverResume || resume) },
+  ];
+  const seekerProfileChecks = isOjtSeeker
     ? [
-        Boolean(providedName),
-        Boolean(email !== "Not provided"),
-        isBackendApplicant
-          ? Boolean(applicantProfile?.phone)
-          : Boolean(jobSeekerExample.phone),
-        isBackendApplicant
-          ? Boolean(applicantProfile?.city)
-          : Boolean(location !== "Not provided"),
-        Boolean(applicantProfile?.profile_photo_url),
-        Boolean(applicantProfile?.ojt_details?.school),
-        Boolean(applicantProfile?.ojt_details?.course),
-        Boolean(applicantProfile?.ojt_details?.year_level),
-        Boolean(applicantProfile?.ojt_details?.required_hours),
-        Boolean(applicantProfile?.ojt_details?.requires_moa !== null &&
-          applicantProfile?.ojt_details?.requires_moa !== undefined),
-        Boolean(applicantProfile?.skills.length),
-        Boolean(applicantProfile?.interests.length),
-        Boolean(applicantProfile?.preferred_locations?.length),
-        Boolean(applicantProfile?.work_setups?.length),
-        Boolean(applicantProfile?.ojt_details?.preferred_start_date),
-        Boolean(applicantProfile?.ojt_details?.allowance_preference),
-        Boolean(serverResume),
+        {
+          label: "Add OJT training fields",
+          complete: Boolean(
+            isBackendApplicant
+              ? applicantProfile?.interests.length ||
+                  applicantProfile?.other_categories?.length
+              : answers.trainingFields.length,
+          ),
+        },
+        {
+          label: "Add OJT skills",
+          complete: Boolean(
+            isBackendApplicant
+              ? applicantProfile?.skills.length
+              : answers.skills.length,
+          ),
+        },
+        {
+          label: "Add your school and course",
+          complete: Boolean(
+            isBackendApplicant
+              ? applicantProfile?.ojt_details?.school &&
+                  applicantProfile.ojt_details.course
+              : answers.school && answers.course,
+          ),
+        },
+        {
+          label: "Choose undergraduate or graduated status",
+          complete: Boolean(
+            isBackendApplicant
+              ? applicantProfile?.ojt_details?.education_status
+              : answers.yearLevel,
+          ),
+        },
+        {
+          label: "Add your year level or graduation year",
+          complete: Boolean(
+            isBackendApplicant
+              ? applicantProfile?.ojt_details?.education_status === "undergraduate"
+                ? applicantProfile.ojt_details.year_level != null
+                : applicantProfile?.ojt_details?.education_status === "graduated" &&
+                  applicantProfile.ojt_details.graduation_year != null
+              : Boolean(answers.yearLevel),
+          ),
+        },
+        {
+          label: "Add required OJT hours",
+          complete: Boolean(
+            isBackendApplicant
+              ? applicantProfile?.ojt_details?.required_hours
+              : answers.requiredOjtHours,
+          ),
+        },
+        {
+          label: "Choose a preferred OJT start date",
+          complete: Boolean(
+            isBackendApplicant
+              ? applicantProfile?.ojt_details?.preferred_start_date
+              : answers.preferredStartDate,
+          ),
+        },
+        {
+          label: "Choose an allowance preference",
+          complete: Boolean(
+            isBackendApplicant
+              ? applicantProfile?.ojt_details?.allowance_preference
+              : answers.allowancePreference,
+          ),
+        },
+        {
+          label: "Specify whether an MOA is required",
+          complete: isBackendApplicant
+            ? applicantProfile?.ojt_details?.requires_moa != null
+            : answers.requiresMoa != null,
+        },
+        {
+          label: "Add a preferred work setup",
+          complete: Boolean(
+            isBackendApplicant
+              ? applicantProfile?.work_setups?.length
+              : answers.workSetup,
+          ),
+        },
       ]
     : [
-        Boolean(providedName),
-        Boolean(email !== "Not provided"),
-        isBackendApplicant
-          ? Boolean(applicantProfile?.phone)
-          : Boolean(jobSeekerExample.phone),
-        isBackendApplicant
-          ? Boolean(applicantProfile?.city)
-          : Boolean(location !== "Not provided"),
-        Boolean(applicantProfile?.profile_photo_url),
-        Boolean(applicantProfile?.interests.length),
-        Boolean(applicantProfile?.desired_titles?.length),
-        Boolean(applicantProfile?.skills.length),
-        Boolean(applicantProfile?.preferred_locations?.length),
-        Boolean(applicantProfile?.work_setups?.length),
-        Boolean(applicantProfile?.employment_types?.length),
-        Boolean(applicantProfile?.experience_level),
-        Boolean(applicantProfile?.ojt_details?.school &&
-          applicantProfile?.ojt_details?.course &&
-          applicantProfile?.ojt_details?.year_level),
-        Boolean(serverResume),
+        {
+          label: "Add job categories or skills",
+          complete: Boolean(
+            isBackendApplicant
+              ? applicantProfile?.interests.length ||
+                  applicantProfile?.other_categories?.length ||
+                  applicantProfile?.skills.length
+              : answers.jobCategories.length || answers.skills.length,
+          ),
+        },
+        {
+          label: "Add target job titles",
+          complete: Boolean(
+            isBackendApplicant
+              ? applicantProfile?.desired_titles?.length
+              : answers.desiredJobTitles.length,
+          ),
+        },
+        {
+          label: "Add work preferences",
+          complete: Boolean(
+            isBackendApplicant
+              ? applicantProfile?.work_setups?.length ||
+                  applicantProfile?.employment_types?.length
+              : answers.workSetup || answers.employmentTypes.length,
+          ),
+        },
+        {
+          label: "Add your experience level",
+          complete: Boolean(
+            isBackendApplicant
+              ? applicantProfile?.experience_level
+              : answers.experienceLevel,
+          ),
+        },
       ];
-  const strength = isBackendApplicant
-    ? Math.round(
-        (profileChecks.filter(Boolean).length / profileChecks.length) * 100,
-      )
-    : 88;
+  const profileChecks = [...sharedProfileChecks, ...seekerProfileChecks];
+  const missingProfileItems = profileChecks
+    .filter((check) => !check.complete)
+    .map((check) => check.label);
+  const strength = Math.round(
+    ((profileChecks.length - missingProfileItems.length) / profileChecks.length) * 100,
+  );
 
   useEffect(() => {
     if (!isBackendApplicant || !token) {
-        return;
+      return;
     }
 
     let active = true;
@@ -389,11 +434,58 @@ export default function ProfilePage() {
         });
 
     applicantFilesApi
+        .documents(token)
+        .then((documents) => {
+          if (active) {
+            setApplicantDocuments(documents);
+            setDocumentsError(null);
+          }
+        })
+        .catch((requestError: unknown) => {
+          if (active) {
+            setDocumentsError(
+              requestError instanceof Error
+                ? requestError.message
+                : "Unable to load your documents.",
+            );
+          }
+        })
+        .finally(() => {
+          if (active) setDocumentsLoading(false);
+        });
+
+    applicantFilesApi
+        .identityVerification(token)
+        .then((verification) => {
+          if (active) {
+            setIdentityVerification(verification);
+            setIdentityVerificationError(null);
+          }
+        })
+        .catch((requestError: unknown) => {
+          if (active) {
+            setIdentityVerificationError(
+              requestError instanceof Error
+                ? requestError.message
+                : "Unable to load identity-verification status.",
+            );
+          }
+        })
+        .finally(() => {
+          if (active) setIdentityVerificationLoading(false);
+        });
+
+    applicantFilesApi
         .profile(token)
         .then((response) => {
           if (active) {
             setApplicantProfile(response.data);
             setProfilePicture(response.data.profile_photo_url);
+            setProfileMode(
+              response.data.looking_for_ojt && !response.data.looking_for_jobs
+                ? "ojt-seeker"
+                : "job-seeker",
+            );
             onboardingStore.setAnswer(
               "goal",
               response.data.looking_for_ojt && !response.data.looking_for_jobs
@@ -404,22 +496,43 @@ export default function ProfilePage() {
         })
         .catch((requestError: unknown) => {
           if (active) {
-            setProfilePictureError(
+            setProfileError(
               requestError instanceof Error
                 ? requestError.message
-                : "Unable to load your profile photo.",
+                : "Unable to load your profile.",
             );
           }
+        })
+        .finally(() => {
+          if (active) setProfileLoading(false);
         });
 
     return () => {
-        active = false;
+      active = false;
     };
   }, [isBackendApplicant, token]);
 
-  function openPreferencesEditor() {
+  async function openPreferencesEditor() {
+    if (isBackendApplicant && (profileLoading || profileError)) return;
     setIsActionMenuOpen(false);
+    setPreferencesSaveError(null);
+    setCategoriesError(null);
     setIsPreferencesEditorOpen(true);
+    if (availableCategories.length === 0) {
+      setCategoriesLoading(true);
+      try {
+        const response = await applicantFilesApi.categories();
+        setAvailableCategories(response.data);
+      } catch (requestError) {
+        setCategoriesError(
+          requestError instanceof Error
+            ? requestError.message
+            : "Unable to load categories. Please close and try again.",
+        );
+      } finally {
+        setCategoriesLoading(false);
+      }
+    }
   }
 
   function openBookmarks() {
@@ -492,8 +605,191 @@ export default function ProfilePage() {
   }, [documentPreview]);
 
   function changeProfileMode(goal: "job-seeker" | "ojt-seeker") {
-    setSampleResumeRemoved(false);
-    onboardingStore.setAnswer("goal", goal);
+    setProfileMode(goal);
+    if (!isBackendApplicant) onboardingStore.setAnswer("goal", goal);
+  }
+
+  async function savePreferences(preferences: ProfilePreferencesDraft) {
+    setIsSavingPreferences(true);
+    setPreferencesSaveError(null);
+
+    try {
+      if (isBackendApplicant && token) {
+        const categoryNames = isOjtSeeker
+          ? preferences.trainingFields
+          : preferences.jobCategories;
+        const categories = availableCategories.length > 0
+          ? { data: availableCategories }
+          : await applicantFilesApi.categories();
+        const categoryIdsByName = new Map(
+          categories.data.map((category) => [
+            category.name.trim().toLocaleLowerCase(),
+            category.id,
+          ]),
+        );
+        const unknownCategories = categoryNames.filter(
+          (category) =>
+            !categoryIdsByName.has(category.trim().toLocaleLowerCase()),
+        );
+        if (unknownCategories.length > 0) {
+          throw new Error(
+            `These categories are unavailable: ${unknownCategories.join(", ")}. Choose an active category and try again.`,
+          );
+        }
+        const categoryIds = categoryNames.flatMap((category) => {
+          const categoryId = categoryIdsByName.get(
+            category.trim().toLocaleLowerCase(),
+          );
+          return categoryId === undefined ? [] : [categoryId];
+        });
+
+        const workSetupMap: Record<string, string> = {
+          Onsite: "onsite",
+          "On-site": "onsite",
+          Hybrid: "hybrid",
+          Remote: "remote",
+        };
+        const employmentTypeMap: Record<string, string> = {
+          "Full-time": "full_time",
+          "Part-time": "part_time",
+          Contract: "contract",
+        };
+        const experienceLevelMap: Record<string, string> = {
+          "Fresh graduate": "fresh_graduate",
+          "1–3 years": "1_3_years",
+          "1-3 years": "1_3_years",
+          "3–5 years": "3_5_years",
+          "3-5 years": "3_5_years",
+          "5+ years": "5_plus_years",
+        };
+        const allowancePreferenceMap: Record<string, string> = {
+          "Paid only": "paid_only",
+          "Unpaid OK": "unpaid_ok",
+          "No preference": "no_preference",
+        };
+        const ojtDetails = isOjtSeeker
+          ? {
+              school: preferences.school.trim() || null,
+              course: preferences.course.trim() || null,
+              education_status: preferences.educationStatus || null,
+              year_level: preferences.educationStatus === "undergraduate" && preferences.yearLevel
+                ? Number(preferences.yearLevel)
+                : null,
+              graduation_year: preferences.educationStatus === "graduated" && preferences.graduationYear
+                ? Number(preferences.graduationYear)
+                : null,
+              required_hours: preferences.requiredOjtHours
+                ? Number(preferences.requiredOjtHours)
+                : null,
+              preferred_start_date: preferences.preferredStartDate || null,
+              allowance_preference:
+                allowancePreferenceMap[preferences.allowancePreference] ?? null,
+              requires_moa: preferences.requiresMoa,
+            }
+          : {
+              school: preferences.school.trim() || null,
+              course: preferences.course.trim() || null,
+              education_status: preferences.educationStatus || null,
+              year_level: preferences.educationStatus === "undergraduate" && preferences.yearLevel
+                ? Number(preferences.yearLevel)
+                : null,
+              graduation_year: preferences.educationStatus === "graduated" && preferences.graduationYear
+                ? Number(preferences.graduationYear)
+                : null,
+            };
+
+        const updated = await applicantFilesApi.updatePreferences(token, {
+          name: preferences.name.trim(),
+          phone: preferences.phone.trim() || null,
+          city: preferences.city.trim() || null,
+          category_ids: categoryIds,
+          other_categories: preferences.otherCategories,
+          skills: preferences.skills,
+          work_setups: preferences.workSetup
+            ? [
+                workSetupMap[preferences.workSetup] ??
+                  preferences.workSetup.toLowerCase(),
+              ]
+            : [],
+          preferred_locations: preferences.preferredLocations,
+          desired_titles: preferences.desiredJobTitles,
+          employment_types: preferences.employmentTypes
+            .map(
+              (type) =>
+                employmentTypeMap[type] ?? type.toLocaleLowerCase(),
+            )
+            .filter(Boolean),
+          salary_min: preferences.minimumSalary
+            ? Number(preferences.minimumSalary)
+            : null,
+          salary_max: preferences.maximumSalary
+            ? Number(preferences.maximumSalary)
+            : null,
+          experience_level: preferences.experienceLevel
+            ? experienceLevelMap[preferences.experienceLevel] ?? null
+            : null,
+          profile_links: {
+            portfolio: normalizeProfileLink(preferences.portfolioLink),
+            github: normalizeProfileLink(preferences.githubLink),
+            linkedin: normalizeProfileLink(preferences.linkedinLink),
+            other: preferences.otherLink.trim()
+              ? {
+                  label: preferences.otherLinkLabel.trim() || "Other",
+                  url: normalizeProfileLink(preferences.otherLink) ?? "",
+                }
+              : null,
+          },
+          ojt_details: ojtDetails,
+        });
+        setApplicantProfile(updated.data);
+        setProfilePicture(updated.data.profile_photo_url);
+      }
+
+      onboardingStore.setAnswer("name", preferences.name);
+      onboardingStore.setAnswer("skills", preferences.skills);
+      onboardingStore.setAnswer("school", preferences.school);
+      onboardingStore.setAnswer("course", preferences.course);
+      onboardingStore.setAnswer("yearLevel", preferences.yearLevel);
+      onboardingStore.setAnswer("requiredOjtHours", preferences.requiredOjtHours);
+      onboardingStore.setAnswer("requiresMoa", preferences.requiresMoa);
+      onboardingStore.setAnswer("trainingFields", preferences.trainingFields);
+      onboardingStore.setAnswer("jobCategories", preferences.jobCategories);
+      onboardingStore.setAnswer("desiredJobTitles", preferences.desiredJobTitles);
+      onboardingStore.setAnswer("employmentTypes", preferences.employmentTypes);
+      onboardingStore.setAnswer("experienceLevel", preferences.experienceLevel);
+      onboardingStore.setAnswer("minimumSalary", preferences.minimumSalary);
+      onboardingStore.setAnswer("maximumSalary", preferences.maximumSalary);
+      onboardingStore.setAnswer(
+        "preferredStartDate",
+        preferences.preferredStartDate,
+      );
+      onboardingStore.setAnswer(
+        "allowancePreference",
+        preferences.allowancePreference,
+      );
+      onboardingStore.setAnswer("workSetup", preferences.workSetup);
+      onboardingStore.setAnswer(
+        "preferredLocations",
+        preferences.preferredLocations,
+      );
+
+      if (!isBackendApplicant && !onboardingStore.saveDraft()) {
+        throw new Error(
+          onboardingStore.getSnapshot().submitError ??
+            "Your profile could not be saved in this browser.",
+        );
+      }
+
+      setIsPreferencesEditorOpen(false);
+    } catch (requestError) {
+      setPreferencesSaveError(
+        requestError instanceof Error
+          ? requestError.message
+          : "Your profile preferences could not be saved. Please try again.",
+      );
+    } finally {
+      setIsSavingPreferences(false);
+    }
   }
 
   async function handleDocumentUpload(
@@ -507,11 +803,13 @@ export default function ProfilePage() {
     const hasAllowedType =
       !file.type ||
       file.type === "application/pdf" ||
-      (documentType === "cover-letter" && file.type === "application/msword") ||
+      (!isBackendApplicant &&
+        documentType === "cover-letter" &&
+        file.type === "application/msword") ||
       file.type ===
         "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
     const allowedName =
-      documentType === "resume" && isBackendApplicant
+      isBackendApplicant
         ? /\.(pdf|docx)$/i
         : allowedResumeName;
     if (!allowedName.test(file.name) || !hasAllowedType) {
@@ -522,8 +820,12 @@ export default function ProfilePage() {
             : "Choose a PDF, DOC, or DOCX file.",
         );
       } else {
-        setCoverLetterError("Choose a PDF, DOC, or DOCX file.");
-        onboardingStore.setAnswer("coverLetterFile", null);
+        setCoverLetterError(
+          isBackendApplicant
+            ? "Choose a PDF or DOCX cover letter."
+            : "Choose a PDF, DOC, or DOCX file.",
+        );
+        if (!isBackendApplicant) onboardingStore.setAnswer("coverLetterFile", null);
       }
       return;
     }
@@ -535,15 +837,18 @@ export default function ProfilePage() {
             : "Your resume must be 10 MB or smaller.",
         );
       } else {
-        setCoverLetterError("Your cover letter must be 10 MB or smaller.");
-        onboardingStore.setAnswer("coverLetterFile", null);
+        setCoverLetterError(
+          isBackendApplicant
+            ? "Your cover letter must be 5 MB or smaller."
+            : "Your cover letter must be 10 MB or smaller.",
+        );
+        if (!isBackendApplicant) onboardingStore.setAnswer("coverLetterFile", null);
       }
       return;
     }
 
     if (documentType === "resume") {
       setResumeError(null);
-      setSampleResumeRemoved(false);
       if (isBackendApplicant && token) {
         if (!/^resume\.(pdf|docx)$/i.test(file.name)) {
           setResumeError(
@@ -571,8 +876,129 @@ export default function ProfilePage() {
       }
     } else {
       setCoverLetterError(null);
-      setSampleCoverLetterRemoved(false);
-      onboardingStore.setAnswer("coverLetterFile", file);
+      if (isBackendApplicant && token) {
+        setDocumentUploadProgress(0);
+        try {
+          const uploaded = await applicantFilesApi.uploadDocument(
+            token,
+            "cover_letter",
+            file,
+            setDocumentUploadProgress,
+          );
+          setApplicantDocuments((documents) => [
+            ...documents.filter((document) => document.document_type !== "cover_letter"),
+            uploaded,
+          ]);
+        } catch (requestError) {
+          setCoverLetterError(
+            requestError instanceof Error
+              ? requestError.message
+              : "The cover letter could not be uploaded.",
+          );
+        } finally {
+          setDocumentUploadProgress(null);
+        }
+      } else {
+        onboardingStore.setAnswer("coverLetterFile", file);
+      }
+    }
+  }
+
+  async function handleSupportingDocumentUpload(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file || !token) return;
+    if (!/\.pdf$|\.docx$/i.test(file.name)) {
+      setDocumentsError("Choose a PDF or DOCX supporting document.");
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      setDocumentsError("Supporting documents must be 5 MB or smaller.");
+      return;
+    }
+
+    setDocumentsError(null);
+    setDocumentUploadProgress(0);
+    try {
+      const uploaded = await applicantFilesApi.uploadDocument(
+        token,
+        supportingDocumentType,
+        file,
+        setDocumentUploadProgress,
+      );
+      setApplicantDocuments((documents) => [
+        ...documents.filter((document) => document.id !== uploaded.id),
+        uploaded,
+      ]);
+    } catch (requestError) {
+      setDocumentsError(
+        requestError instanceof Error
+          ? requestError.message
+          : "The supporting document could not be uploaded.",
+      );
+    } finally {
+      setDocumentUploadProgress(null);
+    }
+  }
+
+  async function previewApplicantDocument(document: ApplicantStoredDocument) {
+    if (!token) return;
+    setDocumentsError(null);
+    try {
+      const blob = await applicantFilesApi.downloadDocument(token, document.id);
+      setDocumentPreview({
+        title: document.document_type === "cover_letter"
+          ? "Cover letter"
+          : document.document_type === "education"
+            ? "Education document"
+            : document.document_type === "certificate"
+              ? "Certificate"
+              : "Supporting document",
+        fileName: document.original_filename,
+        blob,
+        mimeType: document.mime_type || blob.type,
+        url: URL.createObjectURL(blob),
+      });
+    } catch (requestError) {
+      setDocumentsError(
+        requestError instanceof Error
+          ? requestError.message
+          : "The document preview could not be loaded.",
+      );
+    }
+  }
+
+  async function downloadApplicantDocument(document: ApplicantStoredDocument) {
+    if (!token) return;
+    setDocumentsError(null);
+    try {
+      downloadApplicantFile(
+        await applicantFilesApi.downloadDocument(token, document.id),
+        document.original_filename,
+      );
+    } catch (requestError) {
+      setDocumentsError(
+        requestError instanceof Error
+          ? requestError.message
+          : "The document could not be downloaded.",
+      );
+    }
+  }
+
+  async function removeApplicantDocument(document: ApplicantStoredDocument) {
+    if (!token) return;
+    setDocumentsError(null);
+    try {
+      await applicantFilesApi.deleteDocument(token, document.id);
+      setApplicantDocuments((documents) =>
+        documents.filter((savedDocument) => savedDocument.id !== document.id),
+      );
+    } catch (requestError) {
+      setDocumentsError(
+        requestError instanceof Error
+          ? requestError.message
+          : "The document could not be removed.",
+      );
     }
   }
 
@@ -594,7 +1020,51 @@ export default function ProfilePage() {
 
     onboardingStore.setAnswer("resumeFile", null);
     setResumeError(null);
-    setSampleResumeRemoved(true);
+  }
+
+  async function handleIdentityVerificationUpload(
+    event: ChangeEvent<HTMLInputElement>,
+  ) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file || !token) return;
+
+    const allowedExtension = /\.(jpe?g|png|pdf)$/i.test(file.name);
+    const allowedMimeType =
+      !file.type ||
+      ["image/jpeg", "image/png", "application/pdf"].includes(file.type);
+    if (!allowedExtension || !allowedMimeType) {
+      setIdentityVerificationError("Choose a JPG, PNG, or PDF identity document.");
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      setIdentityVerificationError("Identity documents must be 5 MB or smaller.");
+      return;
+    }
+
+    setIdentityVerificationError(null);
+    setIdentityUploadProgress(0);
+    try {
+      const response = await applicantFilesApi.submitIdentityVerification(
+        token,
+        file,
+        setIdentityUploadProgress,
+      );
+      setIdentityVerification({
+        status: response.status,
+        rejection_reason: null,
+        submitted_at: new Date().toISOString(),
+        reviewed_at: null,
+      });
+    } catch (requestError) {
+      setIdentityVerificationError(
+        requestError instanceof Error
+          ? requestError.message
+          : "The identity document could not be submitted.",
+      );
+    } finally {
+      setIdentityUploadProgress(null);
+    }
   }
 
   async function downloadServerResume() {
@@ -614,6 +1084,30 @@ export default function ProfilePage() {
     }
   }
 
+  async function previewServerResume() {
+    if (!token || !serverResume || resumePreviewLoading) return;
+    setResumeError(null);
+    setResumePreviewLoading(true);
+    try {
+      const blob = await applicantFilesApi.downloadResume(token);
+      setDocumentPreview({
+        title: "Resume",
+        fileName: serverResume.original_filename,
+        blob,
+        mimeType: serverResume.mime_type || blob.type,
+        url: URL.createObjectURL(blob),
+      });
+    } catch (requestError) {
+      setResumeError(
+        requestError instanceof Error
+          ? requestError.message
+          : "The resume preview could not be loaded.",
+      );
+    } finally {
+      setResumePreviewLoading(false);
+    }
+  }
+
   function previewDocument(file: File, title: string) {
     setDocumentPreview({
       title,
@@ -621,14 +1115,6 @@ export default function ProfilePage() {
       file,
       url: URL.createObjectURL(file),
     });
-  }
-
-  function previewSampleDocument(
-    title: string,
-    fileName: string,
-    content: string,
-  ) {
-    setDocumentPreview({ title, fileName, content });
   }
 
   function closeDocumentPreview() {
@@ -644,15 +1130,12 @@ export default function ProfilePage() {
     window.setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
 
-  function downloadSampleDocument(fileName: string, content: string) {
-    const url = URL.createObjectURL(
-      new Blob([content], { type: "text/plain;charset=utf-8" }),
-    );
-    const anchor = document.createElement("a");
-    anchor.href = url;
-    anchor.download = fileName;
-    anchor.click();
-    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+  function downloadPreviewDocument() {
+    if (documentPreview?.file) {
+      downloadDocument(documentPreview.file);
+    } else if (documentPreview?.blob) {
+      downloadApplicantFile(documentPreview.blob, documentPreview.fileName);
+    }
   }
 
   async function handleProfilePictureUpload(event: ChangeEvent<HTMLInputElement>) {
@@ -761,9 +1244,9 @@ export default function ProfilePage() {
         : "";
   const documentPreviewIsPdf = Boolean(
     documentPreview &&
-      documentPreview.file &&
-      (documentPreview.file.type === "application/pdf" ||
-        /\.pdf$/i.test(documentPreview.file.name)),
+      (documentPreview.mimeType === "application/pdf" ||
+        documentPreview.file?.type === "application/pdf" ||
+        /\.pdf$/i.test(documentPreview.fileName)),
   );
   const isEmailVerified = Boolean(user?.email_verified_at);
   const hasEmailVerificationStatus = Boolean(user) || onboarding.accountCreated;
@@ -825,112 +1308,154 @@ export default function ProfilePage() {
     otherLink: otherProfileLink?.url || "",
     school: isBackendApplicant
       ? applicantProfile?.ojt_details?.school || ""
-      : answers.school || (isOjtSeeker ? ojtSeekerExample.school : ""),
-    course:
-      isBackendApplicant
-        ? applicantProfile?.ojt_details?.course || ""
-        : answers.course ||
-          (isOjtSeeker
-            ? ojtSeekerExample.course
-            : useJobSeekerExample
-              ? jobSeekerExample.education.course
-              : ""),
+      : answers.school,
+    course: isBackendApplicant
+      ? applicantProfile?.ojt_details?.course || ""
+      : answers.course,
+    educationStatus: isBackendApplicant
+      ? applicantProfile?.ojt_details?.education_status ?? ""
+      : "",
     yearLevel: isBackendApplicant
-      ? applicantProfile?.ojt_details?.year_level
+      ? applicantProfile?.ojt_details?.education_status === "undergraduate" && applicantProfile.ojt_details.year_level
         ? String(applicantProfile.ojt_details.year_level)
         : ""
-      : answers.yearLevel || (isOjtSeeker ? ojtSeekerExample.yearLevel : ""),
-    requiredOjtHours:
-      isBackendApplicant
-        ? applicantProfile?.ojt_details?.required_hours
-          ? String(applicantProfile.ojt_details.required_hours)
-          : ""
-        : answers.requiredOjtHours ||
-          (isOjtSeeker ? ojtSeekerExample.requiredOjtHours : ""),
+      : answers.yearLevel,
+    graduationYear: isBackendApplicant
+      ? applicantProfile?.ojt_details?.graduation_year
+        ? String(applicantProfile.ojt_details.graduation_year)
+        : ""
+      : "",
+    requiredOjtHours: isBackendApplicant
+      ? applicantProfile?.ojt_details?.required_hours
+        ? String(applicantProfile.ojt_details.required_hours)
+        : ""
+      : answers.requiredOjtHours,
     requiresMoa: isBackendApplicant
-      ? applicantProfile?.ojt_details?.requires_moa ?? false
+      ? applicantProfile?.ojt_details?.requires_moa ?? null
       : answers.requiresMoa,
-    trainingFields:
-      answers.trainingFields.length > 0
-        ? answers.trainingFields
-        : isOjtSeeker
-          ? ojtSeekerExample.trainingFields
-          : [],
-    jobCategories:
-      isBackendApplicant
-        ? applicantProfile?.interests.map((interest) => interest.name) || []
-        : answers.jobCategories.length > 0
-        ? answers.jobCategories
-        : useJobSeekerExample
-          ? jobSeekerExample.jobCategories
-          : [],
-    desiredJobTitles:
-      isBackendApplicant
-        ? applicantProfile?.desired_titles || []
-        : answers.desiredJobTitles.length > 0
-        ? answers.desiredJobTitles
-        : useJobSeekerExample
-          ? [jobSeekerExample.title]
-          : [],
-    employmentTypes:
-      isBackendApplicant
-        ? applicantProfile?.employment_types || []
-        : answers.employmentTypes.length > 0
-        ? answers.employmentTypes
-        : useJobSeekerExample
-          ? jobSeekerExample.employmentTypes
-          : [],
-    experienceLevel:
-      isBackendApplicant
-        ? applicantProfile?.experience_level || ""
-        : answers.experienceLevel ||
-          (useJobSeekerExample ? jobSeekerExample.experienceLevel : ""),
-    minimumSalary:
-      isBackendApplicant
-        ? applicantProfile?.salary_min ? String(applicantProfile.salary_min) : ""
-        : answers.minimumSalary ||
-          (useJobSeekerExample ? jobSeekerExample.minimumSalary : ""),
-    maximumSalary:
-      isBackendApplicant
-        ? applicantProfile?.salary_max ? String(applicantProfile.salary_max) : ""
-        : answers.maximumSalary ||
-          (useJobSeekerExample ? jobSeekerExample.maximumSalary : ""),
-    skills:
-      isBackendApplicant
-        ? applicantProfile?.skills || []
-        : answers.skills.length > 0
-        ? answers.skills
-        : isOjtSeeker
-          ? ojtSeekerExample.skills
-          : jobSeekerExample.skills,
-    preferredStartDate:
-      answers.preferredStartDate ||
-      (isOjtSeeker ? ojtSeekerExample.preferredStartDate : ""),
-    allowancePreference:
-      isBackendApplicant
-        ? applicantProfile?.ojt_details?.allowance_preference || ""
-        : answers.allowancePreference ||
-          (isOjtSeeker ? ojtSeekerExample.allowancePreference : ""),
-    workSetup:
-      isBackendApplicant
-        ? applicantProfile?.work_setups?.[0] || ""
-        : answers.workSetup ||
-          (isOjtSeeker
-            ? ojtSeekerExample.workSetup
-            : useJobSeekerExample
-              ? jobSeekerExample.workSetups[0]
-              : ""),
-    preferredLocations:
-      isBackendApplicant
-        ? applicantProfile?.preferred_locations || []
-        : answers.preferredLocations.length > 0
-        ? answers.preferredLocations
-        : isOjtSeeker
-          ? ojtSeekerExample.preferredLocations
-          : useJobSeekerExample
-            ? jobSeekerExample.locations
-            : [],
+    trainingFields: isBackendApplicant
+      ? applicantProfile?.interests.map((interest) => interest.name) ?? []
+      : answers.trainingFields,
+    jobCategories: isBackendApplicant
+      ? applicantProfile?.interests.map((interest) => interest.name) ?? []
+      : answers.jobCategories,
+    otherCategories: isBackendApplicant
+      ? applicantProfile?.other_categories ?? []
+      : [],
+    desiredJobTitles: isBackendApplicant
+      ? applicantProfile?.desired_titles ?? []
+      : answers.desiredJobTitles,
+    employmentTypes: isBackendApplicant
+      ? (applicantProfile?.employment_types ?? []).map(
+          (type) => employmentTypeLabels[type] ?? type,
+        )
+      : answers.employmentTypes,
+    experienceLevel: isBackendApplicant
+      ? experienceLevelLabels[applicantProfile?.experience_level ?? ""] ?? ""
+      : answers.experienceLevel,
+    minimumSalary: isBackendApplicant
+      ? applicantProfile?.salary_min != null
+        ? String(applicantProfile.salary_min)
+        : ""
+      : answers.minimumSalary,
+    maximumSalary: isBackendApplicant
+      ? applicantProfile?.salary_max != null
+        ? String(applicantProfile.salary_max)
+        : ""
+      : answers.maximumSalary,
+    skills: isBackendApplicant ? applicantProfile?.skills ?? [] : answers.skills,
+    preferredStartDate: isBackendApplicant
+      ? applicantProfile?.ojt_details?.preferred_start_date ?? ""
+      : answers.preferredStartDate,
+    allowancePreference: isBackendApplicant
+      ? allowancePreferenceLabels[
+          applicantProfile?.ojt_details?.allowance_preference ?? ""
+        ] ?? ""
+      : answers.allowancePreference,
+    workSetup: isBackendApplicant
+      ? workSetupLabels[applicantProfile?.work_setups?.[0] ?? ""] ?? ""
+      : answers.workSetup,
+    preferredLocations: isBackendApplicant
+      ? applicantProfile?.preferred_locations ?? []
+      : answers.preferredLocations,
   };
+  const educationCourse = isBackendApplicant
+    ? applicantProfile?.ojt_details?.course || ""
+    : answers.course;
+  const educationDetails = [
+    isBackendApplicant
+      ? applicantProfile?.ojt_details?.school
+      : answers.school,
+    isBackendApplicant
+      ? applicantProfile?.ojt_details?.education_status === "graduated"
+        ? applicantProfile.ojt_details.graduation_year
+          ? `Graduated ${applicantProfile.ojt_details.graduation_year}`
+          : "Graduated"
+        : applicantProfile?.ojt_details?.education_status === "undergraduate"
+          ? applicantProfile.ojt_details.year_level
+            ? `Year ${applicantProfile.ojt_details.year_level}`
+            : "Undergraduate"
+          : null
+      : answers.yearLevel,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+  const preferenceTags = isBackendApplicant
+    ? [
+        ...(applicantProfile?.interests.map((interest) => interest.name) ?? []),
+        ...(applicantProfile?.other_categories ?? []),
+        ...(!isOjtSeeker ? applicantProfile?.desired_titles ?? [] : []),
+        ...(applicantProfile?.employment_types?.map(
+          (type) => employmentTypeLabels[type] ?? type,
+        ) ?? []),
+        ...(applicantProfile?.work_setups?.map(
+          (setup) => workSetupLabels[setup] ?? setup,
+        ) ?? []),
+        ...(applicantProfile?.preferred_locations ?? []),
+        ...(isOjtSeeker &&
+        applicantProfile?.ojt_details?.allowance_preference
+          ? [
+              allowancePreferenceLabels[
+                applicantProfile.ojt_details.allowance_preference
+              ] ?? applicantProfile.ojt_details.allowance_preference,
+            ]
+          : []),
+        ...(isOjtSeeker &&
+        applicantProfile?.ojt_details?.requires_moa === true
+          ? ["MOA required"]
+          : []),
+      ]
+    : [
+        ...(isOjtSeeker ? answers.trainingFields : answers.jobCategories),
+        ...(!isOjtSeeker ? answers.desiredJobTitles : []),
+        ...answers.employmentTypes,
+        ...(answers.workSetup ? [answers.workSetup] : []),
+        ...answers.preferredLocations,
+        ...(isOjtSeeker && answers.allowancePreference
+          ? [answers.allowancePreference]
+          : []),
+        ...(isOjtSeeker && answers.requiresMoa === true ? ["MOA required"] : []),
+      ];
+  const expectedCompensation = isBackendApplicant
+    ? applicantProfile?.salary_min != null || applicantProfile?.salary_max != null
+      ? `₱${applicantProfile.salary_min ?? "Any"} – ₱${applicantProfile.salary_max ?? "Any"} monthly`
+      : ""
+    : answers.minimumSalary || answers.maximumSalary
+      ? `₱${answers.minimumSalary || "Any"} – ₱${answers.maximumSalary || "Any"} monthly`
+      : "";
+  const profileExperienceLevel = isBackendApplicant
+    ? experienceLevelLabels[applicantProfile?.experience_level ?? ""] ?? ""
+    : answers.experienceLevel;
+  const requiredOjtHours = isBackendApplicant
+    ? applicantProfile?.ojt_details?.required_hours
+      ? `${applicantProfile.ojt_details.required_hours} hours`
+      : ""
+    : answers.requiredOjtHours
+      ? `${answers.requiredOjtHours} hours`
+      : "";
+  const preferredStartDate = isBackendApplicant
+    ? applicantProfile?.ojt_details?.preferred_start_date ?? ""
+    : answers.preferredStartDate;
 
   return (
     <div className="flex min-h-screen min-w-[320px] flex-col overflow-x-hidden bg-[#f5f8f8] font-sans text-[#263a3c] antialiased">
@@ -1022,38 +1547,42 @@ export default function ProfilePage() {
                       {isOjtSeeker ? "OJT Seeker" : "Job Seeker"}
                     </span>
                   </div>
-                  <p className="mt-1 text-[9px] text-[#829092]">
-                    {isBackendApplicant
-                      ? isOjtSeeker
-                        ? [
-                            applicantProfile?.ojt_details?.course,
-                            applicantProfile?.ojt_details?.year_level
-                              ? `Year ${applicantProfile.ojt_details.year_level}`
-                              : null,
-                          ]
-                            .filter(Boolean)
-                            .join(" · ") || "OJT details not added"
-                        : [
-                            applicantProfile?.desired_titles?.[0],
-                            applicantProfile?.preferred_locations?.[0],
-                          ]
-                            .filter(Boolean)
-                            .join(" · ") || "Career preferences not added"
-                      : isOjtSeeker
-                        ? [
-                            answers.course || ojtSeekerExample.course,
-                            answers.yearLevel || ojtSeekerExample.yearLevel,
-                          ].join(" · ")
-                        : [
-                            answers.desiredJobTitles[0],
-                            answers.preferredLocations[0],
-                          ]
-                            .filter(Boolean)
-                            .join(" · ") ||
-                              (useJobSeekerExample
-                                ? `${jobSeekerExample.title} · ${jobSeekerExample.location}`
-                                : email)}
+                  <p className="mt-1 text-[9px] text-[#627273]">
+                    {isOjtSeeker
+                      ? [
+                          isBackendApplicant
+                            ? applicantProfile?.ojt_details?.course
+                            : answers.course,
+                          isBackendApplicant
+                            ? applicantProfile?.ojt_details?.education_status === "graduated"
+                              ? applicantProfile.ojt_details.graduation_year
+                                ? `Graduated ${applicantProfile.ojt_details.graduation_year}`
+                                : "Graduated"
+                              : applicantProfile?.ojt_details?.education_status === "undergraduate"
+                                ? applicantProfile.ojt_details.year_level
+                                  ? `Year ${applicantProfile.ojt_details.year_level}`
+                                  : "Undergraduate"
+                                : null
+                            : answers.yearLevel,
+                        ]
+                          .filter(Boolean)
+                          .join(" · ") || "OJT details not added"
+                      : [
+                          isBackendApplicant
+                            ? applicantProfile?.desired_titles?.[0]
+                            : answers.desiredJobTitles[0],
+                          isBackendApplicant
+                            ? applicantProfile?.preferred_locations?.[0]
+                            : answers.preferredLocations[0],
+                        ]
+                          .filter(Boolean)
+                          .join(" · ") || "Career preferences not added"}
                   </p>
+                  {profileError && (
+                    <p className="mt-1 text-[9px] text-[#b34b4b]" role="alert">
+                      {profileError}
+                    </p>
+                  )}
                   {profilePictureError && (
                     <p className="mt-1 text-[9px] text-[#b34b4b]" role="alert">
                       {profilePictureError}
@@ -1145,7 +1674,7 @@ export default function ProfilePage() {
                 <h2 className="text-[10px] font-bold text-[#526365]">
                   Profile mode
                 </h2>
-                <p className="mt-0.5 text-[9px] text-[#93a0a1]">
+                <p className="mt-0.5 text-[9px] text-[#667779]">
                   Switch modes to manage separate job and OJT preferences.
                 </p>
               </div>
@@ -1207,7 +1736,7 @@ export default function ProfilePage() {
                 <ProfileField label="Full name" value={name} />
                 <ProfileField label="Location" value={location} />
                 <div className="min-w-0">
-                  <dt className="text-[8px] font-semibold uppercase tracking-[0.04em] text-[#98a5a5]">
+                  <dt className="text-[8px] font-semibold uppercase tracking-[0.04em] text-[#667779]">
                     Email
                   </dt>
                   <dd className="mt-1 break-words text-[10px] font-medium text-[#526365]">
@@ -1216,13 +1745,7 @@ export default function ProfilePage() {
                 </div>
                 <ProfileField
                   label="Mobile"
-                  value={
-                    isBackendApplicant
-                      ? applicantProfile?.phone || ""
-                      : isOjtSeeker || useJobSeekerExample
-                        ? jobSeekerExample.phone
-                        : "Not provided"
-                  }
+                  value={isBackendApplicant ? applicantProfile?.phone || "" : ""}
                 />
               </dl>
             </ProfilePanel>
@@ -1238,7 +1761,7 @@ export default function ProfilePage() {
                     value={
                       isBackendApplicant
                         ? applicantProfile?.ojt_details?.school || ""
-                        : answers.school || ojtSeekerExample.school
+                        : answers.school
                     }
                   />
                   <ProfileField
@@ -1246,17 +1769,29 @@ export default function ProfilePage() {
                     value={
                       isBackendApplicant
                         ? applicantProfile?.ojt_details?.course || ""
-                        : answers.course || ojtSeekerExample.course
+                        : answers.course
                     }
                   />
                   <ProfileField
-                    label="Year level"
+                    label={
+                      isBackendApplicant
+                        ? applicantProfile?.ojt_details?.education_status === "graduated"
+                          ? "Graduation year"
+                          : "Education status"
+                        : "Year level"
+                    }
                     value={
                       isBackendApplicant
-                        ? applicantProfile?.ojt_details?.year_level
-                          ? String(applicantProfile.ojt_details.year_level)
-                          : ""
-                        : answers.yearLevel || ojtSeekerExample.yearLevel
+                        ? applicantProfile?.ojt_details?.education_status === "graduated"
+                          ? applicantProfile.ojt_details.graduation_year
+                            ? String(applicantProfile.ojt_details.graduation_year)
+                            : "Graduated"
+                          : applicantProfile?.ojt_details?.education_status === "undergraduate"
+                            ? applicantProfile.ojt_details.year_level
+                              ? `Undergraduate · Year ${applicantProfile.ojt_details.year_level}`
+                              : "Undergraduate"
+                            : ""
+                        : answers.yearLevel
                     }
                   />
                   <ProfileField
@@ -1266,7 +1801,9 @@ export default function ProfilePage() {
                         ? applicantProfile?.ojt_details?.required_hours
                           ? `${applicantProfile.ojt_details.required_hours} hours`
                           : ""
-                        : `${answers.requiredOjtHours || ojtSeekerExample.requiredOjtHours} hours`
+                        : answers.requiredOjtHours
+                          ? `${answers.requiredOjtHours} hours`
+                          : ""
                     }
                   />
                 </dl>
@@ -1278,9 +1815,11 @@ export default function ProfilePage() {
                       : applicantProfile?.ojt_details?.requires_moa === false
                         ? "My school does not require a MOA with the company."
                         : "MOA requirement not provided."
-                    : answers.requiresMoa
+                    : answers.requiresMoa === true
                       ? "My school requires a MOA with the company."
-                      : "My school does not require a MOA with the company."}
+                      : answers.requiresMoa === false
+                        ? "My school does not require a MOA with the company."
+                        : "MOA requirement not provided."}
                 </p>
               </ProfilePanel>
             ) : (
@@ -1293,38 +1832,16 @@ export default function ProfilePage() {
                     <span className="mt-1.5 size-1.5 shrink-0 rounded-full bg-[#078b8d]" />
                     <div className="min-w-0">
                       <p className="text-[10px] font-semibold text-[#526365]">
-                        {applicantProfile?.experience_level
-                          ? `Experience level: ${applicantProfile.experience_level}`
+                        {profileExperienceLevel
+                          ? `Experience level: ${profileExperienceLevel}`
                           : "Work experience not added"}
                       </p>
-                      <p className="mt-1 text-[9px] leading-4 text-[#849293]">
+                      <p className="mt-1 text-[9px] leading-4 text-[#627273]">
                         {applicantProfile?.desired_titles?.length
                           ? `Interested in ${applicantProfile.desired_titles.join(", ")}`
                           : "Use Edit preferences to add your desired roles."}
                       </p>
                     </div>
-                  </div>
-                ) : useJobSeekerExample ? (
-                  <div className="space-y-4 border-l border-[#e7eeee] pl-3">
-                    {jobSeekerExample.workExperience.map((experience) => (
-                      <div className="relative min-w-0" key={experience.title}>
-                        <span className="absolute -left-[15px] top-1 size-1.5 rounded-full bg-[#078b8d]" />
-                        <p className="text-[10px] font-semibold text-[#526365]">
-                          {experience.title}
-                        </p>
-                        <p className="mt-1 text-[9px] text-[#849293]">
-                          {experience.company}
-                        </p>
-                        <p className="text-[8px] text-[#9aa6a7]">
-                          {experience.period}
-                        </p>
-                        {experience.description && (
-                          <p className="mt-2 text-[9px] leading-4 text-[#849293]">
-                            {experience.description}
-                          </p>
-                        )}
-                      </div>
-                    ))}
                   </div>
                 ) : (
                   <div className="flex items-start gap-2.5">
@@ -1333,7 +1850,7 @@ export default function ProfilePage() {
                       <p className="text-[10px] font-semibold text-[#526365]">
                         {answers.experienceLevel || "Experience details not added"}
                       </p>
-                      <p className="mt-1 text-[9px] leading-4 text-[#849293]">
+                      <p className="mt-1 text-[9px] leading-4 text-[#627273]">
                         {answers.desiredJobTitles.length > 0
                           ? `Interested in ${answers.desiredJobTitles.join(", ")}`
                           : "Add your career interests to improve your recommendations."}
@@ -1352,43 +1869,11 @@ export default function ProfilePage() {
                 <span className="mt-1.5 size-1.5 shrink-0 rounded-full bg-[#078b8d]" />
                 <div className="min-w-0">
                   <p className="text-[10px] font-semibold text-[#526365]">
-                    {isBackendApplicant
-                      ? applicantProfile?.ojt_details?.course || "Education details not added"
-                      : answers.course ||
-                        (isOjtSeeker
-                          ? ojtSeekerExample.course
-                          : useJobSeekerExample
-                            ? jobSeekerExample.education.course
-                            : "Education details not added")}
+                    {educationCourse || "Education details not added"}
                   </p>
-                  <p className="mt-1 text-[9px] text-[#849293]">
-                    {isBackendApplicant
-                      ? [
-                          applicantProfile?.ojt_details?.school,
-                          applicantProfile?.ojt_details?.year_level
-                            ? `Year ${applicantProfile.ojt_details.year_level}`
-                            : null,
-                        ]
-                          .filter(Boolean)
-                          .join(" · ") ||
-                        "Education details not added. Use Edit preferences to add them."
-                      : [
-                          answers.school ||
-                            (isOjtSeeker
-                              ? ojtSeekerExample.school
-                              : useJobSeekerExample
-                                ? jobSeekerExample.education.school
-                                : ""),
-                          isOjtSeeker
-                            ? ojtSeekerExample.educationPeriod
-                            : answers.yearLevel ||
-                              (useJobSeekerExample
-                                ? jobSeekerExample.education.period
-                                : ""),
-                        ]
-                          .filter(Boolean)
-                          .join(" · ") ||
-                        "Add your education details to your profile."}
+                  <p className="mt-1 text-[9px] text-[#627273]">
+                    {educationDetails ||
+                      "Education details not added. Use Edit preferences to add them."}
                   </p>
                 </div>
               </div>
@@ -1398,75 +1883,22 @@ export default function ProfilePage() {
               icon="settings"
               title={isOjtSeeker ? "OJT preferences" : "Work preferences"}
             >
-              <ProfileTags
-                tags={[
-                  ...(isOjtSeeker
-                    ? answers.trainingFields.length > 0
-                      ? answers.trainingFields
-                      : ojtSeekerExample.trainingFields
-                    : answers.jobCategories.length > 0
-                      ? answers.jobCategories
-                      : useJobSeekerExample
-                        ? jobSeekerExample.jobCategories
-                        : []),
-                  ...(answers.desiredJobTitles.length > 0
-                    ? answers.desiredJobTitles
-                    : useJobSeekerExample
-                      ? [jobSeekerExample.title]
-                      : []),
-                  ...(answers.employmentTypes.length > 0
-                    ? answers.employmentTypes
-                    : useJobSeekerExample
-                      ? jobSeekerExample.employmentTypes
-                      : []),
-                  ...(answers.workSetup
-                    ? [answers.workSetup]
-                    : isOjtSeeker
-                      ? [ojtSeekerExample.workSetup]
-                      : useJobSeekerExample
-                        ? jobSeekerExample.workSetups
-                        : []),
-                  ...(answers.preferredLocations.length > 0
-                    ? answers.preferredLocations
-                    : isOjtSeeker
-                      ? ojtSeekerExample.preferredLocations
-                      : useJobSeekerExample
-                        ? jobSeekerExample.locations
-                        : []),
-                  ...(isOjtSeeker
-                    ? [
-                        answers.allowancePreference ||
-                          ojtSeekerExample.allowancePreference,
-                        ...(answers.requiresMoa ? ["MOA required"] : []),
-                      ]
-                    : []),
-                ].filter(Boolean)}
-              />
+              <ProfileTags tags={preferenceTags} />
               <dl className="mt-3 grid grid-cols-2 gap-3 border-t border-[#edf1f1] pt-3">
                 <ProfileField
                   label={isOjtSeeker ? "Preferred start date" : "Expected salary"}
                   value={
                     isOjtSeeker
-                      ? formatDate(
-                          answers.preferredStartDate ||
-                            ojtSeekerExample.preferredStartDate,
-                        )
-                      : answers.minimumSalary || answers.maximumSalary
-                        ? `₱${answers.minimumSalary || "Any"} – ₱${answers.maximumSalary || "Any"} monthly`
-                        : useJobSeekerExample
-                          ? `₱${jobSeekerExample.minimumSalary} – ₱${jobSeekerExample.maximumSalary} monthly`
-                          : "Not provided"
+                      ? formatDate(preferredStartDate)
+                      : expectedCompensation || "Not provided"
                   }
                 />
                 <ProfileField
                   label={isOjtSeeker ? "Required training" : "Experience level"}
                   value={
                     isOjtSeeker
-                      ? `${answers.requiredOjtHours || ojtSeekerExample.requiredOjtHours} hours`
-                      : answers.experienceLevel ||
-                        (useJobSeekerExample
-                          ? jobSeekerExample.experienceLevel
-                          : "Not provided")
+                      ? requiredOjtHours
+                      : profileExperienceLevel || "Not provided"
                   }
                 />
               </dl>
@@ -1478,11 +1910,10 @@ export default function ProfilePage() {
               percentage={strength}
               description={
                 isOjtSeeker
-                  ? "Add a letter from your school to strengthen your OJT profile."
-                  : useJobSeekerExample
-                    ? "Add a portfolio link to help employers see more of your work."
-                    : undefined
+                  ? "Add your school and training details to strengthen your OJT profile."
+                  : "Add your work history and job preferences to strengthen your job-seeker profile."
               }
+              missingItems={missingProfileItems}
             />
             <ProfilePanel icon="briefcase" title="Professional links">
               {[
@@ -1501,7 +1932,7 @@ export default function ProfilePage() {
                     url ? (
                       <a
                         className="block truncate rounded-lg bg-[#eff8f6] px-3 py-2 text-[9px] font-semibold text-[#078b8d] hover:bg-[#e5f4f2] hover:underline"
-                        href={url}
+                        href={normalizeProfileLink(url) ?? undefined}
                         key={label}
                         rel="noopener noreferrer"
                         target="_blank"
@@ -1523,6 +1954,69 @@ export default function ProfilePage() {
             >
               <ProfileTags tags={skills} />
             </ProfilePanel>
+            <ProfilePanel icon="user" title="Identity verification">
+              {identityVerificationLoading ? (
+                <p className="rounded-lg bg-[#f2f8f7] p-2 text-[9px] text-[#526365]" role="status">
+                  Checking identity-verification status…
+                </p>
+              ) : identityVerification?.status === "verified" ? (
+                <div className="rounded-lg border border-[#d6ebe4] bg-[#f0f8f5] p-3">
+                  <p className="text-[10px] font-semibold text-[#247b63]">Identity verified</p>
+                  <p className="mt-1 text-[9px] leading-4 text-[#617b72]">
+                    Your identity review is approved.
+                  </p>
+                </div>
+              ) : identityVerification?.status === "pending" ? (
+                <div className="rounded-lg border border-[#dce9e7] bg-[#f5f9f8] p-3">
+                  <p className="text-[10px] font-semibold text-[#526365]">Identity review in progress</p>
+                  <p className="mt-1 text-[9px] leading-4 text-[#718184]">
+                    Identity review is separate from application eligibility.
+                  </p>
+                </div>
+              ) : identityVerification?.status === "rejected" ? (
+                <div className="rounded-lg border border-[#f0d9d7] bg-[#fff7f6] p-3">
+                  <p className="text-[10px] font-semibold text-[#a2534c]">Identity document needs attention</p>
+                  <p className="mt-1 text-[9px] leading-4 text-[#875d5a]">
+                    {identityVerification.rejection_reason ||
+                      "Please submit a clearer or valid identity document."}
+                  </p>
+                </div>
+              ) : (
+                <p className="rounded-lg bg-[#f5f9f8] p-3 text-[9px] leading-4 text-[#718184]">
+                  Identity verification is separate from application eligibility and does not need to be approved before you apply.
+                </p>
+              )}
+              {(!identityVerification || identityVerification.status === "rejected") &&
+                !identityVerificationLoading && (
+                  <label className="mt-2 flex cursor-pointer items-center justify-center rounded-lg border border-dashed border-[#d6e5e3] bg-[#f8fbfb] p-2.5 text-center text-[9px] font-semibold text-[#526365] hover:border-[#078b8d] focus-within:outline-[3px] focus-within:outline-[#67c9c1]">
+                    {identityUploadProgress !== null
+                      ? "Uploading identity document…"
+                      : identityVerification?.status === "rejected"
+                        ? "Upload a replacement ID"
+                        : "Upload a government-issued ID"}
+                    <input
+                      accept=".jpg,.jpeg,.png,.pdf"
+                      className="sr-only"
+                      disabled={identityUploadProgress !== null}
+                      onChange={(event) => void handleIdentityVerificationUpload(event)}
+                      type="file"
+                    />
+                  </label>
+                )}
+              {identityUploadProgress !== null && (
+                <p className="mt-2 text-[9px] text-[#087879]" role="status">
+                  Uploading… {identityUploadProgress}%
+                </p>
+              )}
+              <p className="mt-1 text-[8px] leading-4 text-[#849394]">
+                JPG, PNG, or PDF · 5 MB maximum
+              </p>
+              {identityVerificationError && (
+                <p className="mt-2 text-[9px] text-[#b34b4b]" role="alert">
+                  {identityVerificationError}
+                </p>
+              )}
+            </ProfilePanel>
             <ProfilePanel icon="resume" title="Documents">
               {resumeLoading ? (
                 <p className="rounded-lg bg-[#f2f8f7] p-3 text-[9px] text-[#526365]" role="status">
@@ -1535,13 +2029,24 @@ export default function ProfilePage() {
                       <ProfileResumeIcon />
                     </ProfileIconBadge>
                     <div className="min-w-0 flex-1">
-                      <span className="block text-[8px] font-semibold text-[#078b8d]">Resume</span>
-                      <span className="block truncate text-[9px] font-semibold text-[#526365]">
-                        {serverResume.original_filename}
-                      </span>
-                      <span className="mt-0.5 block text-[8px] text-[#93a0a1]">
-                        {formatFileSize(serverResume.file_size)}
-                      </span>
+                      <button
+                        aria-label={`Preview resume ${serverResume.original_filename}`}
+                        aria-busy={resumePreviewLoading}
+                        className="block min-w-0 text-left focus-visible:outline-[3px] focus-visible:outline-[#67c9c1] focus-visible:outline-offset-2 disabled:cursor-wait"
+                        disabled={resumePreviewLoading}
+                        onClick={() => void previewServerResume()}
+                        type="button"
+                      >
+                        <span className="block text-[8px] font-semibold text-[#078b8d]">
+                          {resumePreviewLoading ? "Opening preview…" : "Resume · Preview"}
+                        </span>
+                        <span className="block truncate text-[9px] font-semibold text-[#526365]">
+                          {serverResume.original_filename}
+                        </span>
+                        <span className="mt-0.5 block text-[8px] text-[#667779]">
+                          {formatFileSize(serverResume.file_size)}
+                        </span>
+                      </button>
                     </div>
                     <button
                       aria-label="Download resume"
@@ -1573,28 +2078,14 @@ export default function ProfilePage() {
                     </button>
                   </div>
                 </div>
-              ) : resume || showSampleResume ? (
+              ) : resume ? (
                 <>
                   <ProfileDocumentCard
-                    details={
-                      resume
-                        ? formatFileSize(resume.size)
-                        : isOjtSeeker
-                          ? ojtSeekerExample.resumeDetails
-                          : jobSeekerExample.resumeDetails
-                    }
+                    details={formatFileSize(resume.size)}
                     file={resume}
-                    fileName={
-                      resume?.name ||
-                      (isOjtSeeker
-                        ? ojtSeekerExample.resumeName
-                        : jobSeekerExample.resumeName)
-                    }
+                    fileName={resume.name}
                     onDownload={downloadDocument}
                     onPreview={previewDocument}
-                    onDownloadSample={downloadSampleDocument}
-                    onPreviewSample={previewSampleDocument}
-                    sampleContent={resume ? undefined : sampleResumeContent}
                     title="Resume"
                   />
                   <div className="mt-2 flex items-center gap-3">
@@ -1644,30 +2135,199 @@ export default function ProfilePage() {
               )}
 
               {isBackendApplicant ? (
-                <p className="mt-4 border-t border-[#edf1f1] pt-3 text-[9px] leading-4 text-[#849394]">
-                  Cover-letter uploads are not yet supported by the backend and are not saved.
-                </p>
+                <div className="mt-4 space-y-4 border-t border-[#edf1f1] pt-3">
+                  <section aria-labelledby="profile-cover-letter-heading">
+                    <h3
+                      className="mb-2 text-[9px] font-semibold text-[#526365]"
+                      id="profile-cover-letter-heading"
+                    >
+                      Cover letter
+                    </h3>
+                    {documentsLoading ? (
+                      <p className="rounded-lg bg-[#f2f8f7] p-2 text-[9px] text-[#526365]" role="status">
+                        Loading documents…
+                      </p>
+                    ) : savedCoverLetter ? (
+                      <>
+                        <div className="rounded-lg bg-[#f2f8f7] p-2">
+                          <div className="flex items-center gap-2">
+                            <ProfileIconBadge>
+                              <ProfileResumeIcon />
+                            </ProfileIconBadge>
+                            <button
+                              className="min-w-0 flex-1 text-left focus-visible:outline-[3px] focus-visible:outline-[#67c9c1]"
+                              onClick={() => void previewApplicantDocument(savedCoverLetter)}
+                              type="button"
+                            >
+                              <span className="block text-[8px] font-semibold text-[#078b8d]">
+                                Cover letter · Preview
+                              </span>
+                              <span className="block truncate text-[9px] font-semibold text-[#526365]">
+                                {savedCoverLetter.original_filename}
+                              </span>
+                              <span className="mt-0.5 block text-[8px] text-[#667779]">
+                                {formatFileSize(savedCoverLetter.file_size)}
+                              </span>
+                            </button>
+                            <button
+                              aria-label="Download cover letter"
+                              className="rounded p-1 text-[#078b8d] hover:bg-white"
+                              onClick={() => void downloadApplicantDocument(savedCoverLetter)}
+                              type="button"
+                            >
+                              ↓
+                            </button>
+                          </div>
+                          <div className="mt-2 flex items-center gap-3">
+                            <label className="cursor-pointer rounded-md border border-[#e0e9e8] px-2 py-1 text-[8px] font-semibold text-[#526365] hover:bg-white">
+                              Replace
+                              <input
+                                accept=".pdf,.docx"
+                                className="sr-only"
+                                disabled={documentUploadProgress !== null}
+                                onChange={(event) => void handleDocumentUpload(event, "cover-letter")}
+                                type="file"
+                              />
+                            </label>
+                            <button
+                              className="rounded px-1 py-1 text-[8px] font-semibold text-[#a2534c] hover:underline"
+                              disabled={documentUploadProgress !== null}
+                              onClick={() => void removeApplicantDocument(savedCoverLetter)}
+                              type="button"
+                            >
+                              Remove
+                            </button>
+                          </div>
+                        </div>
+                      </>
+                    ) : (
+                      <label className="flex cursor-pointer items-center gap-2 rounded-lg border border-dashed border-[#d6e5e3] bg-[#f8fbfb] p-2.5 hover:border-[#078b8d]">
+                        <ProfileIconBadge>
+                          <ProfileResumeIcon />
+                        </ProfileIconBadge>
+                        <span className="text-[9px] font-semibold text-[#526365]">
+                          Upload a PDF or DOCX cover letter · up to 5 MB
+                        </span>
+                        <input
+                          accept=".pdf,.docx"
+                          className="sr-only"
+                          disabled={documentUploadProgress !== null}
+                          onChange={(event) => void handleDocumentUpload(event, "cover-letter")}
+                          type="file"
+                        />
+                      </label>
+                    )}
+                    {coverLetterError && (
+                      <p className="mt-2 text-[9px] text-[#b34b4b]" role="alert">
+                        {coverLetterError}
+                      </p>
+                    )}
+                    {documentUploadProgress !== null && (
+                      <p className="mt-2 text-[9px] text-[#087879]" role="status">
+                        Uploading document… {documentUploadProgress}%
+                      </p>
+                    )}
+                  </section>
+
+                  <section aria-labelledby="supporting-documents-heading">
+                    <h3
+                      className="mb-2 text-[9px] font-semibold text-[#526365]"
+                      id="supporting-documents-heading"
+                    >
+                      Supporting documents
+                    </h3>
+                    <div className="mb-2 flex flex-wrap items-center gap-2">
+                      <label className="text-[8px] font-medium text-[#667779]" htmlFor="supporting-document-type">
+                        Document type
+                      </label>
+                      <select
+                        className="rounded-md border border-[#e0e9e8] bg-white px-2 py-1 text-[9px] text-[#526365]"
+                        id="supporting-document-type"
+                        onChange={(event) =>
+                          setSupportingDocumentType(
+                            event.target.value as Exclude<ApplicantDocumentType, "cover_letter">,
+                          )
+                        }
+                        value={supportingDocumentType}
+                      >
+                        <option value="certificate">Certificate</option>
+                        <option value="education">Education</option>
+                        <option value="other">Other</option>
+                      </select>
+                      <label className="cursor-pointer rounded-md border border-[#dce9e7] px-2 py-1 text-[8px] font-semibold text-[#078b8d] hover:bg-[#f4faf9]">
+                        Add document
+                        <input
+                          accept=".pdf,.docx"
+                          className="sr-only"
+                          disabled={documentUploadProgress !== null}
+                          onChange={(event) => void handleSupportingDocumentUpload(event)}
+                          type="file"
+                        />
+                      </label>
+                    </div>
+                    {documentsLoading ? null : supportingDocuments.length > 0 ? (
+                      <ul className="space-y-2">
+                        {supportingDocuments.map((document) => (
+                          <li
+                            className="flex min-w-0 items-center gap-2 rounded-lg bg-[#f2f8f7] p-2"
+                            key={document.id}
+                          >
+                            <button
+                              className="min-w-0 flex-1 text-left focus-visible:outline-[3px] focus-visible:outline-[#67c9c1]"
+                              onClick={() => void previewApplicantDocument(document)}
+                              type="button"
+                            >
+                              <span className="block text-[8px] font-semibold capitalize text-[#078b8d]">
+                                {document.document_type.replace("_", " ")}
+                              </span>
+                              <span className="block truncate text-[9px] font-semibold text-[#526365]">
+                                {document.original_filename}
+                              </span>
+                              <span className="mt-0.5 block text-[8px] text-[#667779]">
+                                {formatFileSize(document.file_size)}
+                              </span>
+                            </button>
+                            <button
+                              aria-label={`Download ${document.original_filename}`}
+                              className="rounded p-1 text-[10px] font-semibold text-[#078b8d] hover:bg-white"
+                              onClick={() => void downloadApplicantDocument(document)}
+                              type="button"
+                            >
+                              ↓
+                            </button>
+                            <button
+                              aria-label={`Remove ${document.original_filename}`}
+                              className="rounded p-1 text-[10px] font-semibold text-[#a2534c] hover:bg-white"
+                              onClick={() => void removeApplicantDocument(document)}
+                              type="button"
+                            >
+                              ×
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p className="rounded-lg bg-[#f8fbfb] p-2 text-[8px] leading-4 text-[#849394]">
+                        Add certificates, education records, or other supporting documents if relevant.
+                      </p>
+                    )}
+                  </section>
+                  {documentsError && (
+                    <p className="text-[9px] text-[#b34b4b]" role="alert">
+                      {documentsError}
+                    </p>
+                  )}
+                </div>
               ) : (
                 <div className="mt-4 border-t border-[#edf1f1] pt-3">
-                {coverLetter || showSampleCoverLetter ? (
+                {coverLetter ? (
                   <>
                     <ProfileDocumentCard
-                      details={
-                        coverLetter
-                          ? formatFileSize(coverLetter.size)
-                          : jobSeekerExample.coverLetterDetails
-                      }
+                      details={formatFileSize(coverLetter.size)}
                       file={coverLetter}
-                      fileName={
-                        coverLetter?.name || jobSeekerExample.coverLetterName
-                      }
+                      fileName={coverLetter.name}
                       onDownload={downloadDocument}
                       onPreview={previewDocument}
-                      onDownloadSample={downloadSampleDocument}
-                      onPreviewSample={previewSampleDocument}
-                      sampleContent={
-                        coverLetter ? undefined : sampleCoverLetterContent
-                      }
                       title="Cover letter"
                     />
                     <div className="mt-2 flex items-center gap-3">
@@ -1687,7 +2347,6 @@ export default function ProfilePage() {
                         onClick={() => {
                           onboardingStore.setAnswer("coverLetterFile", null);
                           setCoverLetterError(null);
-                          setSampleCoverLetterRemoved(true);
                         }}
                         type="button"
                       >
@@ -1722,7 +2381,7 @@ export default function ProfilePage() {
               )}
 
               {location !== "Not provided" && (
-                <p className="mt-2 flex items-center gap-1 text-[8px] text-[#9aa6a7]">
+                <p className="mt-2 flex items-center gap-1 text-[8px] text-[#667779]">
                   <ProfileLocationIcon />
                   Profile location: {location}
                 </p>
@@ -1730,7 +2389,7 @@ export default function ProfilePage() {
             </ProfilePanel>
             {isOjtSeeker && (
               <ProfilePanel icon="skills" title="OJT readiness">
-                <ul className="space-y-2.5 text-[9px] text-[#829092]">
+                <ul className="space-y-2.5 text-[9px] text-[#627273]">
                   <li className="flex items-center gap-2">
                     <span className={`font-bold ${applicantProfile?.ojt_details?.school ? "text-[#46b99e]" : "text-[#9aa6a7]"}`}>
                       {applicantProfile?.ojt_details?.school ? "✓" : "—"}
@@ -1760,149 +2419,16 @@ export default function ProfilePage() {
       {isPreferencesEditorOpen && (
         <ProfilePreferencesEditor
           initialPreferences={preferencesForEditor}
+          isSaving={isSavingPreferences}
           isOjtSeeker={isOjtSeeker}
-          onClose={() => setIsPreferencesEditorOpen(false)}
-          onSave={async (preferences) => {
-            onboardingStore.setAnswer("skills", preferences.skills);
-            onboardingStore.setAnswer(
-              "workSetup",
-              preferences.workSetup,
-            );
-            onboardingStore.setAnswer(
-              "preferredLocations",
-              preferences.preferredLocations,
-            );
-
-            if (isOjtSeeker) {
-              onboardingStore.setAnswer("school", preferences.school);
-              onboardingStore.setAnswer("course", preferences.course);
-              onboardingStore.setAnswer("yearLevel", preferences.yearLevel);
-              onboardingStore.setAnswer(
-                "requiredOjtHours",
-                preferences.requiredOjtHours,
-              );
-              onboardingStore.setAnswer("requiresMoa", preferences.requiresMoa);
-              onboardingStore.setAnswer(
-                "trainingFields",
-                preferences.trainingFields,
-              );
-              onboardingStore.setAnswer(
-                "preferredStartDate",
-                preferences.preferredStartDate,
-              );
-              onboardingStore.setAnswer(
-                "allowancePreference",
-                preferences.allowancePreference,
-              );
-            } else {
-              onboardingStore.setAnswer(
-                "jobCategories",
-                preferences.jobCategories,
-              );
-              onboardingStore.setAnswer(
-                "desiredJobTitles",
-                preferences.desiredJobTitles,
-              );
-              onboardingStore.setAnswer(
-                "employmentTypes",
-                preferences.employmentTypes,
-              );
-              onboardingStore.setAnswer(
-                "minimumSalary",
-                preferences.minimumSalary,
-              );
-              onboardingStore.setAnswer(
-                "maximumSalary",
-                preferences.maximumSalary,
-              );
-              onboardingStore.setAnswer(
-                "experienceLevel",
-                preferences.experienceLevel,
-              );
-            }
-
-            if (isBackendApplicant && token) {
-              await applicantFilesApi.updateProfile(token, {
-                name: preferences.name,
-                phone: preferences.phone || null,
-                city: preferences.city || null,
-              });
-
-              const workSetupMap: Record<string, string> = {
-                Onsite: "onsite",
-                "On-site": "onsite",
-                Hybrid: "hybrid",
-                Remote: "remote",
-              };
-              const employmentTypeMap: Record<string, string> = {
-                "Full-time": "full_time",
-                "Part-time": "part_time",
-                Contract: "contract",
-              };
-              const experienceLevelMap: Record<string, string> = {
-                "Fresh graduate": "fresh_graduate",
-                "1–3 years": "1_3_years",
-                "1-3 years": "1_3_years",
-                "3–5 years": "3_5_years",
-                "3-5 years": "3_5_years",
-                "5+ years": "5_plus_years",
-              };
-
-              const ojtDetails = isOjtSeeker
-                ? {
-                    school: preferences.school || null,
-                    course: preferences.course || null,
-                    year_level: preferences.yearLevel ? Number(preferences.yearLevel.replace(/\D/g, "")) || null : null,
-                    required_hours: preferences.requiredOjtHours ? Number(preferences.requiredOjtHours) : null,
-                    preferred_start_date: preferences.preferredStartDate || null,
-                    allowance_preference: preferences.allowancePreference === "Paid only"
-                      ? "paid_only"
-                      : preferences.allowancePreference === "Unpaid OK"
-                        ? "unpaid_ok"
-                        : "no_preference",
-                    requires_moa: preferences.requiresMoa,
-                  }
-                : preferences.school || preferences.course || preferences.yearLevel
-                  ? {
-                      school: preferences.school || null,
-                      course: preferences.course || null,
-                      year_level: preferences.yearLevel ? Number(preferences.yearLevel.replace(/\D/g, "")) || null : null,
-                    }
-                  : undefined;
-
-              const updated = await applicantFilesApi.updatePreferences(token, {
-                skills: preferences.skills,
-                work_setups: preferences.workSetup
-                  ? [workSetupMap[preferences.workSetup] || preferences.workSetup.toLowerCase()]
-                  : [],
-                preferred_locations: preferences.preferredLocations,
-                desired_titles: preferences.desiredJobTitles,
-                employment_types: preferences.employmentTypes
-                  .map((type) => employmentTypeMap[type] || type.toLowerCase())
-                  .filter(Boolean),
-                salary_min: preferences.minimumSalary ? Number(preferences.minimumSalary) : null,
-                salary_max: preferences.maximumSalary ? Number(preferences.maximumSalary) : null,
-                experience_level: preferences.experienceLevel
-                  ? experienceLevelMap[preferences.experienceLevel] || null
-                  : null,
-                profile_links: {
-                  portfolio: preferences.portfolioLink.trim() || null,
-                  github: preferences.githubLink.trim() || null,
-                  linkedin: preferences.linkedinLink.trim() || null,
-                  other: preferences.otherLink.trim()
-                    ? {
-                        label: preferences.otherLinkLabel.trim() || "Other",
-                        url: preferences.otherLink.trim(),
-                      }
-                    : null,
-                },
-                ...(ojtDetails ? { ojt_details: ojtDetails } : {}),
-              });
-              setApplicantProfile(updated.data);
-            }
-
-            setIsPreferencesEditorOpen(false);
+          categories={availableCategories}
+          categoriesLoading={categoriesLoading}
+          categoriesError={categoriesError}
+          onClose={() => {
+            if (!isSavingPreferences) setIsPreferencesEditorOpen(false);
           }}
+          onSave={savePreferences}
+          saveError={preferencesSaveError}
         />
       )}
       {isBookmarksModalOpen && (
@@ -1911,7 +2437,7 @@ export default function ProfilePage() {
         />
       )}
       {isProfilePicturePreviewOpen && profilePicture && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-[60] flex items-center justify-center overflow-y-auto overscroll-contain p-4 max-[600px]:p-3">
           <button
             aria-label="Close profile picture preview"
             className="absolute inset-0 size-full cursor-default bg-[#1f3333]/70"
@@ -1921,16 +2447,19 @@ export default function ProfilePage() {
           <section
             aria-label={`${name} profile picture`}
             aria-modal="true"
-            className="relative z-10 flex max-h-[calc(100dvh-2rem)] max-w-[min(90vw,720px)] items-center justify-center rounded-[16px] bg-white p-2 shadow-[0_16px_48px_rgba(0,0,0,0.3)]"
+            className="relative z-10 flex max-h-[calc(100dvh-3rem)] max-w-[min(90vw,720px)] items-center justify-center rounded-[16px] bg-white p-2 shadow-[0_16px_48px_rgba(0,0,0,0.3)]"
+            ref={profilePictureDialogRef}
             role="dialog"
+            tabIndex={-1}
           >
             <img
               alt={`${name} profile`}
-              className="max-h-[calc(100dvh-3rem)] max-w-full rounded-xl object-contain"
+              className="max-h-[calc(100dvh-5rem)] max-w-full rounded-xl object-contain"
               src={profilePicture}
             />
             <button
               aria-label="Close profile picture preview"
+              data-dialog-initial
               className="absolute -top-3 -right-3 grid size-8 place-items-center rounded-full border border-[#e5eeec] bg-white text-[18px] text-[#526365] shadow-md hover:bg-[#f1f6f5] focus-visible:outline-[3px] focus-visible:outline-[#67c9c1]"
               onClick={() => setIsProfilePicturePreviewOpen(false)}
               type="button"
@@ -1941,7 +2470,7 @@ export default function ProfilePage() {
         </div>
       )}
       {documentPreview && (
-        <div className="fixed inset-0 z-[70] flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-[70] flex items-center justify-center overflow-y-auto overscroll-contain p-4 max-[600px]:p-3">
           <button
             aria-label="Close document preview"
             className="absolute inset-0 size-full cursor-default bg-[#1f3333]/70"
@@ -1951,8 +2480,10 @@ export default function ProfilePage() {
           <section
             aria-labelledby="document-preview-title"
             aria-modal="true"
-            className="relative z-10 flex max-h-[calc(100dvh-2rem)] w-full max-w-[900px] flex-col overflow-hidden rounded-[16px] bg-white shadow-[0_16px_48px_rgba(0,0,0,0.3)]"
+            className="relative z-10 flex h-[min(82dvh,760px)] max-h-[calc(100dvh-2rem)] w-full max-w-[900px] flex-col overflow-hidden rounded-[16px] bg-white shadow-[0_16px_48px_rgba(0,0,0,0.3)]"
+            ref={documentPreviewDialogRef}
             role="dialog"
+            tabIndex={-1}
           >
             <header className="flex items-center justify-between gap-3 border-b border-[#edf1f1] px-4 py-3">
               <div className="min-w-0">
@@ -1968,16 +2499,10 @@ export default function ProfilePage() {
               </div>
               <div className="flex shrink-0 items-center gap-2">
                 <button
+                  data-dialog-initial
                   className="rounded-lg bg-[#078b98] px-3 py-2 text-[10px] font-semibold text-white hover:bg-[#06767f] focus-visible:outline-[3px] focus-visible:outline-[#67c9c1]"
                   onClick={() => {
-                    if (documentPreview.file) {
-                      downloadDocument(documentPreview.file);
-                    } else if (documentPreview.content) {
-                      downloadSampleDocument(
-                        documentPreview.fileName,
-                        documentPreview.content,
-                      );
-                    }
+                    downloadPreviewDocument();
                   }}
                   type="button"
                 >
@@ -1993,18 +2518,7 @@ export default function ProfilePage() {
                 </button>
               </div>
             </header>
-            {documentPreview.content ? (
-              <div className="min-h-0 flex-1 overflow-y-auto bg-[#f3f6f6] p-5 max-[600px]:p-3">
-                <article className="mx-auto min-h-full max-w-[700px] bg-white px-10 py-12 shadow-sm max-[600px]:px-5 max-[600px]:py-7">
-                  <p className="mb-6 text-center text-[9px] font-semibold uppercase tracking-[0.16em] text-[#8b999a]">
-                    Sample profile document
-                  </p>
-                  <pre className="whitespace-pre-wrap break-words font-sans text-[12px] leading-7 text-[#344648] max-[600px]:text-[11px] max-[600px]:leading-6">
-                    {documentPreview.content}
-                  </pre>
-                </article>
-              </div>
-            ) : documentPreviewIsPdf && documentPreview.url ? (
+            {documentPreviewIsPdf && documentPreview.url ? (
               <iframe
                 className="min-h-0 flex-1 bg-[#f3f6f6]"
                 src={documentPreview.url}
@@ -2024,11 +2538,7 @@ export default function ProfilePage() {
                 </p>
                 <button
                   className="mt-4 rounded-lg bg-[#078b98] px-4 py-2.5 text-[10px] font-semibold text-white hover:bg-[#06767f] focus-visible:outline-[3px] focus-visible:outline-[#67c9c1]"
-                  onClick={() => {
-                    if (documentPreview.file) {
-                      downloadDocument(documentPreview.file);
-                    }
-                  }}
+                  onClick={downloadPreviewDocument}
                   type="button"
                 >
                   Download document

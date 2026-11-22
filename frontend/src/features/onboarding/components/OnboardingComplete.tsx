@@ -35,16 +35,12 @@ export default function OnboardingComplete({
         You’re all set!
       </h1>
       <p className="mt-2 text-sm leading-6 text-[#718082]">
-        Your account is created. Verify your email to activate it and sign in.
+        Your account and applicant profile are saved. Verify your email to activate your account and sign in.
       </p>
       <p className="mt-3 rounded-xl bg-[#f2f9f7] px-4 py-3 text-left text-xs leading-5 text-[#587675]">
         You verify it yourself: check {answers.email} for the six-digit code,
         then enter it on the next screen. Check your spam folder if it is not in
         your inbox; you can request another code there.
-      </p>
-      <p className="mt-3 rounded-xl bg-[#fff9e9] px-4 py-3 text-left text-xs leading-5 text-[#75633a]">
-        Your profile answers are not yet saved to your account. Drafts saved
-        with “Save &amp; finish later” remain in this browser.
       </p>
       <div className="mt-6 flex flex-wrap justify-center gap-2">
         {[

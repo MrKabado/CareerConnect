@@ -9,6 +9,7 @@ use App\Services\OtpCodeService;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\Rules\Password;
@@ -35,7 +36,7 @@ class AuthController extends Controller
 
     private function registerForRole(Request $request, ?string $forcedRole): JsonResponse
     {
-        $validated = $request->validate([
+        $rules = [
             'name' => ['required', 'string', 'max:255'],
             'email' => ['required', 'string', 'email', 'max:255'],
             'password' => ['required', 'string', 'confirmed', Password::min(12)->letters()->mixedCase()->numbers()->symbols()],
@@ -43,10 +44,44 @@ class AuthController extends Controller
                 'sometimes',
                 Rule::in($forcedRole === null ? ['applicant', 'employer'] : [$forcedRole]),
             ],
-        ]);
+        ];
+        if ($forcedRole === 'employer') {
+            $rules += [
+                'company_name' => ['required', 'string', 'max:255'],
+                'company_size' => ['required', Rule::in([
+                    '1-10',
+                    '11-50',
+                    '51-200',
+                    '201-500',
+                    '501-1000',
+                    '1000+',
+                ])],
+                'industry' => ['required', 'string', 'max:100'],
+                'website' => ['nullable', 'url', 'max:255'],
+            ];
+        }
+
+        $validated = $request->validate($rules);
 
         $validated['role'] = $forcedRole ?? ($validated['role'] ?? 'applicant');
         $validated['name'] = mb_convert_case(trim($validated['name']), MB_CASE_TITLE, 'UTF-8');
+        $companyData = null;
+        if ($forcedRole === 'employer') {
+            $companyData = [
+                'name' => trim($validated['company_name']),
+                'company_size' => $validated['company_size'],
+                'industry' => trim($validated['industry']),
+                'website' => $validated['website'] ?? null,
+                'contact_name' => $validated['name'],
+                'contact_email' => $validated['email'],
+            ];
+            unset(
+                $validated['company_name'],
+                $validated['company_size'],
+                $validated['industry'],
+                $validated['website'],
+            );
+        }
         $existingUser = User::where('email', $validated['email'])->first();
 
         if ($existingUser !== null) {
@@ -62,7 +97,14 @@ class AuthController extends Controller
         }
 
         try {
-            $user = User::create($validated);
+            $user = DB::transaction(function () use ($validated, $companyData): User {
+                $user = User::create($validated);
+                if ($companyData !== null) {
+                    $user->company()->create($companyData);
+                }
+
+                return $user;
+            });
         } catch (QueryException $exception) {
             $existingUser = User::where('email', $validated['email'])->first();
 
@@ -97,7 +139,7 @@ class AuthController extends Controller
         $onboardingToken = $user->role === 'applicant'
             ? $user->createToken(
                 'careerconnect-onboarding-resume',
-                ['onboarding:resume'],
+                ['onboarding:resume', 'onboarding:profile'],
                 now()->addDays(7),
             )->plainTextToken
             : null;

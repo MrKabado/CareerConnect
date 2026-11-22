@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from "react";
+import { useRef, useState, type FormEvent } from "react";
 import { Link } from "react-router";
 import EmployerWorkspaceLayout from "@/components/common/employer/EmployerWorkspaceLayout";
 import { useEmployerStatus } from "@/features/employer-registration/useEmployerStatus";
@@ -16,6 +16,7 @@ import EmployerVerificationDocuments from "@/features/employer-verification/comp
 import { CompanyHiringSetupDetails } from "@/components/common/user/companyProfileComponents";
 import CompanyMediaManager from "@/features/company-verification/components/CompanyMediaManager";
 import { useCompanyVerification } from "@/features/company-verification/useCompanyVerification";
+import { useDialogBehavior } from "@/hooks/useDialogBehavior";
 
 const inputClassName = "w-full rounded-xl border border-[#dfe8e7] bg-white px-3 py-2.5 text-sm text-[#344749] outline-none focus:border-[#078b8d] focus:ring-2 focus:ring-[#078b8d]/15";
 const cardEditButtonClass = "text-[10px] font-semibold text-[#087879] underline underline-offset-2";
@@ -99,12 +100,14 @@ function StringListEditor({
 
 export default function EmployerCompanyProfilePage() {
   const { employer } = useEmployerStatus();
-  const companyName = employer?.companyName ?? "Maya Philippines";
+  const companyName = employer?.companyName ?? "";
   const profileSlug = getCompanyProfileSlug(companyName);
   const profile = useCompanyProfile(companyName);
   const verification = useCompanyVerification();
   const employerLogoUrl = verification.record.media?.logo?.url || profile.logoUrl;
   const [editing, setEditing] = useState(false);
+  const editDialogRef = useRef<HTMLElement>(null);
+  useDialogBehavior(editDialogRef, editing, () => setEditing(false));
   const [editingHiringSetup, setEditingHiringSetup] = useState(false);
   const [editingContact, setEditingContact] = useState(false);
   const [draft, setDraft] = useState<EditableCompanyProfile>(() => toEditableCompanyProfile(profile));
@@ -881,7 +884,7 @@ export default function EmployerCompanyProfilePage() {
       </main>
       {editing && (
         <div
-          className="fixed inset-0 z-[80] flex items-center justify-center bg-[#162b2b]/55 p-4"
+          className="fixed inset-0 z-[80] flex items-center justify-center overflow-y-auto overscroll-contain bg-[#162b2b]/55 p-4 max-[600px]:p-3"
           onMouseDown={(event) => {
             if (event.target === event.currentTarget) setEditing(false);
           }}
@@ -889,8 +892,10 @@ export default function EmployerCompanyProfilePage() {
           <section
             aria-labelledby="edit-company-profile-title"
             aria-modal="true"
-            className="flex max-h-[92dvh] w-full max-w-4xl flex-col overflow-hidden rounded-2xl border border-[#e5eeec] bg-white shadow-[0_24px_70px_rgba(0,0,0,0.28)]"
+            className="flex max-h-[calc(100dvh-2rem)] w-full max-w-4xl flex-col overflow-hidden rounded-2xl border border-[#e5eeec] bg-white shadow-[0_24px_70px_rgba(0,0,0,0.28)] max-[600px]:max-h-[calc(100dvh-1.5rem)]"
+            ref={editDialogRef}
             role="dialog"
+            tabIndex={-1}
           >
             <header className="border-b border-[#edf1f1] px-6 py-5">
               <h2 className="text-lg font-bold text-[#263a3c]" id="edit-company-profile-title">
@@ -900,7 +905,7 @@ export default function EmployerCompanyProfilePage() {
                 Update all public company details. Your changes appear on the applicant-facing profile after saving.
               </p>
             </header>
-            <form className="min-h-0 flex-1 overflow-y-auto p-6" onSubmit={handleSave}>
+            <form className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-6 [-webkit-overflow-scrolling:touch]" onSubmit={handleSave}>
               <div className="space-y-7">
                 <section className="space-y-4">
                   <h3 className="text-sm font-bold text-[#263a3c]">Company identity</h3>

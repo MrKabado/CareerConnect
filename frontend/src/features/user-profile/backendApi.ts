@@ -9,8 +9,31 @@ export type ApplicantResumeFile = {
   created_at: string | null;
 };
 
+export type ApplicantDocumentType = "cover_letter" | "certificate" | "education" | "other";
+
+export type ApplicantStoredDocument = {
+  id: number;
+  document_type: ApplicantDocumentType;
+  original_filename: string;
+  mime_type: string;
+  file_size: number;
+  is_current: boolean;
+  created_at: string | null;
+};
+
+export type ApplicantIdentityVerification = {
+  status: "pending" | "verified" | "rejected";
+  rejection_reason: string | null;
+  submitted_at: string | null;
+  reviewed_at: string | null;
+};
+
 type ResumeResponse = {
   data: ApplicantResumeFile | null;
+};
+
+type ApplicantDocumentsResponse = {
+  data: ApplicantStoredDocument[];
 };
 
 export type ApplicantProfileData = {
@@ -24,6 +47,7 @@ export type ApplicantProfileData = {
     linkedin?: string | null;
     other?: { label: string; url: string } | null;
   } | null;
+  other_categories: string[] | null;
   profile_photo_url: string | null;
   looking_for_jobs: boolean;
   looking_for_ojt: boolean;
@@ -40,6 +64,8 @@ export type ApplicantProfileData = {
     school?: string | null;
     course?: string | null;
     year_level?: number | null;
+    education_status?: "undergraduate" | "graduated" | null;
+    graduation_year?: number | null;
     required_hours?: number | null;
     preferred_start_date?: string | null;
     allowance_preference?: string | null;
@@ -47,7 +73,13 @@ export type ApplicantProfileData = {
   } | null;
 };
 
+export type ApplicantCategory = { id: number; name: string };
+
 export const applicantFilesApi = {
+  categories() {
+    return apiRequest<{ data: ApplicantCategory[] }>("/categories");
+  },
+
   async resume(token: string): Promise<ApplicantResumeFile | null> {
     const response = await apiRequest<ResumeResponse>("/applicant/resume", {}, token);
     return response.data;
@@ -105,6 +137,74 @@ export const applicantFilesApi = {
     return apiBlob("/applicant/resume/download", token);
   },
 
+  async documents(token: string): Promise<ApplicantStoredDocument[]> {
+    const response = await apiRequest<ApplicantDocumentsResponse>("/applicant/documents", {}, token);
+    return response.data;
+  },
+
+  async uploadDocument(
+    token: string,
+    documentType: ApplicantDocumentType,
+    file: File,
+    onProgress: (progress: number) => void = () => {},
+  ): Promise<ApplicantStoredDocument> {
+    const formData = new FormData();
+    formData.set("document_type", documentType);
+    formData.set("document", file);
+    const response = await apiRequest<{ data: ApplicantStoredDocument }>(
+      "/applicant/documents",
+      {
+        method: "POST",
+        data: formData,
+        onUploadProgress: (event) => {
+          if (event.total) onProgress(Math.round((event.loaded / event.total) * 100));
+        },
+      },
+      token,
+    );
+    if (!response.data) throw new Error("The server did not return the uploaded document.");
+    return response.data;
+  },
+
+  deleteDocument(token: string, documentId: number) {
+    return apiRequest<{ message: string }>(
+      `/applicant/documents/${documentId}`,
+      { method: "DELETE" },
+      token,
+    );
+  },
+
+  downloadDocument(token: string, documentId: number): Promise<Blob> {
+    return apiBlob(`/applicant/documents/${documentId}/download`, token);
+  },
+
+  async identityVerification(token: string): Promise<ApplicantIdentityVerification | null> {
+    const response = await apiRequest<{
+      verification: ApplicantIdentityVerification | null;
+    }>("/applicant/identity-verification", {}, token);
+    return response.verification;
+  },
+
+  submitIdentityVerification(
+    token: string,
+    file: File,
+    onProgress: (progress: number) => void,
+  ) {
+    const formData = new FormData();
+    formData.set("document", file);
+    return apiRequest<{ message: string; status: "pending" }>(
+      "/applicant/identity-verification",
+      {
+        method: "POST",
+        data: formData,
+        onUploadProgress: (event) => {
+          if (event.total) onProgress(Math.round((event.loaded / event.total) * 100));
+        },
+      },
+      token,
+    );
+  },
+
   async uploadPhoto(
     token: string,
     file: File,
@@ -154,6 +254,11 @@ export const applicantFilesApi = {
   updatePreferences(
     token: string,
     details: {
+      name?: string;
+      phone?: string | null;
+      city?: string | null;
+      category_ids?: number[];
+      other_categories?: string[];
       skills?: string[];
       work_setups?: string[];
       preferred_locations?: string[];
@@ -166,6 +271,8 @@ export const applicantFilesApi = {
         school?: string | null;
         course?: string | null;
         year_level?: number | null;
+        education_status?: "undergraduate" | "graduated" | null;
+        graduation_year?: number | null;
         required_hours?: number | null;
         preferred_start_date?: string | null;
         allowance_preference?: string | null;

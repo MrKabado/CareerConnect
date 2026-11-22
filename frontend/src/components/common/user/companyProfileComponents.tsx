@@ -343,7 +343,17 @@ export function CompanyHiringSetupDetails({
   );
 }
 
-export function CompanyOpenRoles({ profile }: { profile: CompanyProfile }) {
+export function CompanyOpenRoles({
+  profile,
+  isLoading = false,
+  error = null,
+  onRetry,
+}: {
+  profile: CompanyProfile;
+  isLoading?: boolean;
+  error?: string | null;
+  onRetry?: () => void;
+}) {
   return (
     <section aria-labelledby="company-open-roles" className="min-w-0">
       <div className="mb-3">
@@ -358,7 +368,24 @@ export function CompanyOpenRoles({ profile }: { profile: CompanyProfile }) {
         </p>
       </div>
 
-      {profile.openRoles.length ? (
+      {isLoading ? (
+        <p className="rounded-[15px] border border-[#e7eeee] bg-white p-4 text-[10px] text-[#748385]" role="status">
+          Loading active opportunities…
+        </p>
+      ) : error ? (
+        <div className="rounded-[15px] border border-[#f1d3d0] bg-white p-4 text-[10px] leading-5 text-[#8b332c]" role="alert">
+          <p>Active opportunities could not be loaded: {error}</p>
+          {onRetry && (
+            <button
+              className="mt-2 font-semibold underline underline-offset-2"
+              onClick={onRetry}
+              type="button"
+            >
+              Try again
+            </button>
+          )}
+        </div>
+      ) : profile.openRoles.length ? (
       <div className="space-y-3">
         {profile.openRoles.map((role) => (
           <article
@@ -380,11 +407,6 @@ export function CompanyOpenRoles({ profile }: { profile: CompanyProfile }) {
                   >
                     {role.type}
                   </span>
-                  {role.type !== "OJT" && (
-                    <span className="rounded-full bg-[#eff6f5] px-1.5 py-0.5 text-[8px] font-semibold text-[#54797a]">
-                      96% match
-                    </span>
-                  )}
                 </div>
                 <p className="mt-1 text-[9px] font-medium text-[#718184]">
                   {role.category}

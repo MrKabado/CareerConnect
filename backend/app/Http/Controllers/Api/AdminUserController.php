@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\AdminUpdateUserRequest;
 use App\Models\ActivityLog;
+use App\Models\OtpCode;
 use App\Models\User;
 use App\Services\OtpCodeService;
 use Illuminate\Http\JsonResponse;
@@ -26,6 +27,7 @@ class AdminUserController extends Controller
 
         $users = User::query()
             ->select(['id', 'name', 'email', 'role', 'account_status', 'email_verified_at', 'created_at'])
+            ->with('identityVerification:id,user_id,status,rejection_reason,created_at')
             ->when(isset($validated['role']), fn ($query) => $query->where('role', $validated['role']))
             ->when(isset($validated['status']), fn ($query) => $query->where('account_status', $validated['status']))
             ->when(isset($validated['search']), function ($query) use ($validated): void {
@@ -34,10 +36,16 @@ class AdminUserController extends Controller
                         ->orWhere('email', 'like', '%'.$validated['search'].'%');
                 });
             })
-            ->orderBy('id')
+            ->orderByDesc('created_at')
+            ->orderByDesc('id')
             ->paginate(min(max($request->integer('per_page', 15), 1), 50));
 
-        return response()->json($users);
+        $response = $users->toArray();
+        $response['features'] = [
+            'delete_users' => (bool) config('careerconnect.use_delete_users', false),
+        ];
+
+        return response()->json($response);
     }
 
     public function show(User $user): JsonResponse
@@ -139,6 +147,58 @@ class AdminUserController extends Controller
                 'account_status' => $user->account_status,
             ],
         ]);
+    }
+
+    public function destroy(Request $request, User $user): JsonResponse
+    {
+        if (! config('careerconnect.use_delete_users', false)) {
+            return response()->json(['message' => 'User deletion is disabled.'], 404);
+        }
+
+        if ($request->user()->is($user)) {
+            return response()->json([
+                'message' => 'You cannot delete your own administrator account.',
+            ], 422);
+        }
+
+        if ($user->role === 'admin') {
+            return response()->json([
+                'message' => 'Administrator accounts cannot be deleted.',
+            ], 422);
+        }
+
+        $request->validate([
+            'confirmation_email' => ['required', 'string', Rule::in([$user->email])],
+        ]);
+
+        if ($this->hasProtectedData($user)) {
+            return response()->json([
+                'message' => 'This account has documents, company records, or application history and cannot be permanently deleted. Deactivate it instead.',
+            ], 409);
+        }
+
+        DB::transaction(function () use ($user): void {
+            $user->tokens()->delete();
+            $user->notifications()->delete();
+            OtpCode::query()->where('email', $user->email)->delete();
+            DB::table('password_reset_tokens')->where('email', $user->email)->delete();
+            $user->delete();
+        });
+
+        return response()->json(['message' => 'User account deleted.']);
+    }
+
+    private function hasProtectedData(User $user): bool
+    {
+        return $user->applications()->exists()
+            || $user->resumes()->exists()
+            || $user->applicantDocuments()->exists()
+            || $user->identityVerification()->exists()
+            || $user->interviewsAsApplicant()->exists()
+            || $user->interviewsAsEmployer()->exists()
+            || $user->jobListings()->exists()
+            || $user->company()->exists()
+            || $user->applicantProfile()->whereNotNull('profile_photo_path')->exists();
     }
 
     public function sendPasswordReset(User $user): JsonResponse

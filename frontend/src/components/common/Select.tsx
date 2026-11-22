@@ -24,7 +24,7 @@ export default function Select({
         aria-label={ariaLabel}
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="h-full cursor-pointer appearance-none bg-transparent pl-3 pr-9 text-ink outline-none"
+        className="h-full cursor-pointer appearance-none bg-transparent pl-3 pr-9 text-[13px] font-medium leading-5 text-ink outline-none"
       >
         {options.map((o) => (
           <option key={o.value} value={o.value}>

@@ -6,6 +6,7 @@ import {
   validateEmployerRegistration,
 } from "@/features/employer-registration/schemas";
 import type { EmployerRegistrationInput } from "@/features/employer-registration/types";
+import { employerCompanySizes } from "@/features/employer-registration/types";
 import PasswordInput from "@/components/ui/PasswordInput";
 import { toNameCase as formatNameCase } from "@/features/auth/nameFormatting";
 
@@ -19,18 +20,10 @@ const initialForm: EmployerRegistrationInput = {
   website: "",
   companySize: "",
   industry: "",
+  otherIndustry: "",
   companyRole: "",
   termsAccepted: false,
 };
-
-const companySizes = [
-  "1-10 employees",
-  "11-50 employees",
-  "51-200 employees",
-  "201-500 employees",
-  "501-1000 employees",
-  "1000+ employees",
-];
 
 const industries = [
   "Technology",
@@ -240,15 +233,33 @@ export default function EmployerRegistrationForm() {
                 <Field error={errors.companySize} label="Company size *">
                   <select className={inputClassName} onChange={(event) => update("companySize", event.target.value)} value={form.companySize}>
                     <option value="">Select size</option>
-                    {companySizes.map((size) => <option key={size} value={size}>{size}</option>)}
+                    {employerCompanySizes.map((size) => <option key={size.value} value={size.value}>{size.label}</option>)}
                   </select>
                 </Field>
                 <Field error={errors.industry} label="Industry *">
-                  <select className={inputClassName} onChange={(event) => update("industry", event.target.value)} value={form.industry}>
+                  <select
+                    className={inputClassName}
+                    onChange={(event) => {
+                      const value = event.target.value;
+                      update("industry", value);
+                      if (value !== "Other") update("otherIndustry", "");
+                    }}
+                    value={form.industry}
+                  >
                     <option value="">Select industry</option>
                     {industries.map((industry) => <option key={industry} value={industry}>{industry}</option>)}
                   </select>
                 </Field>
+                {form.industry === "Other" && (
+                  <Field error={errors.otherIndustry} label="Other industry (please specify) *">
+                    <input
+                      className={inputClassName}
+                      onChange={(event) => update("otherIndustry", event.target.value)}
+                      placeholder="Enter your industry"
+                      value={form.otherIndustry}
+                    />
+                  </Field>
+                )}
               </div>
               <div className="mt-3">
                 <Field error={errors.companyRole} label="Your role at the company *">

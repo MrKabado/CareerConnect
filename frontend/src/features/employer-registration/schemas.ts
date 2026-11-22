@@ -1,4 +1,7 @@
-import type { EmployerRegistrationInput } from "@/features/employer-registration/types";
+import {
+  employerCompanySizes,
+  type EmployerRegistrationInput,
+} from "@/features/employer-registration/types";
 
 export type EmployerRegistrationErrors = Partial<
   Record<keyof EmployerRegistrationInput, string>
@@ -55,8 +58,13 @@ export function validateEmployerRegistration(
       errors.website = "Enter a valid company website, such as company.com or https://company.vercel.app.";
     }
   }
-  if (!input.companySize) errors.companySize = "Select your company size.";
+  if (!employerCompanySizes.some((size) => size.value === input.companySize)) {
+    errors.companySize = "Select your company size.";
+  }
   if (!input.industry) errors.industry = "Select your industry.";
+  if (input.industry === "Other" && !input.otherIndustry.trim()) {
+    errors.otherIndustry = "Please specify your industry.";
+  }
   if (!input.companyRole.trim()) {
     errors.companyRole = "Enter your role at the company.";
   }

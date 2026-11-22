@@ -13,13 +13,18 @@ function mapStatus(status: string): VerificationStatus {
 export function useVerifications(): AdminOutletContext {
   const { token } = useAuth();
   const [verifications, setVerifications] = useState<EmployerVerification[]>([]);
+  const [pendingApplicantIdentityCount, setPendingApplicantIdentityCount] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     if (!token) return;
+    setError(null);
     try {
-      const response = await adminApi.companyVerifications(token);
+      const [response, applicantResponse] = await Promise.all([
+        adminApi.companyVerifications(token),
+        adminApi.applicantIdentityVerifications(token, "pending"),
+      ]);
       const records = response.data.map((record): EmployerVerification => {
         const owner = record.company.owner.name;
         const company = record.company.name;
@@ -38,6 +43,7 @@ export function useVerifications(): AdminOutletContext {
         };
       });
       setVerifications(records);
+      setPendingApplicantIdentityCount(applicantResponse.meta.total);
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : "Unable to load employer verification requests.");
     } finally {
@@ -79,7 +85,9 @@ export function useVerifications(): AdminOutletContext {
   return {
     verifications,
     pendingCount: verifications.filter((verification) => verification.status === "pending").length,
+    pendingApplicantIdentityCount,
     updateVerification,
+    refresh: load,
     isLoading,
     error,
     retry: () => {

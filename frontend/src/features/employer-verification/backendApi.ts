@@ -43,6 +43,7 @@ export const employerVerificationFilesApi = {
         category_id: number | null;
         company_size: string | null;
         address: string | null;
+        country: string | null;
         city: string | null;
         website: string | null;
         description: string | null;
@@ -81,6 +82,7 @@ export const employerVerificationFilesApi = {
     return apiRequest<{
       status: "incomplete" | "pending" | "verified" | "rejected";
       company_profile_complete: boolean;
+      requires_reauthentication: boolean;
       rejection_reason: string | null;
       rejection_note: string | null;
     }>("/employer/verification", {}, token);

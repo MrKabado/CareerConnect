@@ -11,7 +11,7 @@ import { useUnreadCount } from "@/features/messaging/hooks";
 import { applicantFilesApi } from "@/features/user-profile/backendApi";
 
 const navItems = [
-  { label: "Job Search", to: "/job-search", icon: jobSearchNavIcon },
+  { label: "Search Job", to: "/job-search", icon: jobSearchNavIcon },
   { label: "OJT Search", to: "/ojt-search", icon: jobSearchNavIcon },
   { label: "Recommendations", to: "/recommendations", icon: recommendationsNavIcon },
   { label: "My Applications", to: "/applications", icon: applicationsNavIcon },
@@ -62,7 +62,9 @@ export default function Header() {
   const navigate = useNavigate();
   const { logout, status, token, user } = useAuth();
   const isApplicant = user?.role === "applicant";
-  const visibleNavItems = isApplicant ? navItems : navItems.slice(0, 2);
+  const visibleNavItems = isApplicant
+    ? navItems.filter((item) => item.to !== "/ojt-search")
+    : navItems.slice(0, 2);
   const userInitials = user?.name
     .trim()
     .split(/\s+/)

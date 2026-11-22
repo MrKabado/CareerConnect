@@ -92,7 +92,7 @@ export function ProfilePanel({
 }) {
   return (
     <section
-      className={`rounded-[15px] border border-[#e8eeee] bg-white px-4 py-3.5 shadow-[0_5px_16px_rgba(39,85,82,0.045)] max-[680px]:px-3.5 ${className}`}
+      className={`rounded-[15px] border border-[#d3dedd] bg-white px-4 py-3.5 shadow-[0_5px_16px_rgba(39,85,82,0.045)] max-[680px]:px-3.5 ${className}`}
     >
       <div className="mb-3 flex items-center justify-between gap-3">
         <h2 className="inline-flex items-center gap-1.5 text-[13px] font-bold text-[#344749]">
@@ -116,7 +116,7 @@ export function ProfileField({
 }) {
   return (
     <div className="min-w-0">
-      <dt className="text-[8px] font-semibold uppercase tracking-[0.04em] text-[#98a5a5]">
+      <dt className="text-[8px] font-semibold uppercase tracking-[0.04em] text-[#667779]">
         {label}
       </dt>
       <dd className="mt-1 break-words text-[10px] font-medium text-[#526365]">
@@ -131,7 +131,7 @@ export function ProfileTags({ tags }: { tags: string[] }) {
     <div className="flex flex-wrap gap-1.5">
       {tags.map((tag) => (
         <span
-          className="rounded-full bg-[#e5f4f2] px-2 py-1 text-[9px] font-semibold text-[#417976]"
+          className="rounded-full bg-[#e5f4f2] px-2 py-1 text-[9px] font-semibold text-[#356b68]"
           key={tag}
         >
           {tag}
@@ -139,16 +139,18 @@ export function ProfileTags({ tags }: { tags: string[] }) {
       ))}
     </div>
   ) : (
-    <p className="text-[10px] text-[#8a999a]">No details added yet.</p>
+    <p className="text-[10px] text-[#5e6f70]">No details added yet.</p>
   );
 }
 
 export function ProfileStrengthCard({
   percentage,
   description,
+  missingItems = [],
 }: {
   percentage: number;
   description?: string;
+  missingItems?: string[];
 }) {
   return (
     <ProfilePanel title="Profile strength" icon="skills">
@@ -169,10 +171,26 @@ export function ProfileStrengthCard({
           style={{ width: `${percentage}%` }}
         />
       </div>
-      <p className="mt-2 text-[9px] leading-4 text-[#829092]">
+      <p className="mt-2 text-[9px] leading-4 text-[#627273]">
         {description ??
           "Add a resume and complete your preferences to help employers see more of your skills."}
       </p>
+      {missingItems.length > 0 ? (
+        <div className="mt-2 border-t border-[#edf1f1] pt-2">
+          <p className="text-[9px] font-semibold text-[#526365]">
+            To reach 100%:
+          </p>
+          <ul className="mt-1 list-inside list-disc space-y-0.5 text-[9px] leading-4 text-[#627273]">
+            {missingItems.map((item) => (
+              <li key={item}>{item}</li>
+            ))}
+          </ul>
+        </div>
+      ) : (
+        <p className="mt-2 text-[9px] font-semibold text-[#078b8d]">
+          Your profile is complete.
+        </p>
+      )}
     </ProfilePanel>
   );
 }

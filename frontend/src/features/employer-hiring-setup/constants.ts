@@ -1,10 +1,10 @@
 export const defaultHiringSetup = {
-  title: "Frontend Developer",
-  department: "Product",
-  location: "BGC, Taguig City",
-  workspace: "Hybrid",
-  schoolPartnerships: "Open to software engineering students and graduates.",
-  acceptedCourses: "Computer Science, Information Technology, Software Engineering",
+  title: "",
+  department: "",
+  location: "",
+  workspace: "",
+  schoolPartnerships: "",
+  acceptedCourses: "",
 } as const;
 
 export const workspaceOptions = ["Hybrid", "Remote", "On-site"] as const;

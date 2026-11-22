@@ -17,6 +17,12 @@ function mapUser(record: AdminUserRecord): User {
       ? new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric" }).format(date)
       : "Date unavailable",
     status: record.account_status === "active" ? "Active" : "Inactive",
+    identityVerification: record.identity_verification
+      ? {
+          status: record.identity_verification.status,
+          rejectionReason: record.identity_verification.rejection_reason,
+        }
+      : null,
   };
 }
 
@@ -27,6 +33,8 @@ export function useUsers(filters: UserFilters) {
   const [total, setTotal] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
   const [isSavingId, setIsSavingId] = useState<string | null>(null);
+  const [isDeletingId, setIsDeletingId] = useState<string | null>(null);
+  const [canDeleteUsers, setCanDeleteUsers] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const requestId = useRef(0);
 
@@ -46,6 +54,7 @@ export function useUsers(filters: UserFilters) {
       setUsers(response.data.map(mapUser));
       setPageCount(response.last_page);
       setTotal(response.total);
+      setCanDeleteUsers(response.features.delete_users);
     } catch (requestError) {
       if (currentRequestId === requestId.current) {
         setError(requestError instanceof Error ? requestError.message : "Unable to load users.");
@@ -76,5 +85,29 @@ export function useUsers(filters: UserFilters) {
     }
   }, [isSavingId, load, token, users]);
 
-  return { users, total, pageCount, isLoading, isSavingId, error, toggleAccess, retry: () => void load() };
+  const deleteUser = useCallback(async (id: string, confirmationEmail: string) => {
+    if (!token) throw new Error("Your admin session has expired. Sign in again to delete accounts.");
+    if (isDeletingId) throw new Error("Another account deletion is already in progress.");
+
+    setIsDeletingId(id);
+    try {
+      await adminApi.deleteUser(token, id, confirmationEmail);
+    } finally {
+      setIsDeletingId(null);
+    }
+  }, [isDeletingId, token]);
+
+  return {
+    users,
+    total,
+    pageCount,
+    isLoading,
+    isSavingId,
+    isDeletingId,
+    canDeleteUsers,
+    error,
+    toggleAccess,
+    deleteUser,
+    retry: () => void load(),
+  };
 }

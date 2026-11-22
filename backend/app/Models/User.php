@@ -69,6 +69,11 @@ class User extends Authenticatable
         return $this->hasMany(Resume::class, 'applicant_id');
     }
 
+    public function applicantDocuments(): HasMany
+    {
+        return $this->hasMany(ApplicantDocument::class, 'applicant_id');
+    }
+
     public function applications(): HasMany
     {
         return $this->hasMany(Application::class, 'applicant_id');

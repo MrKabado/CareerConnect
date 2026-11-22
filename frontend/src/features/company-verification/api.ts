@@ -51,37 +51,6 @@ const emptyMedia: CompanyMediaCollection = {
   videoUrl: "",
   coverImageId: null,
 };
-const mayaDemoMedia: CompanyMediaCollection = {
-  logo: {
-    id: "maya-demo-logo",
-    url: "/maya-logo.svg",
-    altText: "Maya logo",
-  },
-  banner: null,
-  gallery: [
-    {
-      id: "maya-demo-office-1",
-      url: "https://images.unsplash.com/photo-1497366754035-f200968a6e72?auto=format&fit=crop&w=960&q=80",
-      altText: "Bright collaborative office workspace",
-    },
-    {
-      id: "maya-demo-office-2",
-      url: "https://images.unsplash.com/photo-1497366216548-37526070297c?auto=format&fit=crop&w=960&q=80",
-      altText: "Modern team meeting space",
-    },
-    {
-      id: "maya-demo-office-3",
-      url: "https://images.unsplash.com/photo-1524758631624-e2822e304c36?auto=format&fit=crop&w=960&q=80",
-      altText: "Open office with shared work tables",
-    },
-  ],
-  videoUrl: "",
-  coverImageId: "maya-demo-office-1",
-};
-const mayaDemoRecord: CompanyVerificationRecord = {
-  hiringDefaultsComplete: true,
-  media: mayaDemoMedia,
-};
 
 type CompanyVerificationStore = Record<string, CompanyVerificationRecord>;
 
@@ -279,12 +248,7 @@ function getReviewStatus(
 
 function getSnapshot(): CompanyVerificationSnapshot {
   const employer = employerRegistrationApi.getSnapshot();
-  const record = employer
-    ? {
-        ...(employer.id === "maya-philippines-demo" ? mayaDemoRecord : {}),
-        ...(store[employer.id] ?? {}),
-      }
-    : {};
+  const record = employer ? store[employer.id] ?? {} : {};
   const reviewStatus = getReviewStatus(record, employer?.status);
   const isLegacyApproved = employer?.status === "approved" &&
     record.reviewStatus !== "needs_changes";

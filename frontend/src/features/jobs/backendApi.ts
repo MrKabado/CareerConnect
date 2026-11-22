@@ -37,6 +37,7 @@ type Paginated<T> = {
 export type PublicJobFilters = {
   keyword?: string;
   location?: string;
+  company_slug?: string;
   listing_type?: "job" | "ojt";
   category_id?: number;
   employment_type?: "full_time" | "part_time" | "contract";

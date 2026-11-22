@@ -2,7 +2,12 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router";
 import type { ApplicationStep } from "@/components/common/user/jobApplicationComponents";
 import { useAuth } from "@/features/auth/useAuth";
-import { applicantFilesApi, type ApplicantResumeFile } from "@/features/user-profile/backendApi";
+import {
+  applicantFilesApi,
+  type ApplicantDocumentType,
+  type ApplicantResumeFile,
+  type ApplicantStoredDocument,
+} from "@/features/user-profile/backendApi";
 import {
   formatListingPay,
   publicJobsApi,
@@ -39,9 +44,14 @@ export function useJobApplication() {
   const [listingLoading, setListingLoading] = useState(true);
   const [listingError, setListingError] = useState<string | null>(null);
   const [savedResume, setSavedResume] = useState<ApplicantResumeFile | null>(null);
+  const [savedCoverLetter, setSavedCoverLetter] = useState<ApplicantStoredDocument | null>(null);
+  const [isCoverLetterIncluded, setIsCoverLetterIncluded] = useState(true);
+  const [coverLetterLoading, setCoverLetterLoading] = useState(false);
+  const [coverLetterUploadProgress, setCoverLetterUploadProgress] = useState<number | null>(null);
+  const [coverLetterError, setCoverLetterError] = useState("");
+  const [coverLetterDocumentsLoading, setCoverLetterDocumentsLoading] = useState(Boolean(token));
   const [resumeLoading, setResumeLoading] = useState(true);
   const [resume, setResume] = useState<File | null>(null);
-  const [coverLetter, setCoverLetter] = useState("");
   const [resumeError, setResumeError] = useState("");
   const [submitError, setSubmitError] = useState("");
   const [step, setStep] = useState<ApplicationStep>(1);
@@ -96,6 +106,34 @@ export function useJobApplication() {
     };
   }, [token]);
 
+  useEffect(() => {
+    let active = true;
+    if (!token) return;
+    applicantFilesApi.documents(token)
+      .then((documents) => {
+        if (!active) return;
+        const coverLetter = documents.find((document) => document.document_type === "cover_letter") ?? null;
+        setSavedCoverLetter(coverLetter);
+        setIsCoverLetterIncluded(Boolean(coverLetter));
+        setCoverLetterError("");
+      })
+      .catch((requestError: unknown) => {
+        if (active) {
+          setCoverLetterError(
+            requestError instanceof Error
+              ? requestError.message
+              : "Unable to load your saved cover letter.",
+          );
+        }
+      })
+      .finally(() => {
+        if (active) setCoverLetterDocumentsLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [token]);
+
   const opportunity = useMemo(
     () => listingId !== null && listing ? toOpportunity(listing) : undefined,
     [listing, listingId],
@@ -109,12 +147,50 @@ export function useJobApplication() {
     setSubmitError("");
   }, []);
 
+  const handleCoverLetterSelect = useCallback(async (file: File) => {
+    setCoverLetterError("");
+    if (!/\.pdf$|\.docx$/i.test(file.name)) {
+      setCoverLetterError("Choose a PDF or DOCX cover letter.");
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      setCoverLetterError("Your cover letter must be 5 MB or smaller.");
+      return;
+    }
+    if (!token) {
+      setCoverLetterError("Sign in again before uploading a cover letter.");
+      return;
+    }
+
+    setCoverLetterLoading(true);
+    setCoverLetterUploadProgress(0);
+    try {
+      const document = await applicantFilesApi.uploadDocument(
+        token,
+        "cover_letter" satisfies ApplicantDocumentType,
+        file,
+        setCoverLetterUploadProgress,
+      );
+      setSavedCoverLetter(document);
+      setIsCoverLetterIncluded(true);
+    } catch (requestError) {
+      setCoverLetterError(
+        requestError instanceof Error
+          ? requestError.message
+          : "The cover letter could not be uploaded.",
+      );
+    } finally {
+      setCoverLetterLoading(false);
+      setCoverLetterUploadProgress(null);
+    }
+  }, [token]);
+
   function reviewApplication() {
     if (!resume && !savedResume) {
       setResumeError("Upload a resume before continuing.");
       return;
     }
-    if (resumeLoading) return;
+    if (resumeLoading || coverLetterDocumentsLoading) return;
     setResumeError("");
     setSubmitError("");
     setStep(2);
@@ -133,7 +209,11 @@ export function useJobApplication() {
         const uploaded = await applicantFilesApi.uploadResume(token, resume, setUploadProgress);
         setSavedResume(uploaded);
       }
-      await applicantApplicationsApi.submit(token, listingId, coverLetter);
+      await applicantApplicationsApi.submit(
+        token,
+        listingId,
+        isCoverLetterIncluded ? savedCoverLetter?.id : undefined,
+      );
       setIsAlreadySubmitted(false);
       setStep(3);
     } catch (requestError) {
@@ -159,21 +239,27 @@ export function useJobApplication() {
     returnPath,
     listingLoading: listingId !== null && listingLoading,
     listingError: listingId === null
-      ? "This sample opportunity is not connected to a live listing."
+      ? "This opportunity is not connected to a live listing."
       : listingError,
     step,
     setStep,
     resume,
     savedResumeName: savedResume?.original_filename,
+    savedCoverLetterName: savedCoverLetter?.original_filename,
+    coverLetterLoading,
+    coverLetterUploadProgress,
+    coverLetterError,
+    coverLetterDocumentsLoading,
+    isCoverLetterIncluded,
+    setIsCoverLetterIncluded,
     resumeLoading: Boolean(token) && resumeLoading,
-    coverLetter,
-    setCoverLetter,
     resumeError,
     submitError,
     isSubmitting,
     uploadProgress,
     isAlreadySubmitted,
     handleFileSelect,
+    handleCoverLetterSelect,
     reviewApplication,
     submitApplication,
   };

@@ -20,6 +20,11 @@ use Throwable;
 
 class EmployerVerificationController extends Controller
 {
+    private const REAUTHENTICATION_ABILITY = 'company-verification:reauthenticate';
+    private const ADDITIONAL_ISO_COUNTRY_CODES = 'BG BH EG GB GD GE';
+
+    private const ISO_COUNTRY_CODES = 'AD AE AF AG AI AL AM AO AQ AR AS AT AU AW AX AZ BA BB BD BE BF BI BJ BL BM BN BO BQ BR BS BT BV BW BY BZ CA CC CD CF CG CH CI CK CL CM CN CO CR CU CV CW CX CY CZ DE DJ DK DM DO DZ EC EE EH ER ES ET FI FJ FK FM FO FR GA GF GG GH GI GL GM GN GP GQ GR GS GT GU GW GY HK HM HN HR HT HU ID IE IL IM IN IO IQ IR IS IT JE JM JO JP KE KG KH KI KM KN KP KR KW KY KZ LA LB LC LI LK LR LS LT LU LV LY MA MC MD ME MF MG MH MK ML MM MN MO MP MQ MR MS MT MU MV MW MX MY MZ NA NC NE NF NG NI NL NO NP NR NU NZ OM PA PE PF PG PH PK PL PM PN PR PS PT PW PY QA RE RO RS RU RW SA SB SC SD SE SG SH SI SJ SK SL SM SN SO SR SS ST SV SX SY SZ TC TD TF TG TH TJ TK TL TM TN TO TR TT TV TW TZ UA UG UM US UY UZ VA VC VE VG VI VN VU WF WS XK YE YT ZA ZM ZW';
+
     public function __construct(private readonly MediaStorage $mediaStorage) {}
 
     public function index(Request $request): JsonResponse
@@ -67,10 +72,21 @@ class EmployerVerificationController extends Controller
         $company = $request->user()->company()->with('verification')->first();
 
         $verification = $company?->verification;
+        $accessToken = $request->user()->currentAccessToken();
+        $tokenAbilities = $accessToken?->abilities ?? [];
 
         return response()->json([
             'status' => $verification?->status ?? 'incomplete',
             'company_profile_complete' => $company !== null && $this->isProfileComplete($company),
+            'requires_reauthentication' => $verification?->status === 'verified'
+                && (
+                    in_array(self::REAUTHENTICATION_ABILITY, $tokenAbilities, true)
+                    || (
+                        $verification->reviewed_at !== null
+                        && $accessToken?->created_at !== null
+                        && $accessToken->created_at->lt($verification->reviewed_at)
+                    )
+                ),
             'company' => $company ? [
                 'id' => $company->id,
                 'name' => $company->name,
@@ -105,6 +121,7 @@ class EmployerVerificationController extends Controller
                     'category' => $company->category?->name,
                     'company_size' => $company->company_size,
                     'address' => $company->address,
+                    'country' => $company->country,
                     'city' => $company->city,
                     'industry' => $company->industry,
                     'website' => $company->website,
@@ -169,14 +186,29 @@ class EmployerVerificationController extends Controller
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:255'],
             'category_id' => ['nullable', 'exists:categories,id'],
-            'company_size' => ['nullable', Rule::in(['1-10', '11-50', '51-200', '201-500', '500+'])],
+            'company_size' => ['nullable', Rule::in(['1-10', '11-50', '51-200', '201-500', '500+', '501-1000', '1000+'])],
             'address' => ['nullable', 'string', 'max:255'],
+            'country' => [
+                'nullable',
+                'string',
+                'size:2',
+                Rule::in(self::isoCountryCodes()),
+            ],
             'city' => ['nullable', 'string', 'max:100'],
             'industry' => ['nullable', 'string', 'max:100'],
             'website' => ['nullable', 'url'],
             'description' => ['nullable', 'string', 'max:1000'],
             'contact_name' => ['nullable', 'string', 'max:255'],
-            'contact_phone' => ['nullable', 'string', 'max:30'],
+            'contact_phone' => [
+                'nullable',
+                'string',
+                'max:30',
+                function (string $attribute, mixed $value, \Closure $fail): void {
+                    if (! $this->isValidPhoneNumber((string) $value)) {
+                        $fail('Enter a valid phone number with 7 to 15 digits.');
+                    }
+                },
+            ],
             'contact_email' => ['nullable', 'email', 'max:255'],
             'hires_jobs' => ['nullable', 'boolean'],
             'hires_ojt' => ['nullable', 'boolean'],
@@ -474,38 +506,63 @@ class EmployerVerificationController extends Controller
         $company = $request->user()->company()->firstOrFail();
         $verification = $this->getOrCreateVerification($company);
 
-        if (! $this->isProfileComplete($company)) {
+        $result = DB::transaction(function () use ($request, $company, $verification): string {
+            $lockedCompany = Company::query()->lockForUpdate()->findOrFail($company->id);
+            $lockedVerification = CompanyVerification::query()
+                ->lockForUpdate()
+                ->findOrFail($verification->id);
+
+            if (in_array($lockedVerification->status, ['pending', 'verified'], true)) {
+                throw new ConflictHttpException(
+                    $lockedVerification->status === 'pending'
+                        ? 'Company verification is already pending approval.'
+                        : 'This company has already been verified.',
+                );
+            }
+
+            if (! $this->isProfileComplete($lockedCompany)) {
+                return 'incomplete_profile';
+            }
+
+            if (! $this->hasRequiredDocuments($lockedVerification)) {
+                return 'verification_incomplete';
+            }
+
+            $lockedVerification->status = 'pending';
+            $lockedVerification->submitted_at = now();
+            $lockedVerification->authorization_confirmed_at = now();
+            $lockedVerification->rejection_reason = null;
+            $lockedVerification->rejection_note = null;
+            $lockedVerification->save();
+
+            ActivityLog::create([
+                'user_id' => $lockedCompany->user_id,
+                'actor_id' => $request->user()->id,
+                'action' => 'employer.verification_submitted',
+                'subject_type' => CompanyVerification::class,
+                'subject_id' => $lockedVerification->id,
+                'payload' => [
+                    'description' => sprintf('%s submitted company verification documents', $lockedCompany->name),
+                    'company_name' => $lockedCompany->name,
+                ],
+            ]);
+
+            return 'pending';
+        });
+
+        if ($result === 'incomplete_profile') {
             return response()->json([
                 'message' => 'Complete the company profile before submitting for verification.',
                 'code' => 'incomplete_profile',
             ], 422);
         }
 
-        if (! $this->hasRequiredDocuments($verification)) {
+        if ($result === 'verification_incomplete') {
             return response()->json([
                 'message' => 'Business registration and permit documents are required before submitting.',
                 'code' => 'verification_incomplete',
             ], 422);
         }
-
-        $verification->status = 'pending';
-        $verification->submitted_at = now();
-        $verification->authorization_confirmed_at = now();
-        $verification->rejection_reason = null;
-        $verification->rejection_note = null;
-        $verification->save();
-
-        ActivityLog::create([
-            'user_id' => $company->user_id,
-            'actor_id' => $request->user()->id,
-            'action' => 'employer.verification_submitted',
-            'subject_type' => CompanyVerification::class,
-            'subject_id' => $verification->id,
-            'payload' => [
-                'description' => sprintf('%s submitted company verification documents', $company->name),
-                'company_name' => $company->name,
-            ],
-        ]);
 
         return response()->json([
             'message' => 'Company verification submitted for review.',
@@ -549,6 +606,10 @@ class EmployerVerificationController extends Controller
             $company->is_verified = $validated['status'] === 'verified';
             $company->verified_at = $validated['status'] === 'verified' ? now() : null;
             $company->save();
+
+            if ($validated['status'] === 'verified') {
+                $this->markExistingTokensForReauthentication($company);
+            }
 
             ActivityLog::create([
                 'user_id' => $company->user_id,
@@ -612,10 +673,12 @@ class EmployerVerificationController extends Controller
         return $company->name !== null
             && trim((string) $company->name) !== ''
             && $company->company_size !== null
+            && in_array($company->country, self::isoCountryCodes(), true)
             && $company->address !== null
             && $company->city !== null
             && $company->contact_name !== null
             && $company->contact_phone !== null
+            && $this->isValidPhoneNumber($company->contact_phone)
             && $company->contact_email !== null
             && $company->description !== null;
     }
@@ -673,6 +736,7 @@ class EmployerVerificationController extends Controller
             'category_id' => $company->category_id,
             'company_size' => $company->company_size,
             'address' => $company->address,
+            'country' => $company->country,
             'city' => $company->city,
             'industry' => $company->industry,
             'website' => $company->website,
@@ -697,6 +761,69 @@ class EmployerVerificationController extends Controller
         if (in_array($verification->status, ['pending', 'verified'], true)) {
             throw new ConflictHttpException('Submitted verification documents cannot be changed while under review or after approval.');
         }
+    }
+
+    private static function isoCountryCodes(): array
+    {
+        return array_merge(
+            explode(' ', self::ISO_COUNTRY_CODES),
+            explode(' ', self::ADDITIONAL_ISO_COUNTRY_CODES),
+        );
+    }
+
+    private function markExistingTokensForReauthentication(Company $company): void
+    {
+        $tokens = DB::table('personal_access_tokens')
+            ->where('tokenable_type', $company->user->getMorphClass())
+            ->where('tokenable_id', $company->user_id)
+            ->lockForUpdate()
+            ->get(['id', 'abilities']);
+
+        foreach ($tokens as $token) {
+            $abilities = json_decode((string) $token->abilities, true);
+            if (! is_array($abilities)) {
+                throw new RuntimeException('Unable to mark the employer session for reauthentication.');
+            }
+            if (in_array(self::REAUTHENTICATION_ABILITY, $abilities, true)) {
+                continue;
+            }
+
+            $abilities[] = self::REAUTHENTICATION_ABILITY;
+            DB::table('personal_access_tokens')
+                ->where('id', $token->id)
+                ->update(['abilities' => json_encode($abilities, JSON_THROW_ON_ERROR)]);
+        }
+    }
+
+    private function isValidPhoneNumber(string $phone): bool
+    {
+        $phone = trim($phone);
+        $digits = preg_replace('/\D/', '', $phone) ?? '';
+        if (
+            ! preg_match('/^\+?[0-9][0-9\s().-]*[0-9]$/', $phone)
+            || strlen($digits) < 7
+            || strlen($digits) > 15
+            || preg_match('/\(\s*\)/', $phone)
+        ) {
+            return false;
+        }
+
+        $depth = 0;
+        foreach (str_split($phone) as $character) {
+            if ($character === '(') {
+                if ($depth !== 0) {
+                    return false;
+                }
+                $depth++;
+            } elseif ($character === ')') {
+                $depth--;
+                if ($depth < 0) {
+                    return false;
+                }
+            }
+        }
+
+        return $depth === 0;
     }
 
     private function validDocumentPath(int $companyId, string $path): bool

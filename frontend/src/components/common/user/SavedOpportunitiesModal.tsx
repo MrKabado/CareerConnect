@@ -5,6 +5,7 @@ import {
   useSyncExternalStore,
 } from "react";
 import { Link } from "react-router";
+import { useDialogBehavior } from "@/hooks/useDialogBehavior";
 import { getCompanyProfileUrl } from "@/features/companies/companyProfiles";
 import { formatListingPay, publicJobsApi } from "@/features/jobs/backendApi";
 import {
@@ -90,6 +91,8 @@ export default function SavedOpportunitiesModal({
 }: {
   onClose: () => void;
 }) {
+  const dialogRef = useRef<HTMLElement>(null);
+  useDialogBehavior(dialogRef, true, onClose);
   const savedIds = useSyncExternalStore(
     savedOpportunityStore.subscribe,
     savedOpportunityStore.getSnapshot,
@@ -134,12 +137,7 @@ export default function SavedOpportunitiesModal({
   }, [savedIds]);
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4"
-      onKeyDown={(event) => {
-        if (event.key === "Escape") onClose();
-      }}
-    >
+    <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto overscroll-contain p-4 max-[600px]:p-3">
       <button
         aria-label="Close saved offers"
         className="absolute inset-0 size-full cursor-default bg-[#1f3333]/35"
@@ -149,10 +147,12 @@ export default function SavedOpportunitiesModal({
       <section
         aria-labelledby="saved-offers-title"
         aria-modal="true"
-        className="relative z-10 flex h-[min(82dvh,680px)] max-h-[calc(100dvh-2rem)] w-full max-w-[560px] flex-col overflow-hidden rounded-[16px] border border-[#e5eeec] bg-[#f7faf9] shadow-[0_16px_48px_rgba(27,54,52,0.2)]"
+        className="relative z-10 flex max-h-[min(82dvh,680px)] w-full max-w-[560px] flex-col overflow-hidden rounded-[16px] border border-[#e5eeec] bg-[#f7faf9] shadow-[0_16px_48px_rgba(27,54,52,0.2)]"
+        ref={dialogRef}
         role="dialog"
+        tabIndex={-1}
       >
-        <header className="flex items-start justify-between gap-4 border-b border-[#e4ecea] bg-white px-5 py-4">
+        <header className="flex shrink-0 items-start justify-between gap-4 border-b border-[#e4ecea] bg-white px-5 py-4">
           <div>
             <h2
               className="text-[16px] font-bold text-[#293d3e]"
@@ -175,7 +175,7 @@ export default function SavedOpportunitiesModal({
         </header>
 
         {savedOffers.length > 0 ? (
-          <ul className="flex-1 space-y-2 overflow-y-auto p-4">
+          <ul className="max-h-[min(60dvh,520px)] space-y-2 overflow-y-auto overscroll-contain p-4 [-webkit-overflow-scrolling:touch]">
             {savedOffers.map((offer) => (
               <li
                 className="flex items-center gap-3 rounded-xl border border-[#e5eeec] bg-white p-3"

@@ -135,14 +135,14 @@ class IdentityVerificationController extends Controller
         Gate::authorize('viewAny', IdentityVerification::class);
 
         $validated = $request->validate([
-            'status' => ['sometimes', Rule::in(['pending', 'verified', 'rejected'])],
+            'status' => ['sometimes', Rule::in(['all', 'pending', 'verified', 'rejected'])],
         ]);
 
         $verifications = IdentityVerification::query()
             ->with(['user:id,name,email'])
             ->when(
-                $validated['status'] ?? 'pending',
-                fn ($query, string $status) => $query->where('status', $status),
+                ($validated['status'] ?? 'pending') !== 'all',
+                fn ($query) => $query->where('status', $validated['status'] ?? 'pending'),
             )
             ->latest()
             ->paginate(min(max($request->integer('per_page', 15), 1), 50));

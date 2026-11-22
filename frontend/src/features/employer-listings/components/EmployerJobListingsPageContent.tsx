@@ -5,13 +5,20 @@ import CreateListingModal from "@/features/employer-listings/components/CreateLi
 import JobListingsBoard from "@/features/employer-listings/components/JobListingsTable";
 
 function SummaryCard({ label, value, detail, tone }: { label: string; value: number; detail: string; tone: string }) {
+  const visibilityLabel =
+    label === "Active listings" ? "Public" : label === "Drafts" ? "Private" : null;
+
   return (
     <div className="rounded-[18px] border border-[#e5eeeb] bg-white p-4 shadow-[0_8px_20px_rgba(27,54,52,0.03)]">
       <div className="flex items-center justify-between gap-3">
         <div className={`grid h-10 w-10 place-items-center rounded-xl ${tone}`}>
           <span className="h-2.5 w-2.5 rounded-full bg-current opacity-90" />
         </div>
-        <span className="text-[9px] font-semibold uppercase tracking-[0.12em] text-[#7b8d8d]">Live</span>
+        {visibilityLabel && (
+          <span className="text-[9px] font-semibold uppercase tracking-[0.12em] text-[#7b8d8d]">
+            {visibilityLabel}
+          </span>
+        )}
       </div>
       <p className="mt-4 text-[11px] text-[#758587]">{label}</p>
       <p className="mt-1 text-[26px] font-bold leading-none tracking-[-0.08em] text-[#1d3133]">{value}</p>
@@ -41,6 +48,7 @@ export default function EmployerJobListingsPageContent() {
     newListingForm,
     updateNewListingForm,
     handleSaveDraft,
+    handlePublish,
     modalTitle,
     categories,
     isLoading,
@@ -120,6 +128,7 @@ export default function EmployerJobListingsPageContent() {
         onBack={() => setNewListingStep(1)}
         onFieldChange={(field, value) => updateNewListingForm(field, value)}
         onSaveDraft={handleSaveDraft}
+        onPublish={handlePublish}
       />
     </EmployerWorkspaceLayout>
   );

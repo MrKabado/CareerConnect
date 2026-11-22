@@ -1,6 +1,7 @@
-import { useEffect, useRef } from "react";
+import { useRef } from "react";
 import type { DefaultsSnapshot } from "@/features/employer-listings/types";
 import { cn } from "@/lib/cn";
+import { useDialogBehavior } from "@/hooks/useDialogBehavior";
 
 type ConfirmOnboardingDialogProps = {
   open: boolean;
@@ -21,36 +22,21 @@ export default function ConfirmOnboardingDialog({
 }: ConfirmOnboardingDialogProps) {
   const dialogRef = useRef<HTMLDivElement>(null);
   const initialFocusRef = useRef<HTMLButtonElement>(null);
-  const previouslyFocusedRef = useRef<HTMLElement | null>(null);
-
-  useEffect(() => {
-    if (!open) {
-      return;
-    }
-
-    previouslyFocusedRef.current = document.activeElement as HTMLElement | null;
-    const focusTimer = window.setTimeout(() => {
-      initialFocusRef.current?.focus();
-    }, 0);
-
-    return () => {
-      window.clearTimeout(focusTimer);
-      previouslyFocusedRef.current?.focus();
-    };
-  }, [open]);
+  useDialogBehavior(dialogRef, open, onClose);
 
   if (!open) {
     return null;
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#21363a]/45 px-4 backdrop-blur-[1px]">
+    <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto overscroll-contain bg-[#21363a]/45 p-4 max-[600px]:p-3 backdrop-blur-[1px]">
       <div
         ref={dialogRef}
         role="dialog"
         aria-modal="true"
+        tabIndex={-1}
         aria-labelledby="confirm-onboarding-title"
-        className="w-full max-w-[480px] rounded-[18px] border border-[#dfeae8] bg-[#f4f8f8] p-5 shadow-[0_30px_80px_rgba(24,48,51,0.22)]"
+        className="my-auto max-h-[calc(100dvh-2rem)] w-full max-w-[480px] overflow-y-auto overscroll-contain rounded-[18px] border border-[#dfeae8] bg-[#f4f8f8] p-5 shadow-[0_30px_80px_rgba(24,48,51,0.22)] [-webkit-overflow-scrolling:touch] max-[600px]:max-h-[calc(100dvh-1.5rem)]"
       >
         <div className="flex items-start justify-between gap-3">
           <div>
@@ -63,6 +49,7 @@ export default function ConfirmOnboardingDialog({
           </div>
           <button
             ref={initialFocusRef}
+            data-dialog-initial
             type="button"
             onClick={onClose}
             className="rounded-md px-2 py-1 text-[11px] font-medium text-[#4b6669] transition hover:bg-white"

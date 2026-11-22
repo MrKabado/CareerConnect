@@ -1,4 +1,4 @@
-import { fileInputClassName } from "@/features/employer-verification/constants";
+import { useState } from "react";
 import {
   verificationDocumentRequirements,
   type VerificationDocumentKind,
@@ -11,6 +11,7 @@ type VerificationDocumentItemProps = {
   uploading: VerificationDocumentKind | null;
   uploadProgress: number;
   submitting: boolean;
+  uploadError?: string | null;
   onFileChange: (kind: VerificationDocumentKind, file?: File) => void | Promise<void>;
   onRemove: (kind: VerificationDocumentKind) => void | Promise<void>;
   onDownload: (documentId: string, fileName: string) => void | Promise<void>;
@@ -23,14 +24,18 @@ export default function VerificationDocumentItem({
   uploading,
   uploadProgress,
   submitting,
+  uploadError,
   onFileChange,
   onRemove,
   onDownload,
   removing,
 }: VerificationDocumentItemProps) {
+  const [isDragging, setIsDragging] = useState(false);
+  const inputId = `verification-file-${requirement.kind}`;
+
   return (
     <section className="rounded-xl border border-[#e5eeec] bg-[#fbfdfd] p-4" key={requirement.kind}>
-      <label className="block">
+      <div>
         <span className="block text-sm font-semibold text-[#314547]">
           {requirement.label}
           <span className="ml-1 text-[#ba564d]" aria-hidden="true">*</span>
@@ -38,18 +43,55 @@ export default function VerificationDocumentItem({
         <span className="mt-1 block text-xs text-[#78888a]">
           PDF, JPG, or PNG · up to 5 MB per file. If the file is larger, compress or reduce its size before uploading.
         </span>
-        <input
-          accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png"
-          aria-label={`Upload ${requirement.label}`}
-          className={`${fileInputClassName} mt-3`}
-          disabled={uploading !== null || submitting}
-          onChange={(event) => {
-            void onFileChange(requirement.kind, event.currentTarget.files?.[0]);
-            event.currentTarget.value = "";
+        <div
+          className={`mt-3 rounded-xl border border-dashed px-4 py-5 text-center transition ${
+            isDragging
+              ? "border-[#078b8d] bg-[#edf9f7]"
+              : "border-[#cadbd8] bg-white"
+          } ${submitting || uploading !== null ? "cursor-not-allowed opacity-60" : ""}`}
+          onDragEnter={(event) => {
+            event.preventDefault();
+            if (!submitting && uploading === null) setIsDragging(true);
           }}
-          type="file"
-        />
-      </label>
+          onDragLeave={() => setIsDragging(false)}
+          onDragOver={(event) => {
+            event.preventDefault();
+            if (!submitting && uploading === null) setIsDragging(true);
+          }}
+          onDrop={(event) => {
+            event.preventDefault();
+            setIsDragging(false);
+            if (!submitting && uploading === null) {
+              void onFileChange(requirement.kind, event.dataTransfer.files.item(0) ?? undefined);
+            }
+          }}
+        >
+          <input
+            accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png"
+            aria-label={`Upload ${requirement.label}`}
+            className="sr-only"
+            disabled={uploading !== null || submitting}
+            id={inputId}
+            onChange={(event) => {
+              void onFileChange(requirement.kind, event.currentTarget.files?.[0]);
+              event.currentTarget.value = "";
+            }}
+            type="file"
+          />
+          <p className="text-xs text-[#657779]">Drag and drop your file here</p>
+          <label
+            className="mt-1 inline-block cursor-pointer text-xs font-semibold text-[#087879] underline underline-offset-2"
+            htmlFor={inputId}
+          >
+            Browse files
+          </label>
+        </div>
+        {uploadError && (
+          <p className="mt-2 text-xs text-[#a2534c]" role="alert">
+            {uploadError}
+          </p>
+        )}
+      </div>
       <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-xs">
         {document ? (
           <>

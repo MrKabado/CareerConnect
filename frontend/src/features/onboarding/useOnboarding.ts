@@ -53,12 +53,31 @@ export function useOnboarding(
   const isLastStep = currentIndex + 1 === steps.length;
 
   const finish = useCallback(async () => {
-    onboardingStore.complete(
-      state.answers.goal === "job-seeker"
-        ? "Your job profile setup is complete."
-        : "Your account has been created. Verify your email to activate it. Your OJT profile answers are ready, but profile saving is not available yet.",
-    );
-  }, [state.answers.goal]);
+    const currentState = onboardingStore.getSnapshot();
+    const token = authenticatedApplicantToken ?? currentState.onboardingToken;
+
+    if (!token) {
+      onboardingStore.setSubmitError(
+        "Your profile could not be saved. Sign in again to finish setting it up.",
+      );
+      return;
+    }
+
+    onboardingStore.setSubmitting(true);
+    try {
+      await onboardingApi.saveApplicantProfile(token, currentState.answers);
+      await onboardingApi.completeApplicantProfile(token);
+      onboardingStore.complete(
+        "Your profile information has been saved. Verify your email to activate your account and sign in.",
+      );
+    } catch (requestError) {
+      onboardingStore.setSubmitError(
+        requestError instanceof Error
+          ? requestError.message
+          : "Unable to save your profile information.",
+      );
+    }
+  }, [authenticatedApplicantToken]);
 
   const next = useCallback(async () => {
     const currentState = onboardingStore.getSnapshot();

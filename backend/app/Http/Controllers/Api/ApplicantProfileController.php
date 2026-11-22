@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\ApplicantProfile;
+use App\Models\Category;
 use App\Models\Skill;
 use App\Services\MediaStorage;
 use Illuminate\Http\JsonResponse;
@@ -147,6 +148,140 @@ class ApplicantProfileController extends Controller
         ]);
     }
 
+    public function saveOnboardingProfile(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'goal' => ['required', Rule::in(['job-seeker', 'ojt-seeker'])],
+            'job_categories' => ['required_if:goal,job-seeker', 'array', 'min:1', 'max:5'],
+            'job_categories.*' => ['required', 'string', 'max:100', 'distinct:ignore_case'],
+            'training_fields' => ['required_if:goal,ojt-seeker', 'array', 'min:1', 'max:3'],
+            'training_fields.*' => ['required', 'string', 'max:100', 'distinct:ignore_case'],
+            'desired_titles' => ['required_if:goal,job-seeker', 'array', 'min:1', 'max:3'],
+            'desired_titles.*' => ['required', 'string', 'max:100', 'distinct:ignore_case'],
+            'skills' => ['required', 'array', 'min:1', 'max:30'],
+            'skills.*' => ['required', 'string', 'max:60', 'distinct:ignore_case'],
+            'experience_level' => ['nullable', Rule::in(['Fresh graduate', '1–3 years', '3–5 years', '5+ years'])],
+            'employment_types' => ['required_if:goal,job-seeker', 'array', 'min:1', 'max:3'],
+            'employment_types.*' => ['required', Rule::in(['Full-time', 'Part-time', 'Contract']), 'distinct'],
+            'minimum_salary' => ['nullable', 'integer', 'min:0'],
+            'maximum_salary' => ['nullable', 'integer', 'min:0'],
+            'work_setup' => ['required', Rule::in(['Onsite', 'Hybrid', 'Remote'])],
+            'preferred_locations' => ['required', 'array', 'min:1', 'max:10'],
+            'preferred_locations.*' => ['required', 'string', 'max:100', 'distinct:ignore_case'],
+            'school' => ['required_if:goal,ojt-seeker', 'nullable', 'string', 'max:255'],
+            'course' => ['required_if:goal,ojt-seeker', 'nullable', 'string', 'max:255'],
+            'year_level' => ['required_if:goal,ojt-seeker', 'nullable', Rule::in(['1st year', '2nd year', '3rd year', '4th year', '5th year'])],
+            'required_ojt_hours' => ['required_if:goal,ojt-seeker', 'nullable', 'integer', 'between:1,2000'],
+            'requires_moa' => ['nullable', 'boolean'],
+            'preferred_start_date' => ['required_if:goal,ojt-seeker', 'nullable', 'date', 'after_or_equal:today'],
+            'allowance_preference' => ['required_if:goal,ojt-seeker', 'nullable', Rule::in(['Required', 'Preferred', 'Not required'])],
+        ]);
+
+        $categoryNames = $validated['goal'] === 'job-seeker'
+            ? $validated['job_categories']
+            : $validated['training_fields'];
+        $categoriesByName = Category::query()
+            ->where('is_active', true)
+            ->get(['id', 'name'])
+            ->keyBy(fn (Category $category): string => mb_strtolower(trim($category->name)));
+        $categoryIds = [];
+        $otherCategories = [];
+
+        foreach ($categoryNames as $categoryName) {
+            $category = $categoriesByName->get(mb_strtolower(trim($categoryName)));
+            if ($category === null) {
+                $otherCategories[] = trim($categoryName);
+            } else {
+                $categoryIds[] = $category->id;
+            }
+        }
+
+        if (count($otherCategories) > 5) {
+            throw ValidationException::withMessages([
+                'job_categories' => ['Too many selected categories are not available in the category list.'],
+            ]);
+        }
+
+        $experienceLevels = [
+            'Fresh graduate' => 'fresh_graduate',
+            '1–3 years' => '1_3_years',
+            '3–5 years' => '3_5_years',
+            '5+ years' => '5_plus_years',
+        ];
+        $employmentTypes = [
+            'Full-time' => 'full_time',
+            'Part-time' => 'part_time',
+            'Contract' => 'contract',
+        ];
+        $allowancePreferences = [
+            'Required' => 'paid_only',
+            'Preferred' => 'no_preference',
+            'Not required' => 'unpaid_ok',
+        ];
+
+        if (($validated['minimum_salary'] ?? null) !== null
+            && ($validated['maximum_salary'] ?? null) !== null
+            && (int) $validated['maximum_salary'] < (int) $validated['minimum_salary']) {
+            throw ValidationException::withMessages([
+                'maximum_salary' => ['Maximum salary must be at least the minimum.'],
+            ]);
+        }
+
+        $profile = $this->profileFor($request);
+
+        DB::transaction(function () use (
+            $profile,
+            $validated,
+            $categoryIds,
+            $otherCategories,
+            $experienceLevels,
+            $employmentTypes,
+            $allowancePreferences,
+        ): void {
+            $this->saveInterests($profile, [
+                'category_ids' => $categoryIds,
+                'other_categories' => $otherCategories,
+                'skills' => $validated['skills'],
+            ]);
+
+            $profile->fill([
+                'looking_for_jobs' => $validated['goal'] === 'job-seeker',
+                'looking_for_ojt' => $validated['goal'] === 'ojt-seeker',
+                'desired_titles' => $validated['desired_titles'] ?? [],
+                'experience_level' => isset($validated['experience_level'])
+                    ? $experienceLevels[$validated['experience_level']]
+                    : null,
+                'employment_types' => array_map(
+                    fn (string $type): string => $employmentTypes[$type],
+                    $validated['employment_types'] ?? [],
+                ),
+                'work_setups' => [mb_strtolower($validated['work_setup'])],
+                'preferred_locations' => $validated['preferred_locations'],
+                'salary_min' => $validated['minimum_salary'] ?? null,
+                'salary_max' => $validated['maximum_salary'] ?? null,
+                'other_categories' => $otherCategories,
+                'onboarding_step' => 'review',
+            ]);
+            $profile->save();
+
+            if ($validated['goal'] === 'ojt-seeker') {
+                $profile->ojtDetails()->updateOrCreate([], [
+                    'school' => trim($validated['school']),
+                    'course' => trim($validated['course']),
+                    'year_level' => (int) $validated['year_level'][0],
+                    'required_hours' => $validated['required_ojt_hours'],
+                    'preferred_start_date' => $validated['preferred_start_date'],
+                    'allowance_preference' => $allowancePreferences[$validated['allowance_preference']],
+                    'requires_moa' => $validated['requires_moa'] ?? null,
+                ]);
+            }
+
+            $this->recalculateOnboarding($profile);
+        });
+
+        return $this->updatedResponse($profile);
+    }
+
     public function updateSeekerTypes(Request $request): JsonResponse
     {
         $validated = $request->validate([
@@ -266,16 +401,19 @@ class ApplicantProfileController extends Controller
             $this->jobPreferenceRules(),
             ['ojt_details' => [
                 'sometimes',
-                'array:school,course,year_level,required_hours,preferred_start_date,allowance_preference,requires_moa',
+                'array:school,course,education_status,year_level,graduation_year,required_hours,preferred_start_date,allowance_preference,requires_moa',
             ]],
             [
+                'name' => ['sometimes', 'string', 'max:255'],
+                'phone' => ['sometimes', 'nullable', 'string', 'max:30'],
+                'city' => ['sometimes', 'nullable', 'string', 'max:100'],
                 'profile_links' => ['sometimes', 'nullable', 'array'],
-                'profile_links.portfolio' => ['sometimes', 'nullable', 'url', 'max:2048'],
-                'profile_links.github' => ['sometimes', 'nullable', 'url', 'max:2048'],
-                'profile_links.linkedin' => ['sometimes', 'nullable', 'url', 'max:2048'],
+                'profile_links.portfolio' => ['sometimes', 'nullable', 'string', 'max:2048'],
+                'profile_links.github' => ['sometimes', 'nullable', 'string', 'max:2048'],
+                'profile_links.linkedin' => ['sometimes', 'nullable', 'string', 'max:2048'],
                 'profile_links.other' => ['sometimes', 'nullable', 'array'],
                 'profile_links.other.label' => ['required_with:profile_links.other', 'string', 'max:100'],
-                'profile_links.other.url' => ['required_with:profile_links.other', 'url', 'max:2048'],
+                'profile_links.other.url' => ['required_with:profile_links.other', 'string', 'max:2048'],
             ],
             $this->nestedOjtDetailRules(),
         ));
@@ -296,9 +434,19 @@ class ApplicantProfileController extends Controller
         DB::transaction(function () use ($profile, $validated, $fields, $lookingForJobs, $lookingForOjt): void {
             $this->saveInterests($profile, $validated);
             $profile->fill($fields);
+            $profile->fill(array_intersect_key(
+                $validated,
+                array_flip(['phone', 'city']),
+            ));
             $profile->looking_for_jobs = $lookingForJobs;
             $profile->looking_for_ojt = $lookingForOjt;
             $profile->save();
+
+            if (array_key_exists('name', $validated)) {
+                $profile->user()->update([
+                    'name' => mb_convert_case(trim($validated['name']), MB_CASE_TITLE, 'UTF-8'),
+                ]);
+            }
 
             if (isset($validated['ojt_details'])) {
                 $details = $profile->ojtDetails()->firstOrNew();
@@ -347,6 +495,7 @@ class ApplicantProfileController extends Controller
             'phone' => $profile->phone,
             'city' => $profile->city,
             'profile_links' => $profile->profile_links ?? [],
+            'other_categories' => $profile->other_categories ?? [],
             'profile_photo_path' => $profile->profile_photo_path,
             'profile_photo_url' => $profile->profile_photo_path
                 ? $this->mediaStorage->publicImageUrl($profile->profile_photo_disk, $profile->profile_photo_path)
@@ -368,7 +517,9 @@ class ApplicantProfileController extends Controller
             'ojt_details' => $profile->ojtDetails?->only([
                 'school',
                 'course',
+                'education_status',
                 'year_level',
+                'graduation_year',
                 'required_hours',
                 'preferred_start_date',
                 'allowance_preference',
@@ -428,6 +579,8 @@ class ApplicantProfileController extends Controller
             ],
             'skills' => ['sometimes', 'array', 'max:30'],
             'skills.*' => ['required', 'string', 'max:60', 'distinct:ignore_case'],
+            'other_categories' => ['sometimes', 'array', 'max:5'],
+            'other_categories.*' => ['required', 'string', 'max:100', 'distinct:ignore_case'],
         ];
     }
 
@@ -467,11 +620,13 @@ class ApplicantProfileController extends Controller
         return [
             'school' => ['sometimes', 'nullable', 'string', 'max:255'],
             'course' => ['sometimes', 'nullable', 'string', 'max:255'],
+            'education_status' => ['sometimes', 'nullable', Rule::in(['undergraduate', 'graduated'])],
             'year_level' => ['sometimes', 'nullable', 'integer', 'between:1,6'],
+            'graduation_year' => ['sometimes', 'nullable', 'integer', 'between:1900,2100'],
             'required_hours' => ['sometimes', 'nullable', 'integer', 'between:1,2000'],
             'preferred_start_date' => ['sometimes', 'nullable', 'date', 'after_or_equal:today'],
-            'allowance_preference' => ['sometimes', Rule::in(self::ALLOWANCE_PREFERENCES)],
-            'requires_moa' => ['sometimes', 'boolean'],
+            'allowance_preference' => ['sometimes', 'nullable', Rule::in(self::ALLOWANCE_PREFERENCES)],
+            'requires_moa' => ['sometimes', 'nullable', 'boolean'],
         ];
     }
 
@@ -522,7 +677,7 @@ class ApplicantProfileController extends Controller
 
     private function normalizeProfileFields(array $fields): array
     {
-        foreach (['desired_titles', 'preferred_locations'] as $key) {
+        foreach (['desired_titles', 'preferred_locations', 'other_categories'] as $key) {
             if (array_key_exists($key, $fields) && is_array($fields[$key])) {
                 $fields[$key] = collect($fields[$key])
                     ->map(fn (string $value): string => trim($value))

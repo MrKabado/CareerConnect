@@ -20,13 +20,19 @@ export default function JobApplicationPageContent() {
     savedResumeName,
     resumeLoading,
     resumeError,
-    coverLetter,
-    setCoverLetter,
+    savedCoverLetterName,
+    coverLetterLoading,
+    coverLetterDocumentsLoading,
+    coverLetterUploadProgress,
+    coverLetterError,
+    isCoverLetterIncluded,
+    setIsCoverLetterIncluded,
     submitError,
     isSubmitting,
     uploadProgress,
     isAlreadySubmitted,
     handleFileSelect,
+    handleCoverLetterSelect,
     reviewApplication,
     submitApplication,
     navigate,
@@ -82,8 +88,14 @@ export default function JobApplicationPageContent() {
           <ErrorBoundary>
             {step === 1 && (
               <JobApplicationFormStep
-                coverLetter={coverLetter}
-                onCoverLetterChange={setCoverLetter}
+                coverLetterFileName={savedCoverLetterName}
+                coverLetterLoading={coverLetterLoading}
+                coverLetterDocumentsLoading={coverLetterDocumentsLoading}
+                coverLetterUploadProgress={coverLetterUploadProgress}
+                coverLetterError={coverLetterError}
+                isCoverLetterIncluded={isCoverLetterIncluded}
+                onCoverLetterSelect={handleCoverLetterSelect}
+                onCoverLetterToggle={setIsCoverLetterIncluded}
                 onFileSelect={handleFileSelect}
                 onReview={reviewApplication}
                 resumeError={resumeError}
@@ -97,7 +109,9 @@ export default function JobApplicationPageContent() {
           <ErrorBoundary>
             {step === 2 && (
               <JobApplicationReviewStep
-                coverLetter={coverLetter}
+                coverLetterFileName={
+                  isCoverLetterIncluded ? savedCoverLetterName : undefined
+                }
                 isSubmitting={isSubmitting}
                 uploadProgress={uploadProgress}
                 onBack={() => setStep(1)}

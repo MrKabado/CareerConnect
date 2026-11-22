@@ -3,10 +3,16 @@ import { useNavigate, useParams } from "react-router";
 import { useAuth } from "@/features/auth/useAuth";
 import { getConversationForApplication, getEmployerMessagingActor } from "@/features/messaging/api";
 import type { Conversation } from "@/features/messaging/types";
-import { downloadEmployerApplicantResume } from "@/features/employer-applicants/api";
+import {
+  downloadEmployerApplicantCoverLetter,
+  downloadEmployerApplicantResume,
+} from "@/features/employer-applicants/api";
 import { useApplicantStatus } from "@/features/employer-applicants/useApplicantStatus";
 import type { ApplicantDocument } from "@/features/employer-applicants/types";
-import { getApplicationId } from "@/features/employer-applicants/utils";
+import {
+  getApplicationId,
+  getExternalDocumentUrl,
+} from "@/features/employer-applicants/utils";
 
 export function useApplicantDetail() {
   const { applicantId } = useParams();
@@ -24,6 +30,62 @@ export function useApplicantDetail() {
   const applicant = applicantStage.applicant;
   const status = applicantStage.status;
   const messagingActor = getEmployerMessagingActor(user);
+
+  useEffect(() => {
+    if (
+      !applicant ||
+      !selectedDocument ||
+      selectedDocument.dataUrl ||
+      getExternalDocumentUrl(selectedDocument)
+    ) {
+      return;
+    }
+
+    if (!token) return;
+
+    let active = true;
+    void Promise.resolve().then(async () => {
+      if (!active) return;
+      setDocumentError(null);
+      setDocumentLoading(true);
+      try {
+        const file = selectedDocument.title.toLowerCase().includes("cover letter")
+          ? await downloadEmployerApplicantCoverLetter(token, applicant.id)
+          : await downloadEmployerApplicantResume(token, applicant.id);
+        if (!active) return;
+        const dataUrl = URL.createObjectURL(file);
+        setSelectedDocument((current) =>
+          current?.id === selectedDocument.id
+            ? {
+                ...current,
+                dataUrl,
+                mimeType: file.type || current.mimeType,
+              }
+            : current,
+        );
+      } catch (requestError: unknown) {
+        if (active) {
+          setDocumentError(
+            requestError instanceof Error
+              ? requestError.message
+              : "Unable to preview this resume.",
+          );
+        }
+      } finally {
+        if (active) setDocumentLoading(false);
+      }
+    });
+
+    return () => {
+      active = false;
+    };
+  }, [applicant, selectedDocument, token]);
+
+  useEffect(() => {
+    const dataUrl = selectedDocument?.dataUrl;
+    if (!dataUrl?.startsWith("blob:")) return;
+    return () => URL.revokeObjectURL(dataUrl);
+  }, [selectedDocument?.dataUrl]);
 
   async function handleContactApplicant() {
     if (!applicant || contactLoading) return;
@@ -57,27 +119,29 @@ export function useApplicantDetail() {
     navigate(`/employer/messages/${encodeURIComponent(conversation.conversationId)}`);
   }
 
-  async function handleDownloadDocument() {
+  async function handleDownloadDocument(selectedDocument: ApplicantDocument) {
     if (!applicant || documentLoading) return;
     if (!token) {
-      setDocumentError("Sign in as an employer to download this resume.");
+      setDocumentError("Sign in as an employer to download this document.");
       return;
     }
 
     setDocumentError(null);
     setDocumentLoading(true);
     try {
-      const file = await downloadEmployerApplicantResume(token, applicant.id);
+      const file = selectedDocument.title.toLowerCase().includes("cover letter")
+        ? await downloadEmployerApplicantCoverLetter(token, applicant.id)
+        : await downloadEmployerApplicantResume(token, applicant.id);
       const objectUrl = URL.createObjectURL(file);
-      const link = document.createElement("a");
+      const link = window.document.createElement("a");
       link.href = objectUrl;
-      link.download = applicant.documents[0]?.fileName ?? "applicant-resume";
-      document.body.append(link);
+      link.download = selectedDocument.fileName;
+      window.document.body.append(link);
       link.click();
       link.remove();
       window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
     } catch (requestError) {
-      setDocumentError(requestError instanceof Error ? requestError.message : "Unable to download this resume.");
+      setDocumentError(requestError instanceof Error ? requestError.message : "Unable to download this document.");
     } finally {
       setDocumentLoading(false);
     }

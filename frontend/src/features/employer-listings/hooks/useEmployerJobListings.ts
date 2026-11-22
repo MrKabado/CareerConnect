@@ -157,7 +157,20 @@ export function useEmployerJobListings() {
         employerListingsApi.categories(),
         employerVerificationFilesApi.company(token),
       ]);
-      const mapped = listingResponse.data.map(toListing);
+      const listingPages = await Promise.all(
+        Array.from(
+          { length: Math.max(0, listingResponse.meta.last_page - 1) },
+          (_, index) =>
+            employerListingsApi.listings(token, {
+              page: index + 2,
+              per_page: 50,
+            }),
+        ),
+      );
+      const mapped = [
+        ...listingResponse.data,
+        ...listingPages.flatMap((page) => page.data),
+      ].map(toListing);
       setListings(mapped);
       setCategories(categoryResponse.data);
       setCompanyProfile({
@@ -190,6 +203,7 @@ export function useEmployerJobListings() {
   const modalTitle = newListingType === "ojt" ? "Create a new OJT opportunity" : "Create a new job";
 
   function openCreateModal() {
+    setError(null);
     setNewListingType(null);
     setNewListingStep(1);
     setNewListingForm(emptyForm(companyProfile.location));
@@ -211,7 +225,7 @@ export function useEmployerJobListings() {
     setNewListingForm((current) => ({ ...current, [field]: value }));
   }
 
-  async function handleSaveDraft() {
+  async function saveNewListing(publishAfterSaving: boolean) {
     if (!token || !newListingType) return;
     if (!newListingForm.title.trim() || !newListingForm.categoryId || !newListingForm.summary.trim()
       || !newListingForm.responsibilities.trim() || !newListingForm.requirements.trim()
@@ -227,12 +241,43 @@ export function useEmployerJobListings() {
       const created = toListing(response.data);
       setListings((current) => [created, ...current]);
       setSelectedId(created.id);
+      if (publishAfterSaving) {
+        try {
+          const publishResponse = await employerListingsApi.updateStatus(
+            token,
+            Number(created.id),
+            "open",
+          );
+          const published = toListing(publishResponse.listing);
+          setListings((current) =>
+            current.map((listing) =>
+              listing.id === published.id ? published : listing,
+            ),
+          );
+        } catch (publishError) {
+          const message =
+            publishError instanceof Error
+              ? publishError.message
+              : "The company may need verification before publishing.";
+          setError(`The listing was saved as a draft but could not be published: ${message}`);
+          closeCreateModal();
+          return;
+        }
+      }
       closeCreateModal();
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : "Unable to save the listing.");
     } finally {
       setIsSaving(false);
     }
+  }
+
+  function handleSaveDraft() {
+    void saveNewListing(false);
+  }
+
+  function handlePublish() {
+    void saveNewListing(true);
   }
 
   async function updateListingStatus(id: string, status: "draft" | "open" | "closed") {
@@ -268,6 +313,7 @@ export function useEmployerJobListings() {
     newListingForm,
     updateNewListingForm,
     handleSaveDraft,
+    handlePublish,
     modalTitle,
     isLoading,
     isSaving,

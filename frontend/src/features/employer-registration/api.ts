@@ -79,12 +79,18 @@ export const employerRegistrationApi = {
   },
 
   async register(input: EmployerRegistrationInput) {
-    const registration = await authApi.register({
+    const industry = input.industry === "Other"
+      ? input.otherIndustry.trim()
+      : input.industry;
+    const registration = await authApi.registerEmployer({
       name: `${input.firstName.trim()} ${input.lastName.trim()}`.trim(),
       email: input.workEmail.trim(),
       password: input.password,
       password_confirmation: input.passwordConfirmation,
-      role: "employer",
+      company_name: input.companyName.trim(),
+      company_size: input.companySize,
+      industry,
+      website: input.website.trim(),
     });
 
     if (registration.resume_verification) {
@@ -96,7 +102,7 @@ export const employerRegistrationApi = {
         companyName: employerSnapshot?.companyName ?? input.companyName.trim(),
         website: employerSnapshot?.website ?? input.website.trim(),
         companySize: employerSnapshot?.companySize ?? input.companySize,
-        industry: employerSnapshot?.industry ?? input.industry,
+        industry: employerSnapshot?.industry ?? industry,
         companyRole: employerSnapshot?.companyRole ?? input.companyRole.trim(),
         status: "email_unverified",
       };
@@ -105,14 +111,16 @@ export const employerRegistrationApi = {
     }
 
     const employer: EmployerProfile = {
-      id: globalThis.crypto?.randomUUID?.() ?? `employer-${Date.now()}`,
+      id: registration.user
+        ? String(registration.user.id)
+        : globalThis.crypto?.randomUUID?.() ?? `employer-${Date.now()}`,
       firstName: input.firstName,
       lastName: input.lastName,
       workEmail: input.workEmail.trim(),
       companyName: input.companyName.trim(),
       website: input.website.trim(),
       companySize: input.companySize,
-      industry: input.industry,
+      industry,
       companyRole: input.companyRole.trim(),
       status: "email_unverified",
     };

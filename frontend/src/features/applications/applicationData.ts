@@ -28,6 +28,10 @@ export type Application = {
   appliedAt: string;
   status: ApplicationStatus;
   track: ApplicationTrack;
+  rejectionReason?: string;
+  rejectedAt?: string;
+  reapplyAvailableAt?: string;
+  reapplicationAllowed?: boolean;
   hiredAt?: string;
   employmentEndedAt?: string | null;
   interviewSchedule?: Pick<InterviewDetails, "date" | "time" | "timezone">;
@@ -44,69 +48,17 @@ export type Application = {
   documents?: SubmittedApplicationDocument[];
 };
 
-export const applications: Application[] = [
-  {
-    id: 1,
-    companyInitial: "S",
-    title: "Frontend Developer",
-    company: "Sprout Solutions",
-    appliedAt: "Jun 18, 2026",
-    status: "Interview Scheduled",
-    track: "Job",
-    interviewSchedule: {
-      date: "2026-11-09",
-      time: "10:00",
-      timezone: "Asia/Manila",
-    },
-  },
-  {
-    id: 2,
-    companyInitial: "G",
-    title: "Software Engineering Intern",
-    company: "Globe Telecom",
-    appliedAt: "Jun 15, 2026",
-    status: "Shortlisted",
-    track: "OJT",
-  },
-  {
-    id: 3,
-    companyInitial: "K",
-    title: "Junior UI Developer",
-    company: "Kumu",
-    appliedAt: "Jun 12, 2026",
-    status: "Under Review",
-    track: "Job",
-  },
-  {
-    id: 4,
-    companyInitial: "C",
-    title: "Web Support Specialist",
-    company: "Concentrix Philippines",
-    appliedAt: "Jun 8, 2026",
-    status: "Applied",
-    track: "Job",
-  },
-  {
-    id: 5,
-    companyInitial: "C",
-    title: "Product Design Intern",
-    company: "Canva Philippines",
-    appliedAt: "May 28, 2026",
-    status: "Hired",
-    track: "OJT",
-  },
-  {
-    id: 6,
-    companyInitial: "M",
-    title: "Junior Frontend Engineer",
-    company: "Maya Philippines",
-    appliedAt: "May 20, 2026",
-    status: "Rejected",
-    track: "Job",
-  },
-];
+export const applications: Application[] = [];
 
 const storageKey = "careerconnect.applications";
+const legacySampleApplications = new Map([
+  [1, { company: "Sprout Solutions", title: "Frontend Developer" }],
+  [2, { company: "Globe Telecom", title: "Software Engineering Intern" }],
+  [3, { company: "Kumu", title: "Junior UI Developer" }],
+  [4, { company: "Concentrix Philippines", title: "Web Support Specialist" }],
+  [5, { company: "Canva Philippines", title: "Product Design Intern" }],
+  [6, { company: "Maya Philippines", title: "Junior Frontend Engineer" }],
+]);
 const listeners = new Set<() => void>();
 let applicationSnapshot = loadApplications();
 
@@ -126,20 +78,19 @@ function isApplication(value: unknown): value is Application {
 
 function loadApplications(): Application[] {
   const stored = localStorage.getItem(storageKey);
-  if (!stored) return [...applications];
+  if (!stored) return [];
 
   const parsed: unknown = JSON.parse(stored);
   if (!Array.isArray(parsed) || !parsed.every(isApplication)) {
     throw new Error("Saved application data is invalid.");
   }
 
-  const persistedById = new Map(
-    parsed.map((application) => [application.id, application]),
-  );
-  return [
-    ...applications.filter((application) => !persistedById.has(application.id)),
-    ...parsed,
-  ];
+  return parsed.filter((application) => {
+    const sample = legacySampleApplications.get(application.id);
+    return !sample ||
+      sample.company !== application.company ||
+      sample.title !== application.title;
+  });
 }
 
 export const applicationStore = {

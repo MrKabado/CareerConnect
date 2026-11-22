@@ -15,12 +15,13 @@ export function useHiringSetup() {
   const navigate = useNavigate();
   const location = useLocation();
   const { employer } = useEmployerStatus();
-  const companyName = employer?.companyName ?? "Maya Philippines";
+  const companyName = employer?.companyName ?? "";
   const profile = useCompanyProfile(companyName);
   const profileSlug = getCompanyProfileSlug(companyName);
 
-  const listingId = (location.state as HiringSetupLocationState | null)?.listingId ?? "frontend-developer";
-  const returnTo = (location.state as HiringSetupLocationState | null)?.returnTo ?? "/employer/listings/review";
+  const listingState = location.state as HiringSetupLocationState | null;
+  const listingId = listingState?.listingId ?? "";
+  const returnTo = listingState?.returnTo ?? "/employer/listings";
 
   const initialDraft: HiringSetupDraft = profile.hiringDefaults ?? { ...defaultHiringSetup };
   const [draft, setDraft] = useState<HiringSetupDraft>(initialDraft);

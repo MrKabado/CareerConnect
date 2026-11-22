@@ -7,7 +7,6 @@ import { getOjtMatch } from "@/features/jobs/ojtMatching";
 import type { OjtOpportunity, ScoredOjtOpportunity } from "@/features/jobs/ojtMatching";
 import { formatListingPay, listingText, publicJobsApi, type PublicJobListing } from "@/features/jobs/backendApi";
 import { onboardingStore } from "@/features/onboarding/store";
-import { ojtProfileExample } from "@/features/onboarding/ojtProfileExample";
 import { savedOpportunityStore } from "@/features/jobs/savedOpportunities";
 
 export type RecommendationSort = "best-match" | "most-recent";
@@ -191,28 +190,8 @@ export function useUserRecommendations() {
   }, [answers, apiJobs, hasJobSeekerPreferences, sort]);
 
   const ojtRecommendations = useMemo(() => {
-    const ojtAnswers = {
-      ...answers,
-      course: answers.course || ojtProfileExample.course,
-      requiredOjtHours:
-        answers.requiredOjtHours || ojtProfileExample.requiredOjtHours,
-      skills:
-        answers.skills.length > 0 ? answers.skills : ojtProfileExample.skills,
-      trainingFields:
-        answers.trainingFields.length > 0
-          ? answers.trainingFields
-          : ojtProfileExample.trainingFields,
-      workSetup: answers.workSetup || ojtProfileExample.workSetup,
-      allowancePreference:
-        answers.allowancePreference || ojtProfileExample.allowancePreference,
-      preferredLocations:
-        answers.preferredLocations.length > 0
-          ? answers.preferredLocations
-          : ojtProfileExample.preferredLocations,
-    };
-
     return apiOjtOpportunities
-      .map((opportunity) => getOjtMatch(opportunity, ojtAnswers))
+      .map((opportunity) => getOjtMatch(opportunity, answers))
       .filter((opportunity) => opportunity !== null)
       .sort((left, right) => right.matchScore - left.matchScore);
   }, [answers, apiOjtOpportunities]);
@@ -262,7 +241,7 @@ export function useUserRecommendations() {
       : null;
 
   const firstName =
-    (user?.name || answers.name).trim().split(/\s+/)[0] || "Jamie";
+    (user?.name || answers.name).trim().split(/\s+/)[0] || "there";
   const verificationEmail =
     user && !user.email_verified_at
       ? user.email

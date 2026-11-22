@@ -30,11 +30,13 @@ export interface EmployerVerification {
 export interface AdminOutletContext {
   verifications: EmployerVerification[];
   pendingCount: number;
+  pendingApplicantIdentityCount: number;
   updateVerification: (
     id: string,
     status: VerificationStatus,
     reason?: string,
   ) => Promise<void>;
+  refresh: () => Promise<void>;
   isLoading?: boolean;
   error?: string | null;
   retry?: () => void;
@@ -48,6 +50,10 @@ export interface User {
   role: UserRole;
   joined: string;
   status: UserStatus;
+  identityVerification?: {
+    status: "pending" | "verified" | "rejected";
+    rejectionReason: string | null;
+  } | null;
 }
 
 export interface Category {

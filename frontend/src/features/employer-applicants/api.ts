@@ -6,6 +6,11 @@ type ApplicationRecord = {
   id: number;
   status: BackendStatus;
   cover_letter: string | null;
+  cover_letter_document?: {
+    original_filename: string;
+    mime_type: string;
+    file_size: number;
+  } | null;
   applied_at: string | null;
   hired_at: string | null;
   employment_ended_at: string | null;
@@ -125,6 +130,7 @@ function mapInterview(interview: InterviewRecord | undefined): Applicant["interv
 function toApplicant(record: ApplicationRecord, interview?: InterviewRecord): Applicant {
   const name = record.applicant?.name ?? "Applicant";
   const resume = record.resume;
+  const coverLetterDocument = record.cover_letter_document ?? null;
   const mimeType = resume?.mime_type ?? "";
   const extension = resume?.original_filename.split(".").pop()?.toLowerCase();
   const fileType = mimeType === "application/pdf" || extension === "pdf"
@@ -147,7 +153,10 @@ function toApplicant(record: ApplicationRecord, interview?: InterviewRecord): Ap
     ...(record.employment_ended_at ? { employmentEndedAt: record.employment_ended_at } : {}),
     ...(interviewDetails ? { interviewDetails } : {}),
     jobType: record.listing?.listing_type === "ojt" ? "OJT" : "Job",
-    summary: record.cover_letter?.trim() || "No cover letter was submitted.",
+    summary: record.cover_letter?.trim() ||
+      (coverLetterDocument
+        ? `Cover letter document: ${coverLetterDocument.original_filename}`
+        : "No cover letter was submitted."),
     skills: record.applicant?.skills ?? [],
     experience: "Not provided",
     experienceDetails: [],
@@ -156,16 +165,30 @@ function toApplicant(record: ApplicationRecord, interview?: InterviewRecord): Ap
     email: "",
     phone: record.applicant?.phone ?? "Not provided",
     ...(rejectionReason ? { rejectionReason } : {}),
-    documents: resume ? [{
-      id: `resume-${record.id}`,
-      title: "Resume",
-      fileName: resume.original_filename,
-      fileType,
-      mimeType,
-      submittedAt: formatDate(record.applied_at),
-      fileSize: formatFileSize(resume.file_size),
-      preview: [],
-    }] : [],
+    documents: [
+      ...(resume ? [{
+        id: `resume-${record.id}`,
+        title: "Resume",
+        fileName: resume.original_filename,
+        fileType,
+        mimeType,
+        submittedAt: formatDate(record.applied_at),
+        fileSize: formatFileSize(resume.file_size),
+        preview: [],
+      } satisfies Applicant["documents"][number]] : []),
+      ...(coverLetterDocument ? [{
+        id: `cover-letter-${record.id}`,
+        title: "Cover letter",
+        fileName: coverLetterDocument.original_filename,
+        fileType: coverLetterDocument.mime_type === "application/pdf" ||
+          /\.pdf$/i.test(coverLetterDocument.original_filename) ? "PDF" :
+          /\.docx$/i.test(coverLetterDocument.original_filename) ? "DOCX" : "DOC",
+        mimeType: coverLetterDocument.mime_type,
+        submittedAt: formatDate(record.applied_at),
+        fileSize: formatFileSize(coverLetterDocument.file_size),
+        preview: [],
+      } satisfies Applicant["documents"][number]] : []),
+    ],
   };
 }
 
@@ -301,4 +324,9 @@ export async function recordApplicantEmploymentEnd(
 export function downloadEmployerApplicantResume(token: string, applicantId: string) {
   const applicationId = getApplicationId(applicantId);
   return apiBlob(`/employer/applications/${applicationId}/resume`, token);
+}
+
+export function downloadEmployerApplicantCoverLetter(token: string, applicantId: string) {
+  const applicationId = getApplicationId(applicantId);
+  return apiBlob(`/employer/applications/${applicationId}/cover-letter`, token);
 }

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import ErrorBoundary from "@/components/common/ErrorBoundary";
 import { Skeleton } from "@/components/ui/skeleton";
 import ApplicantDetailSkeleton from "@/features/employer-applicants/components/ApplicantDetailSkeleton";
@@ -9,6 +9,7 @@ import {
   getExternalDocumentUrl,
   getGitHubUsername,
 } from "@/features/employer-applicants/utils";
+import { useDialogBehavior } from "@/hooks/useDialogBehavior";
 
 function ApplicantProfilePortfolioPreview({ applicant }: { applicant: Applicant }) {
   return (
@@ -319,7 +320,11 @@ export function ApplicantProfileSection({
                   onClick={() => onDocumentOpen(document)}
                   className="rounded-lg border border-[#d7e6e5] px-3 py-2 text-[10px] font-semibold text-[#177d83] hover:bg-[#f3faf9]"
                 >
-                  {isPortfolioDocument ? "View portfolio" : "View document"}
+                  {isPortfolioDocument
+                    ? "View portfolio"
+                    : document.title === "Resume"
+                      ? "Preview resume"
+                      : "View document"}
                 </button>
               </div>
             </div>
@@ -454,13 +459,16 @@ export function ApplicantDocumentPreviewDialog({
   selectedDocument: ApplicantDocument | null;
   isDownloading: boolean;
   downloadError: string | null;
-  onDownload: () => void;
+  onDownload: (document: ApplicantDocument) => void;
   onClose: () => void;
 }) {
+  const dialogRef = useRef<HTMLElement>(null);
+  useDialogBehavior(dialogRef, selectedDocument !== null, onClose);
+
   if (!selectedDocument) return null;
 
   return (
-    <div className="fixed inset-0 z-70 flex items-center justify-center bg-[#1f3333]/20 p-4">
+    <div className="fixed inset-0 z-70 flex items-center justify-center overflow-y-auto overscroll-contain bg-[#1f3333]/20 p-4 max-[600px]:p-3">
       <button
         type="button"
         aria-label="Close document preview"
@@ -471,7 +479,9 @@ export function ApplicantDocumentPreviewDialog({
         role="dialog"
         aria-modal="true"
         aria-labelledby="document-dialog-title"
-        className="relative z-10 flex h-[94dvh] max-h-[calc(100dvh-1rem)] w-[98vw] max-w-400 flex-col overflow-hidden rounded-2xl bg-white shadow-[0_16px_48px_rgba(0,0,0,0.3)]"
+        ref={dialogRef}
+        tabIndex={-1}
+        className="relative z-10 flex h-[min(82dvh,760px)] max-h-[calc(100dvh-2rem)] min-h-[min(320px,calc(100dvh-2rem))] w-full max-w-5xl flex-col overflow-hidden rounded-2xl bg-white shadow-[0_16px_48px_rgba(0,0,0,0.3)]"
       >
         <header className="flex items-center justify-between gap-3 border-b border-[#edf1f1] px-4 py-3">
           <div className="min-w-0">
@@ -483,15 +493,17 @@ export function ApplicantDocumentPreviewDialog({
           <div className="flex shrink-0 items-center gap-2">
             <button
               type="button"
-              onClick={selectedDocument.dataUrl ? () => downloadApplicantDocument(selectedDocument) : onDownload}
+              onClick={selectedDocument.dataUrl
+                ? () => downloadApplicantDocument(selectedDocument)
+                : () => onDownload(selectedDocument)}
               disabled={isDownloading}
               className="rounded-lg bg-[#078b98] px-3 py-2 text-[10px] font-semibold text-white hover:bg-[#06767f] focus-visible:outline-[3px] focus-visible:outline-[#67c9c1] disabled:cursor-wait disabled:opacity-60"
             >
-              {isDownloading ? "Downloading..." : "Download"}
+              {isDownloading ? "Loading..." : "Download"}
             </button>
             <button
               type="button"
-              autoFocus
+              data-dialog-initial
               onClick={onClose}
               aria-label="Close document preview"
               className="grid size-8 place-items-center rounded-full text-xl text-[#526365] hover:bg-[#f1f6f5] focus-visible:outline-[3px] focus-visible:outline-[#67c9c1]"
@@ -501,7 +513,9 @@ export function ApplicantDocumentPreviewDialog({
           </div>
         </header>
 
-        {selectedDocument.dataUrl && selectedDocument.mimeType === "application/pdf" ? (
+        {selectedDocument.dataUrl &&
+        (selectedDocument.mimeType === "application/pdf" ||
+          /\.pdf$/i.test(selectedDocument.fileName)) ? (
           <iframe
             className="min-h-0 flex-1 bg-[#f3f6f6]"
             src={selectedDocument.dataUrl}
@@ -517,19 +531,38 @@ export function ApplicantDocumentPreviewDialog({
             </p>
             <button
               type="button"
-              onClick={selectedDocument.dataUrl ? () => downloadApplicantDocument(selectedDocument) : onDownload}
+              onClick={selectedDocument.dataUrl
+                ? () => downloadApplicantDocument(selectedDocument)
+                : () => onDownload(selectedDocument)}
               disabled={isDownloading}
               className="mt-4 rounded-lg bg-[#078b98] px-4 py-2.5 text-[10px] font-semibold text-white hover:bg-[#06767f] focus-visible:outline-[3px] focus-visible:outline-[#67c9c1] disabled:cursor-wait disabled:opacity-60"
             >
               {isDownloading ? "Downloading..." : "Download document"}
             </button>
           </div>
+        ) : isDownloading && !selectedDocument.dataUrl ? (
+          <div className="flex min-h-75 flex-col items-center justify-center bg-[#f3f6f6] px-6 py-10 text-center" role="status">
+            <span className="size-8 animate-spin rounded-full border-2 border-[#d6e8e6] border-t-[#078b98]" />
+            <p className="mt-4 text-[13px] font-semibold text-[#2c3e40]">
+              Loading {selectedDocument.title.toLowerCase()} preview…
+            </p>
+            <p className="mt-1 max-w-105 text-[11px] leading-5 text-[#829091]">
+              The private file is being fetched securely for your application review.
+            </p>
+          </div>
         ) : (
           <div className="flex min-h-75 flex-col items-center justify-center bg-[#f3f6f6] px-6 py-10 text-center">
-            <p className="text-[13px] font-semibold text-[#2c3e40]">Secure preview is unavailable</p>
-            <p className="mt-1 max-w-105 text-[11px] leading-5 text-[#829091]">This private resume can be downloaded after your employer access is verified.</p>
-            <button type="button" onClick={onDownload} disabled={isDownloading} className="mt-4 rounded-lg bg-[#078b98] px-4 py-2.5 text-[10px] font-semibold text-white hover:bg-[#06767f] disabled:cursor-wait disabled:opacity-60">
-              {isDownloading ? "Downloading..." : "Download resume"}
+            <p className="text-[13px] font-semibold text-[#2c3e40]">
+              {selectedDocument.title} preview could not be loaded
+            </p>
+            <p className="mt-1 max-w-105 text-[11px] leading-5 text-[#829091]">Try downloading the file, or close this dialog and preview it again.</p>
+            <button
+              type="button"
+              onClick={() => onDownload(selectedDocument)}
+              disabled={isDownloading}
+              className="mt-4 rounded-lg bg-[#078b98] px-4 py-2.5 text-[10px] font-semibold text-white hover:bg-[#06767f] disabled:cursor-wait disabled:opacity-60"
+            >
+              {isDownloading ? "Downloading..." : `Download ${selectedDocument.title.toLowerCase()}`}
             </button>
           </div>
         )}

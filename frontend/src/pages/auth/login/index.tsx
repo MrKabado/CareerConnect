@@ -3,6 +3,7 @@ import { useNavigate } from "react-router";
 import { useAuth } from "@/features/auth/useAuth";
 import LoginPageView from "@/components/ui/LoginPageView";
 import { employerVerificationFilesApi } from "@/features/employer-verification/backendApi";
+import { toast } from "sonner";
 
 export default function LoginPage() {
   const { login } = useAuth();
@@ -34,8 +35,9 @@ export default function LoginPage() {
       } else if (loginResult.user.role === "employer") {
         const verification = await employerVerificationFilesApi.status(loginResult.token);
         if (verification.status === "pending") {
-          navigate("/employer/under-review", { replace: true });
+          navigate("/", { replace: true });
         } else if (verification.status === "verified") {
+          toast.success("Company verification approved. You can now access your employer account.");
           navigate("/employer/overview", { replace: true });
         } else if (verification.status === "rejected") {
           navigate("/employer/verification", { replace: true });
@@ -45,7 +47,7 @@ export default function LoginPage() {
           navigate("/employer/verification/company-info", { replace: true });
         }
       } else {
-        navigate("/onboarding", { replace: true });
+        navigate("/profile", { replace: true });
       }
     } catch (error) {
       const message =

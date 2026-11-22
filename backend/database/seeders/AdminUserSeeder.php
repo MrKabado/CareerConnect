@@ -10,11 +10,7 @@ class AdminUserSeeder extends Seeder
 {
     public function run(): void
     {
-        $credentials = [
-            'name' => 'System Administrator',
-            'email' => 'admin@gmail.com',
-            'password' => 'Password123?',
-        ];
+        $credentials = config('careerconnect.admin_seed');
 
         $user = User::firstOrNew(['email' => $credentials['email']]);
 

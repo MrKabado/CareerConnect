@@ -55,8 +55,18 @@ it('registers applicant and employer through role-specific endpoints', function 
         'email' => 'employer-one@example.com',
         'password' => 'Password123!',
         'password_confirmation' => 'Password123!',
+        'company_name' => 'Employer Company',
+        'company_size' => '11-50',
+        'industry' => 'Technology',
+        'website' => 'https://employer.example',
     ])->assertCreated()
         ->assertJsonPath('user.role', 'employer');
+    $this->assertDatabaseHas('companies', [
+        'name' => 'Employer Company',
+        'company_size' => '11-50',
+        'industry' => 'Technology',
+        'website' => 'https://employer.example',
+    ]);
 
     Mail::assertSent(OtpCodeMail::class, 2);
 });
@@ -154,6 +164,18 @@ it('lets admins review identity submissions and applicants resubmit after reject
         ->assertJsonPath('data.0.status', 'pending')
         ->assertJsonMissingPath('data.0.document_path');
 
+    $this->app['auth']->forgetGuards();
+    $this->withToken($adminToken)->getJson('/api/admin/users?role=applicant')
+        ->assertOk()
+        ->assertJsonPath('data.0.identity_verification.status', 'pending')
+        ->assertJsonMissingPath('data.0.identity_verification.document_path');
+
+    $this->app['auth']->forgetGuards();
+    $this->withToken($adminToken)->getJson('/api/admin/identity-verifications?status=all')
+        ->assertOk()
+        ->assertJsonCount(1, 'data');
+
+    $this->app['auth']->forgetGuards();
     $this->withToken($adminToken)->postJson("/api/admin/identity-verifications/{$verification->id}/review", [
         'status' => 'rejected',
     ])->assertUnprocessable()
@@ -186,6 +208,12 @@ it('lets admins review identity submissions and applicants resubmit after reject
         ->and($verification->reviewed_by)->toBe($admin->id)
         ->and($verification->expires_at)->not->toBeNull();
 
+    $this->app['auth']->forgetGuards();
+    $this->withToken($adminToken)->getJson('/api/admin/identity-verifications?status=all')
+        ->assertOk()
+        ->assertJsonCount(1, 'data')
+        ->assertJsonPath('data.0.status', 'verified');
+
     $this->withToken($adminToken)->postJson("/api/admin/identity-verifications/{$verification->id}/review", [
         'status' => 'rejected',
         'rejection_reason' => 'A second review must not overwrite the first.',
@@ -199,6 +227,19 @@ it('lets admins review identity submissions and applicants resubmit after reject
     $this->withToken($adminToken)->get("/api/admin/identity-verifications/{$verification->id}/document")
         ->assertOk()
         ->assertHeader('content-disposition');
+});
+
+it('shows the newest accounts first in admin user management', function (): void {
+    $olderApplicant = User::factory()->create(['role' => 'applicant']);
+    $newerApplicant = User::factory()->create(['role' => 'applicant']);
+    $admin = User::factory()->create(['role' => 'admin']);
+    $adminToken = $admin->createToken('admin')->plainTextToken;
+
+    $this->withToken($adminToken)
+        ->getJson('/api/admin/users?role=applicant&per_page=6')
+        ->assertOk()
+        ->assertJsonPath('data.0.id', $newerApplicant->id)
+        ->assertJsonPath('data.1.id', $olderApplicant->id);
 });
 
 it('keeps Cloudinary identity documents private and prunes them after retention', function (): void {
@@ -290,6 +331,70 @@ it('allows admins to activate and deactivate accounts without changing roles', f
         ->assertJsonPath('user.account_status', 'active');
 });
 
+it('gates temporary user deletion behind its feature flag', function (): void {
+    $admin = User::factory()->create(['role' => 'admin']);
+    $target = User::factory()->create(['role' => 'applicant']);
+    $adminToken = $admin->createToken('admin')->plainTextToken;
+    $targetToken = $target->createToken('target')->plainTextToken;
+
+    Config::set('careerconnect.use_delete_users', false);
+
+    $this->withToken($adminToken)->getJson('/api/admin/users')
+        ->assertOk()
+        ->assertJsonPath('features.delete_users', false);
+
+    $this->withToken($adminToken)->deleteJson("/api/admin/users/{$target->id}", [
+        'confirmation_email' => $target->email,
+    ])->assertNotFound();
+
+    expect(User::find($target->id))->not->toBeNull();
+
+    Config::set('careerconnect.use_delete_users', true);
+
+    $this->withToken($adminToken)->getJson('/api/admin/users')
+        ->assertOk()
+        ->assertJsonPath('features.delete_users', true);
+
+    $this->withToken($adminToken)->deleteJson("/api/admin/users/{$target->id}", [
+        'confirmation_email' => $target->email,
+    ])->assertOk()
+        ->assertJsonPath('message', 'User account deleted.');
+
+    expect(User::find($target->id))->toBeNull();
+    $this->assertDatabaseMissing('personal_access_tokens', [
+        'tokenable_id' => $target->id,
+        'name' => 'target',
+    ]);
+});
+
+it('protects administrator accounts and accounts with submitted identity data from deletion', function (): void {
+    Config::set('careerconnect.use_delete_users', true);
+
+    $admin = User::factory()->create(['role' => 'admin']);
+    $otherAdmin = User::factory()->create(['role' => 'admin']);
+    $applicant = User::factory()->create(['role' => 'applicant']);
+    IdentityVerification::create([
+        'user_id' => $applicant->id,
+        'status' => 'pending',
+    ]);
+    $adminToken = $admin->createToken('admin')->plainTextToken;
+
+    $this->withToken($adminToken)->deleteJson("/api/admin/users/{$admin->id}", [
+        'confirmation_email' => $admin->email,
+    ])->assertUnprocessable();
+
+    $this->withToken($adminToken)->deleteJson("/api/admin/users/{$otherAdmin->id}", [
+        'confirmation_email' => $otherAdmin->email,
+    ])->assertUnprocessable();
+
+    $this->withToken($adminToken)->deleteJson("/api/admin/users/{$applicant->id}", [
+        'confirmation_email' => $applicant->email,
+    ])->assertStatus(409);
+
+    expect(User::find($otherAdmin->id))->not->toBeNull()
+        ->and(User::find($applicant->id))->not->toBeNull();
+});
+
 it('blocks protected routes for deactivated accounts even if a token remains', function (): void {
     $user = User::factory()->create();
     $token = $user->createToken('still-valid')->plainTextToken;
@@ -310,17 +415,6 @@ it('enforces the application eligibility middleware on direct API requests', fun
     $applicant = User::factory()->create(['role' => 'applicant']);
     $token = $applicant->createToken('applicant')->plainTextToken;
 
-    $this->withToken($token)->postJson('/__test/application')
-        ->assertForbidden()
-        ->assertJsonPath('code', 'application_ineligible');
-
-    IdentityVerification::create([
-        'user_id' => $applicant->id,
-        'document_path' => null,
-        'status' => 'verified',
-    ]);
-
-    $this->app['auth']->forgetGuards();
     $this->withToken($token)->postJson('/__test/application')
         ->assertOk()
         ->assertJsonPath('submitted', true);

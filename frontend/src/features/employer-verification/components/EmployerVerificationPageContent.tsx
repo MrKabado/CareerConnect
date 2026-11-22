@@ -18,15 +18,23 @@ export default function EmployerVerificationPageContent() {
     uploading,
     uploadProgress,
     uploadError,
+    uploadErrorKind,
     submitError,
     submitting,
     removing,
     allDocumentsUploaded,
+    requiredDocumentsCount,
     handleFileChange,
     handleRemove,
     handleDownload,
     handleSubmit,
   } = useEmployerVerificationPage();
+  const documentsLocked =
+    isLoading ||
+    Boolean(verificationError) ||
+    verificationStatus === null ||
+    verificationStatus === "pending" ||
+    verificationStatus === "verified";
 
   return (
     <main className="min-h-dvh bg-[#f5f8f8] px-4 py-10 font-sans text-[#263a3c]">
@@ -99,10 +107,11 @@ export default function EmployerVerificationPageContent() {
                   onRemove={handleRemove}
                   onDownload={handleDownload}
                   requirement={requirement}
-                  submitting={submitting || isLoading || Boolean(verificationError)}
+                  submitting={submitting || documentsLocked}
                   uploading={uploading}
                   uploadProgress={uploadProgress}
                   removing={removing === document?.id}
+                  uploadError={uploadErrorKind === requirement.kind ? uploadError : null}
                 />
               );
             })}
@@ -111,13 +120,13 @@ export default function EmployerVerificationPageContent() {
 
         <VerificationSubmissionPanel
           allDocumentsUploaded={allDocumentsUploaded}
-          documentsCount={documents.length}
+          documentsCount={requiredDocumentsCount}
           onSubmit={handleSubmit}
           submitError={submitError}
           submitting={submitting}
-          uploadError={uploadError}
+          uploadError={uploadErrorKind === null ? uploadError : null}
           uploading={uploading !== null}
-          disabled={isLoading || Boolean(verificationError)}
+          disabled={documentsLocked}
         />
       </section>
     </main>

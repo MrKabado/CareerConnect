@@ -270,6 +270,23 @@ it('shows only publicly visible listings and exposes no employer contact or veri
     $this->getJson("/api/jobs/{$deactivated->id}")->assertNotFound();
 });
 
+it('filters public opportunities by the normalized company slug', function (): void {
+    $category = Category::create(['name' => 'Technology']);
+    $owner = User::factory()->create(['role' => 'employer']);
+    $matchingListing = listingTestRecord($owner, $category);
+    $matchingListing->company()->update(['name' => 'Jerson Jay, Inc.']);
+
+    $otherOwner = User::factory()->create(['role' => 'employer']);
+    $otherListing = listingTestRecord($otherOwner, $category);
+    $otherListing->company()->update(['name' => 'Different Company']);
+
+    $this->getJson('/api/jobs?company_slug=jerson-jay-inc')
+        ->assertOk()
+        ->assertJsonCount(1, 'data')
+        ->assertJsonPath('data.0.id', $matchingListing->id)
+        ->assertJsonPath('data.0.company.name', 'Jerson Jay, Inc.');
+});
+
 it('combines public filters and paginates in a predictable order', function (): void {
     $employer = User::factory()->create(['role' => 'employer']);
     $technology = Category::create(['name' => 'Technology']);

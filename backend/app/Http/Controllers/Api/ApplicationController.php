@@ -4,10 +4,12 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\ActivityLog;
+use App\Models\ApplicantDocument;
 use App\Models\Application;
 use App\Models\ApplicationStatusHistory;
 use App\Models\JobListing;
 use App\Models\User;
+use App\Services\MediaStorage;
 use App\Services\NotificationService;
 use App\Services\ResumeStorage;
 use Carbon\CarbonImmutable;
@@ -22,12 +24,16 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class ApplicationController extends Controller
 {
-    public function __construct(private readonly ResumeStorage $resumeStorage) {}
+    public function __construct(
+        private readonly ResumeStorage $resumeStorage,
+        private readonly MediaStorage $mediaStorage,
+    ) {}
 
     public function store(Request $request, JobListing $jobListing): JsonResponse
     {
         $validated = $request->validate([
             'cover_letter' => ['sometimes', 'nullable', 'string', 'max:10000'],
+            'cover_letter_document_id' => ['sometimes', 'nullable', 'integer'],
             'applicant_id' => ['prohibited'],
             'job_listing_id' => ['prohibited'],
             'resume_id' => ['prohibited'],
@@ -71,6 +77,22 @@ class ApplicationController extends Controller
                 ], 422));
             }
 
+            $coverLetterDocumentId = $validated['cover_letter_document_id'] ?? null;
+            if ($coverLetterDocumentId !== null) {
+                $coverLetterDocument = $applicant->applicantDocuments()
+                    ->whereKey($coverLetterDocumentId)
+                    ->where('document_type', 'cover_letter')
+                    ->where('is_current', true)
+                    ->lockForUpdate()
+                    ->first();
+
+                if ($coverLetterDocument === null) {
+                    throw ValidationException::withMessages([
+                        'cover_letter_document_id' => ['Choose a current cover letter from your documents.'],
+                    ]);
+                }
+            }
+
             $hasScheduledInterview = Application::query()
                 ->where('applicant_id', $applicant->id)
                 ->whereHas('jobListing', fn (Builder $query): Builder => $query->where('company_id', $listing->company_id))
@@ -92,6 +114,20 @@ class ApplicationController extends Controller
             $canReapplyAfterCancellation = $existingApplication?->status === 'interview'
                 && $existingApplication->interviews()->where('status', 'cancelled')->exists()
                 && ! $existingApplication->interviews()->where('status', 'scheduled')->exists();
+            $rejectedAt = $existingApplication?->status === 'rejected'
+                ? $this->rejectionDate($existingApplication)
+                : null;
+            $reapplyAvailableAt = $rejectedAt?->addDays(30);
+
+            if ($reapplyAvailableAt !== null && now()->lt($reapplyAvailableAt)) {
+                throw new HttpResponseException(response()->json([
+                    'message' => 'You can apply to this listing again on '.$reapplyAvailableAt->toDateString().'.',
+                    'code' => 'reapplication_cooldown',
+                    'rejected_at' => $rejectedAt?->toISOString(),
+                    'reapply_available_at' => $reapplyAvailableAt->toISOString(),
+                ], 409));
+            }
+
             $canReapply = $existingApplication !== null
                 && ($existingApplication->status === 'rejected' || $canReapplyAfterCancellation);
 
@@ -117,6 +153,7 @@ class ApplicationController extends Controller
                 'resume_original_filename' => $resume->original_filename,
                 'resume_mime_type' => $resume->mime_type,
                 'resume_file_size' => $resume->file_size,
+                'cover_letter_document_id' => $coverLetterDocumentId,
                 'cover_letter' => isset($validated['cover_letter'])
                     ? trim($validated['cover_letter'])
                     : null,
@@ -172,6 +209,7 @@ class ApplicationController extends Controller
                 'jobListing.company',
                 'resume',
                 'statusHistories',
+                'coverLetterDocument',
             ])),
         ], $isReapplication ? 200 : 201);
     }
@@ -185,7 +223,7 @@ class ApplicationController extends Controller
         ]);
 
         $applications = $request->user()->applications()
-            ->with(['jobListing.company', 'resume', 'statusHistories'])
+            ->with(['jobListing.company', 'resume', 'coverLetterDocument', 'statusHistories'])
             ->when(isset($filters['status']), fn (Builder $query): Builder => $query->where('status', $filters['status']))
             ->orderByDesc('applied_at')
             ->orderByDesc('id')
@@ -209,7 +247,7 @@ class ApplicationController extends Controller
     public function applicantShow(Request $request, int $application): JsonResponse
     {
         $application = $request->user()->applications()
-            ->with(['jobListing.company', 'resume', 'statusHistories'])
+            ->with(['jobListing.company', 'resume', 'coverLetterDocument', 'statusHistories'])
             ->findOrFail($application);
 
         return response()->json(['data' => $this->applicantApplicationData($application)]);
@@ -260,7 +298,7 @@ class ApplicationController extends Controller
 
         $applications = Application::query()
             ->whereHas('jobListing', fn (Builder $query): Builder => $query->where('company_id', $company->id))
-            ->with(['applicant.applicantProfile.skills', 'applicant.applicantProfile.categories', 'jobListing', 'resume', 'statusHistories'])
+            ->with(['applicant.applicantProfile.skills', 'applicant.applicantProfile.categories', 'jobListing', 'resume', 'coverLetterDocument', 'statusHistories'])
             ->when(isset($filters['listing_id']), fn (Builder $query): Builder => $query->where('job_listing_id', $filters['listing_id']))
             ->when(isset($filters['status']), fn (Builder $query): Builder => $query->where('status', $filters['status']))
             ->orderByDesc('applied_at')
@@ -285,7 +323,7 @@ class ApplicationController extends Controller
     public function employerShow(Request $request, int $application): JsonResponse
     {
         $application = $this->employerApplicationQuery($request->user())
-            ->with(['applicant.applicantProfile.skills', 'applicant.applicantProfile.categories', 'jobListing', 'resume', 'statusHistories'])
+            ->with(['applicant.applicantProfile.skills', 'applicant.applicantProfile.categories', 'jobListing', 'resume', 'coverLetterDocument', 'statusHistories'])
             ->findOrFail($application);
 
         return response()->json(['data' => $this->employerApplicationData($application)]);
@@ -441,6 +479,20 @@ class ApplicationController extends Controller
         return $this->downloadApplicationResume($application);
     }
 
+    public function employerCoverLetter(Request $request, int $application): StreamedResponse
+    {
+        $application = $this->employerApplicationQuery($request->user())
+            ->with('coverLetterDocument')
+            ->findOrFail($application);
+        $document = $application->coverLetterDocument;
+
+        if ($document === null || $document->applicant_id !== $application->applicant_id) {
+            abort(404);
+        }
+
+        return $this->downloadApplicantDocument($document);
+    }
+
     private function employerApplicationQuery(User $employer): Builder
     {
         return Application::query()->whereHas(
@@ -451,16 +503,25 @@ class ApplicationController extends Controller
 
     private function applicantApplicationData(Application $application): array
     {
+        $rejectedAt = $this->rejectionDate($application);
+
         return [
             'id' => $application->id,
             'status' => $application->status,
             'cover_letter' => $application->cover_letter,
+            'cover_letter_document' => $application->coverLetterDocument
+                ? $this->applicantDocumentData($application->coverLetterDocument)
+                : null,
             'resume' => [
                 'original_filename' => $application->resume_original_filename,
                 'mime_type' => $application->resume_mime_type,
                 'file_size' => $application->resume_file_size,
             ],
             'applied_at' => $application->applied_at?->toISOString(),
+            'rejected_at' => $rejectedAt?->toISOString(),
+            'reapply_available_at' => $rejectedAt?->addDays(30)->toISOString(),
+            'reapplication_allowed' => $rejectedAt !== null
+                && now()->greaterThanOrEqualTo($rejectedAt->addDays(30)),
             'hired_at' => $application->hired_at?->toISOString(),
             'employment_ended_at' => $application->employment_ended_at?->toDateString(),
             'listing' => $this->listingSummary($application->jobListing),
@@ -474,6 +535,29 @@ class ApplicationController extends Controller
         ];
     }
 
+    private function rejectionDate(Application $application): ?CarbonImmutable
+    {
+        if ($application->status !== 'rejected') {
+            return null;
+        }
+
+        if ($application->relationLoaded('statusHistories')) {
+            $rejection = $application->statusHistories
+                ->where('new_status', 'rejected')
+                ->last();
+        } else {
+            $rejection = $application->statusHistories()
+                ->where('new_status', 'rejected')
+                ->orderByDesc('created_at')
+                ->orderByDesc('id')
+                ->first();
+        }
+
+        $date = $rejection?->created_at ?? $application->updated_at ?? now();
+
+        return CarbonImmutable::instance($date);
+    }
+
     private function employerApplicationData(Application $application): array
     {
         $profile = $application->applicant?->applicantProfile;
@@ -482,6 +566,9 @@ class ApplicationController extends Controller
             'id' => $application->id,
             'status' => $application->status,
             'cover_letter' => $application->cover_letter,
+            'cover_letter_document' => $application->coverLetterDocument
+                ? $this->applicantDocumentData($application->coverLetterDocument)
+                : null,
             'applied_at' => $application->applied_at?->toISOString(),
             'hired_at' => $application->hired_at?->toISOString(),
             'employment_ended_at' => $application->employment_ended_at?->toDateString(),
@@ -528,6 +615,37 @@ class ApplicationController extends Controller
             'status' => $listing->status,
             'company_name' => $listing->company?->name,
         ];
+    }
+
+    private function applicantDocumentData(ApplicantDocument $document): array
+    {
+        return [
+            'id' => $document->id,
+            'document_type' => $document->document_type,
+            'original_filename' => $document->original_filename,
+            'mime_type' => $document->mime_type,
+            'file_size' => $document->file_size,
+            'created_at' => $document->created_at?->toISOString(),
+        ];
+    }
+
+    private function downloadApplicantDocument(ApplicantDocument $document): StreamedResponse
+    {
+        $expectedPrefix = 'applicant-documents/'.$document->applicant_id.'/';
+        $path = $document->storage_path;
+
+        if (! str_starts_with($path, $expectedPrefix)
+            || preg_match('#^applicant-documents/[0-9]+/[a-f0-9-]+\.(pdf|docx)$#i', $path) !== 1) {
+            abort(404, 'The cover letter is unavailable.');
+        }
+
+        return $this->mediaStorage->privateDownload(
+            $document->storage_disk,
+            $path,
+            $document->cloudinary_asset_id,
+            $document->original_filename,
+            $document->mime_type,
+        );
     }
 
     private function downloadApplicationResume(Application $application): StreamedResponse

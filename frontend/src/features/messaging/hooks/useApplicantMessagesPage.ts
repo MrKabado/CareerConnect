@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useMemo, useState, type FormEvent } from "react";
 import { useNavigate, useParams } from "react-router";
 import { useAuth } from "@/features/auth/useAuth";
 import { getApplicantMessagingActor, sendMessage } from "@/features/messaging/api";
@@ -6,9 +6,8 @@ import { useConversations, useNotifications, useThread } from "@/features/messag
 import type { Conversation } from "@/features/messaging/types";
 
 export function useApplicantMessagesPage() {
-  const { user, status } = useAuth();
+  const { user } = useAuth();
   const actor = useMemo(() => getApplicantMessagingActor(user), [user]);
-  const isDemoPreview = import.meta.env.DEV && status === "unauthenticated";
   const { conversationId: routeConversationId } = useParams<{ conversationId: string }>();
   const navigate = useNavigate();
   const {
@@ -42,14 +41,6 @@ export function useApplicantMessagesPage() {
       .toLocaleLowerCase()
       .includes(search.trim().toLocaleLowerCase()),
   );
-
-  useEffect(() => {
-    if (isDemoPreview && !conversationId && conversations.length > 0) {
-      navigate(`/messages/${encodeURIComponent(conversations[0].conversationId)}`, {
-        replace: true,
-      });
-    }
-  }, [conversationId, conversations, isDemoPreview, navigate]);
 
   async function handleSend(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -86,7 +77,6 @@ export function useApplicantMessagesPage() {
     filteredConversations,
     handleSend,
     chooseConversation,
-    isDemoPreview,
     messages,
     messagesError,
     messagesLoading,

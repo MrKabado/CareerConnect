@@ -45,7 +45,7 @@ export function useListingOnboarding(listingId?: string) {
   /* eslint-enable react-hooks/set-state-in-effect */
 
   const confirm = useCallback(
-    async (confirmedBy = "Maya Philippines", nextSnapshot?: DefaultsSnapshot) => {
+    async (confirmedBy: string, nextSnapshot?: DefaultsSnapshot) => {
       if (!listingId) {
         return null;
       }
@@ -56,8 +56,8 @@ export function useListingOnboarding(listingId?: string) {
       try {
         const next = await confirmOnboarding(
           listingId,
-          nextSnapshot ?? snapshot ?? record?.defaultsSnapshot ?? undefined,
           confirmedBy,
+          nextSnapshot ?? snapshot ?? record?.defaultsSnapshot ?? undefined,
         );
 
         setRecord(next);

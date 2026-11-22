@@ -6,6 +6,7 @@ import ApplicantStatusIcon from "@/features/employer-applicants/components/Appli
 import { applicantStatusConfig } from "@/features/employer-applicants/statuses";
 import type { Applicant, ApplicantStatus } from "@/features/employer-applicants/types";
 import { jobTypeOptions, useApplicantPipeline } from "@/features/employer-applicants/hooks/useApplicantPipeline";
+import { useEmployerStatus } from "@/features/employer-registration/useEmployerStatus";
 
 function StatusPill({ status }: { status: ApplicantStatus }) {
   return (
@@ -51,6 +52,7 @@ function ApplicantRow({ applicant }: { applicant: Applicant }) {
 }
 
 export default function ApplicantPipelinePageContent() {
+  const { employer } = useEmployerStatus();
   const { applicants, isLoading, isLoadingMore, error, total, hasMore, retry, loadMore, jobTypeFilter, setJobTypeFilter, statusFilter, setStatusFilter, search, setSearch, visibleApplicants, countByStatus, applicantStatuses } = useApplicantPipeline();
 
   if (isLoading) {
@@ -66,7 +68,9 @@ export default function ApplicantPipelinePageContent() {
       <main className="mx-auto w-full max-w-284 flex-1 px-10 py-6 max-[920px]:px-6 max-[680px]:px-4 max-[680px]:py-5">
         <header className="relative isolate mb-5 flex flex-col gap-3 py-5 before:absolute before:inset-y-0 before:left-1/2 before:-z-10 before:w-screen before:-translate-x-1/2 before:border-b before:border-[#deeeeb] before:bg-[radial-gradient(ellipse_at_77%_0%,rgba(194,236,228,0.56),transparent_44%),linear-gradient(112deg,#f0faf8_0%,#e8f7f4_53%,#e4f5f2_100%)] md:flex-row md:items-end md:justify-between">
           <div>
-            <p className="text-[9px] font-semibold text-[#188783]">Maya Philippines</p>
+            {employer?.companyName ? (
+              <p className="text-[9px] font-semibold text-[#188783]">{employer.companyName}</p>
+            ) : null}
             <h1 className="mt-2 text-[25px] font-bold leading-tight text-[#263638] max-[600px]:text-[22px]">Applicants</h1>
             <p className="mt-1 text-[11px] text-[#849293]">Review applicant profiles, submitted documents, and hiring progress.</p>
           </div>

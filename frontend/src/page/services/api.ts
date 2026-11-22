@@ -8,7 +8,8 @@ import type {
 // Not wired up yet: the hooks still use mock data. When your backend exists,
 // call these from the hooks (useEffect + setState) instead of reading data/mock.ts.
 
-const BASE_URL = import.meta.env.VITE_API_URL ?? "http://localhost:8000/api";
+const BASE_URL =
+  import.meta.env.VITE_API_BASE_URL ?? "http://192.168.254.125:8000/api";
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${BASE_URL}${path}`, {

@@ -134,6 +134,13 @@ function formatInterviewSchedule(details: NonNullable<Application["interviewSche
   return `${displayDate} · ${displayTime} ${details.timezone}`;
 }
 
+function formatApplicationDate(value: string): string {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime())
+    ? "Date unavailable"
+    : new Intl.DateTimeFormat("en-US", { dateStyle: "medium" }).format(date);
+}
+
 export function ApplicationDetailPanel({
   application,
   onClose,
@@ -169,6 +176,29 @@ export function ApplicationDetailPanel({
             Close
           </button>
         </div>
+        {application.status === "Rejected" && (
+          <section
+            aria-label="Rejection feedback and reapplication date"
+            className="mt-3 rounded-lg border border-[#f1d8d5] bg-[#fff7f6] p-3 text-[#875d5a]"
+          >
+            <h3 className="text-[9px] font-bold">Employer feedback</h3>
+            <p className="mt-1 text-[9px] leading-4">
+              {application.rejectionReason || "The employer did not provide additional feedback."}
+            </p>
+            {application.rejectedAt && (
+              <p className="mt-1 text-[9px]">
+                Rejected on {formatApplicationDate(application.rejectedAt)}.
+              </p>
+            )}
+            {application.reapplyAvailableAt && (
+              <p className="mt-1 text-[9px] font-semibold">
+                {application.reapplicationAllowed
+                  ? `You may reapply to this listing now (eligible since ${formatApplicationDate(application.reapplyAvailableAt)}).`
+                  : `You may reapply to this listing on ${formatApplicationDate(application.reapplyAvailableAt)}.`}
+              </p>
+            )}
+          </section>
+        )}
         <h2 className="mt-3 text-[15px] font-bold text-[#2b3e3f]">
           {application.title}
         </h2>

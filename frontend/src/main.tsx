@@ -14,6 +14,7 @@ import RequireRole from "@/features/auth/RequireRole";
 import RequireEmployerStatus from "@/features/employer-registration/RequireEmployerStatus";
 import EmployerRoutePlaceholder from "@/features/employer-registration/components/EmployerRoutePlaceholder";
 import CategoriesPage from "@/page/admin/CategoryCard";
+import ApplicantIdentityVerificationPage from "@/page/admin/ApplicantIdentityVerificationPage";
 import ReportsPage from "@/page/admin/ReportsPage";
 import UsersPage from "@/page/admin/StatCard";
 import VerificationPage from "@/page/admin/VerificationPage";
@@ -23,6 +24,7 @@ import {
   CompanyProfilePage,
   EmployerApplicantsPage,
   EmployerApplicantDetailPage,
+  EmployerApprovalPage,
   EmployerCompanyProfilePage,
   EmployerCompanyInformationPage,
   EmployerHiringSetupPage,
@@ -77,6 +79,7 @@ createRoot(document.getElementById("root")!).render(
               </RequireGuest>
             }
           />
+          <Route path="/employer/approved" element={<EmployerApprovalPage />} />
           <Route
             path="/employer/verify-email"
             element={
@@ -98,7 +101,9 @@ createRoot(document.getElementById("root")!).render(
             element={
               <RequireAuth>
                 <RequireRole role="employer">
-                  <EmployerCompanyInformationPage />
+                  <RequireEmployerStatus access="verification">
+                    <EmployerCompanyInformationPage />
+                  </RequireEmployerStatus>
                 </RequireRole>
               </RequireAuth>
             }
@@ -120,8 +125,8 @@ createRoot(document.getElementById("root")!).render(
             element={
               <RequireEmployerStatus access="under-review">
                 <EmployerRoutePlaceholder
-                  title="Your company is under review"
-                  description="A CareerConnect administrator is reviewing your submitted company documents. Verification usually takes 1 to 2 business days. You will keep access to this status page while the review is pending."
+                  title="Company verification pending approval"
+                  description="Your verification request was submitted successfully. A CareerConnect administrator is reviewing your documents. You will be notified here when a decision is made."
                 />
               </RequireEmployerStatus>
             }
@@ -214,6 +219,7 @@ createRoot(document.getElementById("root")!).render(
             <Route index element={<ReportsPage />} />
             <Route path="reports" element={<ReportsPage />} />
             <Route path="verifications" element={<VerificationPage />} />
+            <Route path="applicant-verifications" element={<ApplicantIdentityVerificationPage />} />
             <Route path="categories" element={<CategoriesPage />} />
             <Route path="users" element={<UsersPage />} />
           </Route>

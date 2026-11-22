@@ -18,6 +18,9 @@ function formatAppliedAt(value: string | null): string {
 
 function toApplication(record: ApplicantApplicationRecord): Application {
   const company = record.listing?.company_name ?? "Company unavailable";
+  const rejection = [...record.status_history]
+    .reverse()
+    .find((history) => history.status === "rejected");
   return {
     id: record.id,
     jobListingId: record.listing ? String(record.listing.id) : undefined,
@@ -27,10 +30,16 @@ function toApplication(record: ApplicantApplicationRecord): Application {
     appliedAt: formatAppliedAt(record.applied_at),
     status: applicationStatusLabel(record.status),
     track: record.listing?.listing_type === "ojt" ? "OJT" : "Job",
+    rejectionReason: rejection?.public_reason ?? undefined,
+    rejectedAt: record.rejected_at ?? rejection?.created_at ?? undefined,
+    reapplyAvailableAt: record.reapply_available_at ?? undefined,
+    reapplicationAllowed: record.reapplication_allowed,
     hiredAt: record.hired_at ?? undefined,
     employmentEndedAt: record.employment_ended_at,
     resumeFileName: record.resume?.original_filename,
-    coverLetterFileName: record.cover_letter ? "Cover letter submitted" : undefined,
+    coverLetterFileName:
+      record.cover_letter_document?.original_filename ??
+      (record.cover_letter ? "Cover letter submitted" : undefined),
   };
 }
 

@@ -1,3 +1,6 @@
+import { useId, useRef } from "react";
+import { useDialogBehavior } from "@/hooks/useDialogBehavior";
+
 type CreateListingModalProps = {
   companyName: string;
   isOpen: boolean;
@@ -30,6 +33,7 @@ type CreateListingModalProps = {
   onBack: () => void;
   onFieldChange: (field: keyof CreateListingModalProps["newListingForm"], value: string) => void;
   onSaveDraft: () => void;
+  onPublish: () => void;
 };
 
 export default function CreateListingModal({
@@ -47,13 +51,30 @@ export default function CreateListingModal({
   onBack,
   onFieldChange,
   onSaveDraft,
+  onPublish,
 }: CreateListingModalProps) {
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const titleId = useId();
+  useDialogBehavior(dialogRef, isOpen, onClose);
+
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#3c4f53]/40 px-4 backdrop-blur-[1px]">
-      <div className="w-full max-w-[680px] overflow-hidden rounded-[18px] border border-[#dfeae8] bg-[#f4f8f8] shadow-[0_30px_80px_rgba(24,48,51,0.22)]">
-        <div className="flex items-center justify-between border-b border-[#edf2f0] bg-[#f7fbfa] px-5 py-3">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto overscroll-contain bg-[#3c4f53]/40 p-4 backdrop-blur-[1px] max-[600px]:p-3"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) onClose();
+      }}
+    >
+      <div
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        tabIndex={-1}
+        className="my-auto flex max-h-[calc(100dvh-2rem)] w-full max-w-[680px] flex-col overflow-hidden rounded-[18px] border border-[#dfeae8] bg-[#f4f8f8] shadow-[0_30px_80px_rgba(24,48,51,0.22)] max-[600px]:max-h-[calc(100dvh-1.5rem)]"
+      >
+        <div className="flex shrink-0 items-center justify-between border-b border-[#edf2f0] bg-[#f7fbfa] px-5 py-3">
           <div className="flex items-center gap-2">
             <span className="grid h-6 w-6 place-items-center rounded-md bg-[#dff4ef] text-[11px] font-bold text-[#0d8fa2]">
               {newListingType ? "2" : "1"}
@@ -62,16 +83,16 @@ export default function CreateListingModal({
               {newListingType ? `Step ${newListingStep} of 2` : "New listing"}
             </span>
           </div>
-          <button type="button" onClick={onClose} className="text-[11px] font-medium text-[#5c7174] transition hover:text-[#1e3437]">
+          <button type="button" data-dialog-initial onClick={onClose} className="text-[11px] font-medium text-[#5c7174] transition hover:text-[#1e3437]">
             Close
           </button>
         </div>
 
-        <div className="px-5 pb-5 pt-4 text-[#1d3133]">
+        <div className="min-h-0 overflow-y-auto overscroll-contain px-5 pb-5 pt-4 text-[#1d3133] [-webkit-overflow-scrolling:touch]">
           {newListingStep === 1 ? (
             <>
               <div className="mb-4">
-                <h2 className="text-[15px] font-bold tracking-[-0.04em] text-[#1d3133]">What are you hiring for?</h2>
+                <h2 id={titleId} className="text-[15px] font-bold tracking-[-0.04em] text-[#1d3133]">What are you hiring for?</h2>
                 <p className="mt-1 text-[11px] text-[#667a7d]">Start with {companyName}&apos;s saved employer setup.</p>
               </div>
 
@@ -115,8 +136,8 @@ export default function CreateListingModal({
           ) : (
             <>
               <div className="mb-4">
-                <h2 className="text-[15px] font-bold tracking-[-0.04em] text-[#1d3133]">{modalTitle}</h2>
-                <p className="mt-1 text-[11px] text-[#677c7d]">Review the prefilled company details and save your listing as a draft.</p>
+                <h2 id={titleId} className="text-[15px] font-bold tracking-[-0.04em] text-[#1d3133]">{modalTitle}</h2>
+                <p className="mt-1 text-[11px] text-[#677c7d]">Review the details, then save privately as a draft or publish it for applicants to find. Publishing requires an approved company.</p>
               </div>
               <div className="grid gap-4 md:grid-cols-2">
                 <label className="block text-[11px] font-medium text-[#445a5d]">
@@ -132,7 +153,7 @@ export default function CreateListingModal({
                 </label>
                 <label className="block text-[11px] font-medium text-[#445a5d]">
                   <span className="mb-1.5 block">Location *</span>
-                  <input value={newListingForm.location} onChange={(event) => onFieldChange("location", event.target.value)} placeholder="BGC, Taguig City" className="w-full rounded-xl border border-[#dfe8e7] bg-white px-3 py-2.5 text-[12px] text-[#1d3133] placeholder:text-[#8a9b9d] outline-none transition focus:border-[#b8dde0]" />
+                  <input value={newListingForm.location} onChange={(event) => onFieldChange("location", event.target.value)} placeholder="Enter work location" className="w-full rounded-xl border border-[#dfe8e7] bg-white px-3 py-2.5 text-[12px] text-[#1d3133] placeholder:text-[#8a9b9d] outline-none transition focus:border-[#b8dde0]" />
                 </label>
                 <label className="block text-[11px] font-medium text-[#445a5d]">
                   <span className="mb-1.5 block">Work setup *</span>
@@ -218,8 +239,11 @@ export default function CreateListingModal({
                   <button type="button" onClick={onClose} className="rounded-xl border border-[#dfe8e7] bg-white px-3 py-2 text-[11px] font-semibold text-[#4a6467] transition hover:border-[#d0e2e0]">
                     Cancel
                   </button>
-                  <button type="button" disabled={isSaving} onClick={onSaveDraft} className="rounded-xl bg-[#0e8e9b] px-4 py-2.5 text-[11px] font-semibold text-white shadow-[0_10px_18px_rgba(14,142,155,0.2)] transition hover:bg-[#0a7d8a] disabled:opacity-50">
+                  <button type="button" disabled={isSaving} onClick={onSaveDraft} className="rounded-xl border border-[#dfe8e7] bg-white px-3 py-2.5 text-[11px] font-semibold text-[#4a6467] transition hover:border-[#d0e2e0] disabled:opacity-50">
                     {isSaving ? "Saving…" : "Save as draft"}
+                  </button>
+                  <button type="button" disabled={isSaving} onClick={onPublish} className="rounded-xl bg-[#0e8e9b] px-4 py-2.5 text-[11px] font-semibold text-white shadow-[0_10px_18px_rgba(14,142,155,0.2)] transition hover:bg-[#0a7d8a] disabled:opacity-50">
+                    {isSaving ? "Saving…" : "Publish listing"}
                   </button>
                 </div>
               </div>

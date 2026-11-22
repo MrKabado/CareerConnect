@@ -26,7 +26,14 @@ export default function OjtStep7({ answers, onEdit }: OjtStep7Props) {
         ["Course / program", answers.course],
         ["Year level", answers.yearLevel],
         ["Required OJT hours", answers.requiredOjtHours],
-        ["MOA required", answers.requiresMoa ? "Yes" : "No"],
+        [
+          "MOA required",
+          answers.requiresMoa === null
+            ? "Not provided"
+            : answers.requiresMoa
+              ? "Yes"
+              : "No",
+        ],
       ],
     },
     {

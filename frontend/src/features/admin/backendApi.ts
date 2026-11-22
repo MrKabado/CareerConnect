@@ -16,6 +16,11 @@ export type AdminUserRecord = {
   role: "admin" | "employer" | "applicant";
   account_status: "active" | "deactivated" | "inactive";
   created_at: string | null;
+  identity_verification: {
+    status: "pending" | "verified" | "rejected";
+    rejection_reason: string | null;
+    created_at: string | null;
+  } | null;
 };
 
 export type AdminCategoryRecord = {
@@ -36,12 +41,29 @@ export type AdminActivityRecord = {
   created_at: string | null;
 };
 
+export type AdminIdentityVerificationRecord = {
+  id: number;
+  applicant: { id: number; name: string; email: string };
+  status: "pending" | "verified" | "rejected";
+  rejection_reason: string | null;
+  submitted_at: string | null;
+  reviewed_at: string | null;
+};
+
+export type AdminIdentityVerificationDetails = AdminIdentityVerificationRecord & {
+  applicant: AdminIdentityVerificationRecord["applicant"] & {
+    city: string | null;
+    phone: string | null;
+  };
+};
+
 type Paginated<T> = {
   data: T[];
   current_page: number;
   last_page: number;
   per_page: number;
   total: number;
+  features: { delete_users: boolean };
 };
 
 export const adminApi = {
@@ -65,6 +87,14 @@ export const adminApi = {
     return apiRequest<{ message: string; user: { id: number; account_status: string } }>(
       `/admin/users/${id}/status`,
       { method: "PATCH", data: { account_status: active ? "active" : "deactivated" } },
+      token,
+    );
+  },
+
+  deleteUser(token: string, id: string, confirmationEmail: string) {
+    return apiRequest<{ message: string }>(
+      `/admin/users/${id}`,
+      { method: "DELETE", data: { confirmation_email: confirmationEmail } },
       token,
     );
   },
@@ -136,6 +166,52 @@ export const adminApi = {
   companyVerificationDocument(token: string, verificationId: string, documentId: string) {
     return apiBlob(
       `/admin/company-verifications/${verificationId}/documents/${documentId}`,
+      token,
+    );
+  },
+
+  applicantIdentityVerifications(
+    token: string,
+    status: "all" | "pending" | "verified" | "rejected" = "pending",
+    page = 1,
+  ) {
+    return apiRequest<{
+      data: AdminIdentityVerificationRecord[];
+      meta: { current_page: number; last_page: number; per_page: number; total: number };
+    }>(
+      "/admin/identity-verifications",
+      { params: { status, page, per_page: 50 } },
+      token,
+    );
+  },
+
+  applicantIdentityVerification(token: string, id: number) {
+    return apiRequest<{ data: AdminIdentityVerificationDetails }>(
+      `/admin/identity-verifications/${id}`,
+      {},
+      token,
+    );
+  },
+
+  applicantIdentityVerificationDocument(token: string, id: number) {
+    return apiBlob(`/admin/identity-verifications/${id}/document`, token);
+  },
+
+  reviewApplicantIdentityVerification(
+    token: string,
+    id: number,
+    status: "verified" | "rejected",
+    rejectionReason?: string,
+  ) {
+    return apiRequest<{ message: string; status: "verified" | "rejected" }>(
+      `/admin/identity-verifications/${id}/review`,
+      {
+        method: "POST",
+        data: {
+          status,
+          ...(rejectionReason ? { rejection_reason: rejectionReason } : {}),
+        },
+      },
       token,
     );
   },

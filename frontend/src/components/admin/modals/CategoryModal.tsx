@@ -78,7 +78,7 @@ export default function CategoryModal({
           </div>
         </div>
 
-        <div className="flex justify-end gap-3 px-10 pb-8 pt-4">
+        <div className="sticky bottom-0 flex shrink-0 justify-end gap-3 border-t border-line bg-white px-6 py-4">
           <Button variant="outline" className="h-12 rounded-[14px] px-6 text-[15px]" onClick={onClose}>
             Cancel
           </Button>

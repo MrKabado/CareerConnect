@@ -4,7 +4,15 @@ export type ApplicantApplicationRecord = {
   id: number;
   status: "pending" | "reviewing" | "shortlisted" | "interview" | "hired" | "rejected";
   cover_letter: string | null;
+  cover_letter_document?: {
+    original_filename: string;
+    mime_type: string;
+    file_size: number;
+  } | null;
   applied_at: string | null;
+  rejected_at: string | null;
+  reapply_available_at: string | null;
+  reapplication_allowed: boolean;
   hired_at: string | null;
   employment_ended_at: string | null;
   listing: {
@@ -40,12 +48,14 @@ export const applicantApplicationsApi = {
     );
   },
 
-  submit(token: string, listingId: number, coverLetter?: string) {
+  submit(token: string, listingId: number, coverLetterDocumentId?: number) {
     return apiRequest<{ message: string; data: ApplicantApplicationRecord }>(
       `/jobs/${listingId}/applications`,
       {
         method: "POST",
-        data: coverLetter?.trim() ? { cover_letter: coverLetter.trim() } : {},
+        data: coverLetterDocumentId
+          ? { cover_letter_document_id: coverLetterDocumentId }
+          : {},
       },
       token,
     );

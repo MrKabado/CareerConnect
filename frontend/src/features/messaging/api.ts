@@ -1,5 +1,4 @@
 import { applicationStore, type ApplicationStatus } from "@/features/applications/applicationData";
-import { applicantSeedData } from "@/features/employer-applicants/data";
 import { employerRegistrationApi } from "@/features/employer-registration/api";
 import type {
   Conversation,
@@ -83,7 +82,29 @@ function readState(): StoredMessagingState {
     if (!isStoredMessagingState(parsed)) {
       throw createError("storage_corrupt", "Saved messaging data is invalid.");
     }
-    return parsed;
+    const legacyConversationIds = new Set(
+      parsed.conversations
+        .filter((conversation) =>
+          conversation.conversationId === "conversation-maya-jamie-demo" ||
+          conversation.applicationId === "employer-applicant-jamie-dela-cruz",
+        )
+        .map((conversation) => conversation.conversationId),
+    );
+    const messages = { ...parsed.messages };
+    legacyConversationIds.forEach((conversationId) => delete messages[conversationId]);
+    const applicationStatuses = { ...parsed.applicationStatuses };
+    delete applicationStatuses["employer-applicant-jamie-dela-cruz"];
+    return {
+      ...parsed,
+      conversations: parsed.conversations.filter(
+        (conversation) => !legacyConversationIds.has(conversation.conversationId),
+      ),
+      messages,
+      notifications: parsed.notifications.filter(
+        (notification) => !legacyConversationIds.has(notification.conversationId),
+      ),
+      applicationStatuses,
+    };
   } catch (error) {
     if (error instanceof MessagingError) throw error;
     throw createError("storage_corrupt", "Saved messaging data could not be read.");
@@ -182,64 +203,6 @@ function notifyParticipant(
   createdAt: string,
 ): void {
   state.notifications.unshift(nextNotification(conversation, recipientId, type, preview, createdAt));
-}
-
-function ensureMayaDemoConversation(state: StoredMessagingState, actor: MessagingActor): boolean {
-  if (
-    !import.meta.env.DEV ||
-    actor.role !== "applicant" ||
-    (normalizedEmail(actor.email) !== "jamie.delacruz@example.com" &&
-      actor.name.trim().toLocaleLowerCase() !== "jamie dela cruz") ||
-    state.conversations.some((conversation) =>
-      conversation.applicationId === "employer-applicant-jamie-dela-cruz",
-    )
-  ) {
-    return false;
-  }
-
-  const createdAt = new Date().toISOString();
-  const conversationId = "conversation-maya-jamie-demo";
-  const employerId = "maya-philippines-demo";
-  const applicantId = normalizedEmail(actor.email);
-  const body =
-    "Hi Jamie, thanks for applying for the Frontend Developer role at Maya Philippines. We’d love to talk about your experience. Are you available for a short interview this week?";
-  const conversation: Conversation = {
-    conversationId,
-    applicationId: "employer-applicant-jamie-dela-cruz",
-    listingId: "employer-applicant-jamie-dela-cruz",
-    employerId,
-    applicantId,
-    employerName: "Maya Philippines",
-    companyName: "Maya Philippines",
-    companyInitial: "M",
-    employerVerified: true,
-    applicantName: actor.name,
-    role: "Frontend Developer",
-    status: "open",
-    createdAt,
-    updatedAt: createdAt,
-    lastMessagePreview: body,
-    lastMessageAt: createdAt,
-    lastMessageSenderId: employerId,
-    mutedBy: [],
-    blockedBy: null,
-  };
-  const message: Message = {
-    id: "message-maya-jamie-demo",
-    conversationId,
-    senderId: employerId,
-    senderRole: "employer",
-    senderName: "Maya Philippines",
-    body,
-    kind: "text",
-    createdAt,
-    readBy: [employerId],
-  };
-
-  state.conversations.unshift(conversation);
-  state.messages[conversationId] = [message];
-  notifyParticipant(state, conversation, applicantId, "message", body, createdAt);
-  return true;
 }
 
 function notifyUpdatedConversation(conversation: Conversation, type: "conversation_created" | "conversation_updated" | "message_created" | "notification_updated"): void {
@@ -374,30 +337,7 @@ function getApplicationMessagingDetails(
     };
   }
 
-  const seededApplicant = applicantSeedData.find((applicant) => applicant.id === requestedApplicationId);
-  if (!seededApplicant || actor.companyName?.trim().toLocaleLowerCase() !== "maya philippines") {
-    throw createError("application_not_found", "This application could not be found.");
-  }
-
-  const applicantStatuses: Record<string, ApplicationStatus> = {
-    applied: "Applied",
-    under_review: "Under Review",
-    shortlisted: "Shortlisted",
-    interview_scheduled: "Interview Scheduled",
-    offer_extended: "Interview Scheduled",
-    hired: "Hired",
-    rejected: "Rejected",
-  };
-  return {
-    applicationId: requestedApplicationId,
-    listingId: `employer-applicant-${requestedApplicationId}`,
-    companyName: actor.companyName,
-    companyInitial: actor.companyName.slice(0, 1).toUpperCase(),
-    role: seededApplicant.role,
-    applicantName: seededApplicant.name,
-    applicantEmail: seededApplicant.email,
-    status: applicantStatuses[seededApplicant.status] ?? "Applied",
-  };
+  throw createError("application_not_found", "This application could not be found.");
 }
 
 export async function getConversationForApplication(
@@ -495,7 +435,6 @@ export async function listConversations(actor: MessagingActor): Promise<Conversa
   requireActor(actor);
   const participantId = canonicalParticipantId(actor);
   const state = readState();
-  if (ensureMayaDemoConversation(state, actor)) writeState(state);
   return state.conversations
     .filter((conversation) =>
       actor.role === "employer"
@@ -563,7 +502,6 @@ export async function listNotifications(actor: MessagingActor): Promise<Notifica
   requireActor(actor);
   const participantId = canonicalParticipantId(actor);
   const state = readState();
-  if (ensureMayaDemoConversation(state, actor)) writeState(state);
   return state.notifications
     .filter((notification) => notification.recipientId === participantId)
     .sort((left, right) => right.createdAt.localeCompare(left.createdAt));
@@ -756,14 +694,7 @@ export function getApplicantMessagingActor(
   user: AuthenticatedMessagingUser | null,
 ): MessagingActor | null {
   if (user && user.role === "applicant") return getMessagingActor(user);
-  if (user || !import.meta.env.DEV) return null;
-
-  return {
-    id: "demo-jamie-dela-cruz",
-    name: "Jamie Dela Cruz",
-    email: "jamie.delacruz@example.com",
-    role: "applicant",
-  };
+  return null;
 }
 
 export function getEmployerMessagingActor(

@@ -10,7 +10,9 @@ class ApplicantOjtDetail extends Model
     protected $fillable = [
         'school',
         'course',
+        'education_status',
         'year_level',
+        'graduation_year',
         'required_hours',
         'preferred_start_date',
         'allowance_preference',
@@ -21,6 +23,7 @@ class ApplicantOjtDetail extends Model
     {
         return [
             'year_level' => 'integer',
+            'graduation_year' => 'integer',
             'required_hours' => 'integer',
             'preferred_start_date' => 'date',
             'requires_moa' => 'boolean',

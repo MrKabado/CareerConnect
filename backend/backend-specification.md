@@ -31,8 +31,8 @@ Employers register a company, submit verification documents, and, once an admin 
 
 ```
 Browser
- ├── http://localhost:5173  →  React + TypeScript (Vite dev server)
- └── http://localhost:8000  →  Nginx → PHP-FPM (Laravel API) → MySQL (Docker-internal)
+ ├── http://192.168.254.125:5173  →  React + TypeScript (Vite dev server)
+ └── http://192.168.254.125:8000  →  Nginx → PHP-FPM (Laravel API) → MySQL (Docker-internal)
 ```
 
 | Layer | Choice |
@@ -44,7 +44,7 @@ Browser
 | Files | Laravel filesystem: private disk for documents, public disk for logos and photos |
 | Infrastructure | Docker Compose: `app`, `web`, `db`, `frontend`, and `phpmyadmin` (tools file) |
 
-The browser calls the API directly, so the API base URL in React is `http://localhost:8000/api`, never a Docker service name.
+The browser calls the API directly, so the API base URL in React is `http://192.168.254.125:8000/api`, never a Docker service name.
 
 ---
 

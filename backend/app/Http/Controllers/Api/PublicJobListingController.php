@@ -4,11 +4,13 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Http\Resources\JobListingResource;
+use App\Models\Company;
 use App\Models\JobListing;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 
 class PublicJobListingController extends Controller
@@ -19,6 +21,7 @@ class PublicJobListingController extends Controller
             'keyword' => ['sometimes', 'string', 'max:120'],
             'category_id' => ['sometimes', 'integer', 'exists:categories,id'],
             'location' => ['sometimes', 'string', 'max:255'],
+            'company_slug' => ['sometimes', 'string', 'max:255'],
             'listing_type' => ['sometimes', Rule::in(['job', 'ojt'])],
             'employment_type' => ['sometimes', Rule::in(['full_time', 'part_time', 'contract'])],
             'work_setup' => ['sometimes', Rule::in(['onsite', 'hybrid', 'remote'])],
@@ -44,6 +47,12 @@ class PublicJobListingController extends Controller
         });
 
         $filters = $validator->validate();
+        $companyIds = isset($filters['company_slug'])
+            ? Company::query()
+                ->get(['id', 'name'])
+                ->filter(fn (Company $company): bool => Str::slug($company->name) === $filters['company_slug'])
+                ->pluck('id')
+            : null;
 
         $listings = JobListing::query()
             ->publiclyVisible()
@@ -63,6 +72,7 @@ class PublicJobListingController extends Controller
             })
             ->when(isset($filters['category_id']), fn (Builder $query): Builder => $query->where('category_id', $filters['category_id']))
             ->when(isset($filters['location']), fn (Builder $query): Builder => $query->where('location', 'like', '%'.$filters['location'].'%'))
+            ->when($companyIds !== null, fn (Builder $query): Builder => $query->whereIn('company_id', $companyIds))
             ->when(isset($filters['listing_type']), fn (Builder $query): Builder => $query->where('listing_type', $filters['listing_type']))
             ->when(isset($filters['employment_type']), fn (Builder $query): Builder => $query->where('employment_type', $filters['employment_type']))
             ->when(isset($filters['work_setup']), fn (Builder $query): Builder => $query->where('work_setup', $filters['work_setup']))

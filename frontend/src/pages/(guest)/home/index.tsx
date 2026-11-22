@@ -1,11 +1,84 @@
+import { useEffect, useState } from "react";
 import { Link } from "react-router";
 import { onboardingStore } from "@/features/onboarding/store";
+import { useAuth } from "@/features/auth/useAuth";
+import { employerVerificationFilesApi } from "@/features/employer-verification/backendApi";
 
 export default function HomePage() {
   const hasSavedDraft = onboardingStore.getSnapshot().accountCreated;
+  const { user, token, status: authStatus } = useAuth();
+  const [employerVerificationState, setEmployerVerificationState] = useState<{
+    userId: number;
+    pending: boolean;
+    error: string | null;
+  } | null>(null);
+  const isAuthenticatedEmployer =
+    authStatus === "authenticated" && user?.role === "employer" && Boolean(token);
+
+  useEffect(() => {
+    if (!isAuthenticatedEmployer || !token || !user) return;
+
+    let active = true;
+    employerVerificationFilesApi
+      .status(token)
+      .then((response) => {
+        if (active) {
+          setEmployerVerificationState({
+            userId: user.id,
+            pending: response.status === "pending",
+            error: null,
+          });
+        }
+      })
+      .catch((requestError: unknown) => {
+        if (active) {
+          setEmployerVerificationState({
+            userId: user.id,
+            pending: false,
+            error:
+              requestError instanceof Error
+                ? requestError.message
+                : "Unable to load your company verification status.",
+          });
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [isAuthenticatedEmployer, token, user]);
+
+  const hasCurrentEmployerStatus =
+    isAuthenticatedEmployer && employerVerificationState?.userId === user?.id;
 
   return (
     <main className="bg-[#f5f8f8] px-4 py-12 text-[#263a3c] sm:px-6 sm:py-16">
+      {hasCurrentEmployerStatus && employerVerificationState.pending && (
+        <section
+          aria-live="polite"
+          className="mx-auto mb-6 max-w-6xl rounded-2xl border border-[#f1dfb8] bg-[#fff9eb] p-5 text-[#6b542b]"
+          role="status"
+        >
+          <h2 className="text-sm font-bold">Company verification under review</h2>
+          <p className="mt-1 text-sm leading-6">
+            Your company verification request is pending approval. The status is saved to your employer account, and employer features will remain unavailable until a decision is made.
+          </p>
+          <Link
+            className="mt-2 inline-block text-sm font-semibold underline underline-offset-2"
+            to="/employer/under-review"
+          >
+            View verification status
+          </Link>
+        </section>
+      )}
+      {hasCurrentEmployerStatus && employerVerificationState.error && (
+        <p
+          className="mx-auto mb-6 max-w-6xl rounded-xl border border-[#f1d8d5] bg-[#fff7f6] p-4 text-sm text-[#9b4e48]"
+          role="alert"
+        >
+          {employerVerificationState.error}
+        </p>
+      )}
       <section className="mx-auto grid max-w-6xl items-center gap-10 rounded-3xl border border-[#e6eeee] bg-white px-6 py-10 sm:px-10 lg:grid-cols-[1.2fr_0.8fr] lg:px-14 lg:py-16">
         <div>
           <p className="text-xs font-bold uppercase tracking-[0.16em] text-[#078b8d]">

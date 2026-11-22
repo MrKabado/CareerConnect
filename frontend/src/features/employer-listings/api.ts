@@ -39,57 +39,14 @@ function writeListingStore(store: Record<string, { id: string; onboarding?: { co
 }
 
 function buildDefaultSnapshot(listingId: string): DefaultsSnapshot {
-  const map: Record<string, DefaultsSnapshot> = {
-    "frontend-developer": {
-      hiringFor: "Job",
-      defaultWorkspace: "BGC, Taguig City",
-      schoolPartnerships: "Open to software engineering students and graduates.",
-      acceptedCourses: ["Computer Science", "Information Technology", "Software Engineering"],
-      listingType: "Job",
-    },
-    "software-engineer": {
-      hiringFor: "OJT",
-      defaultWorkspace: "BGC, Taguig City",
-      schoolPartnerships: "Open to software engineering students and graduates.",
-      acceptedCourses: ["Computer Science", "Information Technology", "Software Engineering"],
-      listingType: "OJT",
-    },
-    "customer-experience-specialist": {
-      hiringFor: "Job",
-      defaultWorkspace: "Quezon City",
-      schoolPartnerships: "Open to customer support and communications graduates.",
-      acceptedCourses: ["Communications", "Business Administration", "Psychology"],
-      listingType: "Job",
-    },
-    "product-designer": {
-      hiringFor: "Job",
-      defaultWorkspace: "Remote",
-      schoolPartnerships: "Open to design students and recent graduates.",
-      acceptedCourses: ["Design Communication", "Multimedia Arts", "Human-Centered Design"],
-      listingType: "Job",
-    },
-    "finance-operations-trainee": {
-      hiringFor: "OJT",
-      defaultWorkspace: "Makati City",
-      schoolPartnerships: "Open to finance, accounting, and business students.",
-      acceptedCourses: ["Accounting", "Finance", "Business Administration"],
-      listingType: "OJT",
-    },
-    "data-analyst": {
-      hiringFor: "Job",
-      defaultWorkspace: "Remote",
-      schoolPartnerships: "Open to analytics, business, and computer science graduates.",
-      acceptedCourses: ["Analytics", "Statistics", "Computer Science"],
-      listingType: "Job",
-    },
-  };
-
-  return map[listingId] ?? {
-    hiringFor: "Job",
-    defaultWorkspace: "BGC, Taguig City",
-    schoolPartnerships: "Open to relevant graduates and students.",
-    acceptedCourses: ["Business Administration", "Computer Science"],
-    listingType: "Job",
+  const listing = getEmployerListingsSnapshot().find((item) => item.id === listingId);
+  const listingType = listing?.type ?? "Job";
+  return {
+    hiringFor: listing?.hiring.type ?? "",
+    defaultWorkspace: listing?.hiring.workspace ?? "",
+    schoolPartnerships: listing?.hiring.schoolPartnerships ?? "",
+    acceptedCourses: [],
+    listingType,
   };
 }
 
@@ -131,8 +88,8 @@ export async function getListingOnboarding(listingId: string): Promise<ListingOn
 
 export async function confirmOnboarding(
   listingId: string,
+  confirmedBy: string,
   defaultsSnapshot?: DefaultsSnapshot,
-  confirmedBy = "Maya Philippines",
 ): Promise<ListingOnboarding> {
   await wait();
 

@@ -19,6 +19,7 @@ import {
 } from "@/features/jobs/ojtMatching";
 import { getCompanyProfileUrl } from "@/features/companies/companyProfiles";
 import { savedOpportunityStore } from "@/features/jobs/savedOpportunities";
+import { loadCitiesForCountry } from "@/lib/cityData";
 import {
   LockedOjtFilters,
   OjtOpportunityCard,
@@ -187,6 +188,9 @@ export default function MainBody({
   const [jobsPage, setJobsPage] = useState(1);
   const [jobsLastPage, setJobsLastPage] = useState(1);
   const [loadingMoreJobs, setLoadingMoreJobs] = useState(false);
+  const [ojtPage, setOjtPage] = useState(1);
+  const [ojtLastPage, setOjtLastPage] = useState(1);
+  const [loadingMoreOjt, setLoadingMoreOjt] = useState(false);
   const [jobRetry, setJobRetry] = useState(0);
   const cityRequestId = useRef(0);
   const jobsRequestId = useRef(0);
@@ -242,6 +246,8 @@ export default function MainBody({
       setApiOjtOpportunities([]);
       setJobsPage(1);
       setJobsLastPage(1);
+      setOjtPage(1);
+      setOjtLastPage(1);
       try {
         const [response, ojtResponse] = await Promise.all([
           publicJobsApi.list({
@@ -266,6 +272,8 @@ export default function MainBody({
         setApiOjtOpportunities(ojtResponse.data.map(toOjtOpportunity));
         setJobsPage(response.meta.current_page);
         setJobsLastPage(response.meta.last_page);
+        setOjtPage(ojtResponse.meta.current_page);
+        setOjtLastPage(ojtResponse.meta.last_page);
       } catch (requestError) {
         if (requestId !== jobsRequestId.current) return;
         setJobsError(requestError instanceof Error ? requestError.message : "Unable to load current job listings.");
@@ -299,6 +307,36 @@ export default function MainBody({
       setJobsError(requestError instanceof Error ? requestError.message : "Unable to load more listings.");
     } finally {
       setLoadingMoreJobs(false);
+    }
+  }
+
+  async function loadMoreOjt() {
+    if (loadingMoreOjt || ojtPage >= ojtLastPage) return;
+    setLoadingMoreOjt(true);
+    setJobsError(null);
+    try {
+      const response = await publicJobsApi.list({
+        keyword: search.trim() || undefined,
+        location: selectedCity || selectedCountry?.name || undefined,
+        listing_type: "ojt",
+        work_setup: apiWorkSetup(selectedWorkSetup),
+        per_page: 50,
+        page: ojtPage + 1,
+      });
+      setApiOjtOpportunities((current) => [
+        ...current,
+        ...response.data.map(toOjtOpportunity),
+      ]);
+      setOjtPage(response.meta.current_page);
+      setOjtLastPage(response.meta.last_page);
+    } catch (requestError) {
+      setJobsError(
+        requestError instanceof Error
+          ? requestError.message
+          : "Unable to load more OJT opportunities.",
+      );
+    } finally {
+      setLoadingMoreOjt(false);
     }
   }
 
@@ -494,25 +532,9 @@ export default function MainBody({
 
     setIsLoadingCities(true);
     try {
-      const { default: citiesUrl } = await import("cities.json?url");
+      const cities = await loadCitiesForCountry(countryCode);
       if (requestId !== cityRequestId.current) return;
-
-      const response = await fetch(citiesUrl);
-      if (!response.ok) {
-        throw new Error(`Unable to load city data (${response.status}).`);
-      }
-      if (requestId !== cityRequestId.current) return;
-
-      const cities: { country: string; name: string }[] = await response.json();
-      setCityList(
-        [
-          ...new Set(
-            cities
-              .filter((city) => city.country === countryCode)
-              .map((city) => city.name),
-          ),
-        ].sort((left, right) => left.localeCompare(right)),
-      );
+      setCityList(cities);
     } catch (error) {
       if (requestId !== cityRequestId.current) return;
 
@@ -852,6 +874,18 @@ export default function MainBody({
                     ? "Complete OJT onboarding to see opportunities matched to your training field and preferred location."
                     : "Try a different search, or update your OJT preferences to explore other matches."}
                 </p>
+              </div>
+            )}
+            {ojtPage < ojtLastPage && (
+              <div className="text-center">
+                <button
+                  className="rounded-lg border border-[#dcebea] bg-white px-4 py-2 text-xs font-semibold text-[#16878b] disabled:opacity-50"
+                  disabled={loadingMoreOjt}
+                  onClick={() => void loadMoreOjt()}
+                  type="button"
+                >
+                  {loadingMoreOjt ? "Loading…" : "Load more OJT opportunities"}
+                </button>
               </div>
             )}
           </div>

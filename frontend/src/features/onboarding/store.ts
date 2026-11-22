@@ -16,7 +16,7 @@ export type OnboardingAnswers = {
   course: string;
   yearLevel: string;
   requiredOjtHours: string;
-  requiresMoa: boolean;
+  requiresMoa: boolean | null;
   trainingFields: string[];
   jobCategories: string[];
   desiredJobTitles: string[];
@@ -62,7 +62,7 @@ const initialState: OnboardingState = {
     course: "",
     yearLevel: "",
     requiredOjtHours: "",
-    requiresMoa: true,
+    requiresMoa: null,
     trainingFields: [],
     jobCategories: [],
     desiredJobTitles: [],
@@ -147,7 +147,7 @@ function isOnboardingAnswers(
     stringFields.every((field) => typeof value[field] === "string") &&
     arrayFields.every((field) => isStringArray(value[field])) &&
     typeof value.acceptedTerms === "boolean" &&
-    typeof value.requiresMoa === "boolean" &&
+    (value.requiresMoa === null || typeof value.requiresMoa === "boolean") &&
     typeof value.resumeSkipped === "boolean" &&
     (value.resumeUploadedFileName === null ||
       typeof value.resumeUploadedFileName === "string") &&

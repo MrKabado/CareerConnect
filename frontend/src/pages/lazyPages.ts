@@ -17,6 +17,9 @@ export const JobApplicationPage = lazy(() => import("@/pages/user/apply"));
 export const ApplicantMessagesPage = lazy(() => import("@/pages/user/messages"));
 export const EmployerMessagesPage = lazy(() => import("@/pages/employer/messages"));
 export const EmployerRegisterPage = lazy(() => import("@/pages/employer/register"));
+export const EmployerApprovalPage = lazy(
+  () => import("@/features/employer-registration/components/EmployerApprovalPage"),
+);
 export const EmployerVerifyEmailPage = lazy(
   () => import("@/pages/employer/verify-email"),
 );

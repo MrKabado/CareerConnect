@@ -17,7 +17,15 @@ import PublicCompanyVerificationSummary from "@/features/company-verification/co
 import { usePublicCompanyProfile } from "@/features/user-company-profile/hooks/usePublicCompanyProfile";
 
 export default function PublicCompanyProfilePageContent() {
-  const { profile, publicProfile, isEmployerProfile, verification } = usePublicCompanyProfile();
+  const {
+    profile,
+    publicProfile,
+    isEmployerProfile,
+    verification,
+    listingsLoading,
+    listingsError,
+    retryListings,
+  } = usePublicCompanyProfile();
 
   return (
     <div className="flex min-h-screen min-w-[320px] flex-col overflow-x-hidden bg-[#f5f8f8] font-sans text-[#263a3c] antialiased">
@@ -30,7 +38,12 @@ export default function PublicCompanyProfilePageContent() {
               <h2 className="text-[13px] font-bold text-[#2d4244]">Company overview</h2>
               <p className="mt-2 text-[10px] leading-5 text-[#657779]">{profile.overview}</p>
             </section>
-            <CompanyOpenRoles profile={publicProfile} />
+            <CompanyOpenRoles
+              profile={publicProfile}
+              isLoading={listingsLoading}
+              error={listingsError}
+              onRetry={retryListings}
+            />
             <CompanyLifeAt profile={publicProfile} />
             <PublicCompanyMediaGallery media={isEmployerProfile ? verification.record.media : undefined} />
           </div>

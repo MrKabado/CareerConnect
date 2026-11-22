@@ -28,6 +28,7 @@ export function useEmployerVerificationPage() {
   const [uploading, setUploading] = useState<VerificationDocumentKind | null>(null);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [uploadError, setUploadError] = useState<string | null>(null);
+  const [uploadErrorKind, setUploadErrorKind] = useState<VerificationDocumentKind | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [removing, setRemoving] = useState<string | null>(null);
@@ -62,13 +63,20 @@ export function useEmployerVerificationPage() {
 
   async function handleFileChange(kind: VerificationDocumentKind, file?: File) {
     if (!file) return;
+    if (verificationStatus === "pending" || verificationStatus === "verified") {
+      setUploadErrorKind(kind);
+      setUploadError("Documents cannot be changed while verification is pending or approved.");
+      return;
+    }
     if (!token || !employerId) {
+      setUploadErrorKind(kind);
       setUploadError("Sign in with an employer account before uploading documents.");
       return;
     }
 
     const validationError = validateEmployerVerificationFile(file);
     if (validationError) {
+      setUploadErrorKind(kind);
       setUploadError(validationError);
       return;
     }
@@ -76,6 +84,7 @@ export function useEmployerVerificationPage() {
     setUploading(kind);
     setUploadProgress(0);
     setUploadError(null);
+    setUploadErrorKind(null);
     setSubmitError(null);
     try {
       await employerVerificationFilesApi.upload(
@@ -88,6 +97,7 @@ export function useEmployerVerificationPage() {
       await refresh();
       setVerificationStatus("incomplete");
     } catch (requestError) {
+      setUploadErrorKind(kind);
       setUploadError(
         requestError instanceof Error
           ? requestError.message
@@ -100,16 +110,23 @@ export function useEmployerVerificationPage() {
   }
 
   async function handleRemove(kind: VerificationDocumentKind) {
+    if (verificationStatus === "pending" || verificationStatus === "verified") {
+      setUploadErrorKind(kind);
+      setUploadError("Documents cannot be changed while verification is pending or approved.");
+      return;
+    }
     const document = documents.find((item) => item.kind === kind);
     if (!document || !token) return;
 
     setRemoving(document.id);
     setUploadError(null);
+    setUploadErrorKind(null);
     try {
       await employerVerificationFilesApi.remove(token, document.id);
       await refresh();
       setVerificationStatus("incomplete");
     } catch (requestError) {
+      setUploadErrorKind(kind);
       setUploadError(
         requestError instanceof Error
           ? requestError.message
@@ -127,6 +144,7 @@ export function useEmployerVerificationPage() {
     }
 
     setUploadError(null);
+    setUploadErrorKind(null);
     try {
       downloadBlob(await employerVerificationFilesApi.download(token, documentId), fileName);
     } catch (requestError) {
@@ -139,6 +157,14 @@ export function useEmployerVerificationPage() {
   }
 
   async function handleSubmit() {
+    if (verificationStatus === "pending" || verificationStatus === "verified") {
+      setSubmitError(
+        verificationStatus === "pending"
+          ? "Your company verification is already pending approval."
+          : "Your company is already verified.",
+      );
+      return;
+    }
     if (!token || !employerId) {
       setSubmitError("Sign in with an employer account before submitting documents.");
       return;
@@ -149,7 +175,7 @@ export function useEmployerVerificationPage() {
     try {
       await employerVerificationFilesApi.submit(token);
       setVerificationStatus("pending");
-      navigate("/employer/under-review", { replace: true });
+      navigate("/", { replace: true });
     } catch (requestError) {
       setSubmitError(
         requestError instanceof Error
@@ -165,6 +191,9 @@ export function useEmployerVerificationPage() {
   const allDocumentsUploaded = verificationDocumentRequirements.every((item) =>
     uploadedKinds.has(item.kind),
   );
+  const requiredDocumentsCount = verificationDocumentRequirements.filter((item) =>
+    uploadedKinds.has(item.kind),
+  ).length;
 
   return {
     employer: user?.role === "employer" ? user : null,
@@ -178,10 +207,12 @@ export function useEmployerVerificationPage() {
     uploading,
     uploadProgress,
     uploadError,
+    uploadErrorKind,
     submitError,
     submitting,
     removing,
     allDocumentsUploaded,
+    requiredDocumentsCount,
     handleFileChange,
     handleRemove,
     handleDownload,

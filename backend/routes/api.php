@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Api\AdminJobListingController;
 use App\Http\Controllers\Api\AdminUserController;
+use App\Http\Controllers\Api\ApplicantDocumentController;
 use App\Http\Controllers\Api\ApplicantProfileController;
 use App\Http\Controllers\Api\ApplicantResumeController;
 use App\Http\Controllers\Api\ApplicationController;
@@ -35,6 +36,10 @@ Route::put('/companies/{companySlug}/ratings', [CompanyRatingController::class, 
     ->middleware(['auth:sanctum', 'account.active', 'abilities:*', 'role:applicant', 'throttle:60,1']);
 Route::post('/onboarding/resume', [ApplicantResumeController::class, 'store'])
     ->middleware(['auth:sanctum', 'account.active', 'abilities:onboarding:resume', 'role:applicant', 'throttle:10,1']);
+Route::put('/onboarding/profile', [ApplicantProfileController::class, 'saveOnboardingProfile'])
+    ->middleware(['auth:sanctum', 'account.active', 'abilities:onboarding:profile', 'role:applicant', 'throttle:10,1']);
+Route::post('/onboarding/complete', [ApplicantProfileController::class, 'completeOnboarding'])
+    ->middleware(['auth:sanctum', 'account.active', 'abilities:onboarding:profile', 'role:applicant', 'throttle:10,1']);
 Route::get('/jobs', [PublicJobListingController::class, 'index']);
 Route::get('/jobs/{jobListing}', [PublicJobListingController::class, 'show'])
     ->whereNumber('jobListing');
@@ -54,6 +59,12 @@ Route::middleware(['auth:sanctum', 'account.active', 'abilities:*', 'throttle:60
         Route::post('/resume', [ApplicantResumeController::class, 'store']);
         Route::delete('/resume', [ApplicantResumeController::class, 'destroy']);
         Route::get('/resume/download', [ApplicantResumeController::class, 'download']);
+        Route::get('/documents', [ApplicantDocumentController::class, 'index']);
+        Route::post('/documents', [ApplicantDocumentController::class, 'store']);
+        Route::get('/documents/{document}/download', [ApplicantDocumentController::class, 'download'])
+            ->whereNumber('document');
+        Route::delete('/documents/{document}', [ApplicantDocumentController::class, 'destroy'])
+            ->whereNumber('document');
         Route::get('/applications', [ApplicationController::class, 'applicantIndex']);
         Route::get('/applications/{application}', [ApplicationController::class, 'applicantShow'])->whereNumber('application');
         Route::get('/applications/{application}/resume', [ApplicationController::class, 'applicantResume'])
@@ -119,6 +130,8 @@ Route::middleware(['auth:sanctum', 'account.active', 'abilities:*', 'throttle:60
             ->whereNumber('interview');
         Route::get('/applications/{application}/resume', [ApplicationController::class, 'employerResume'])
             ->whereNumber('application');
+        Route::get('/applications/{application}/cover-letter', [ApplicationController::class, 'employerCoverLetter'])
+            ->whereNumber('application');
     });
 
     Route::middleware('role:employer')->group(function (): void {
@@ -158,6 +171,7 @@ Route::middleware(['auth:sanctum', 'account.active', 'abilities:*', 'throttle:60
         Route::get('/users', [AdminUserController::class, 'index']);
         Route::get('/users/{user}', [AdminUserController::class, 'show'])->whereNumber('user');
         Route::put('/users/{user}', [AdminUserController::class, 'update'])->whereNumber('user');
+        Route::delete('/users/{user}', [AdminUserController::class, 'destroy'])->whereNumber('user');
         Route::patch('/users/{user}/status', [AdminUserController::class, 'updateStatus']);
         Route::post('/users/{user}/password-reset', [AdminUserController::class, 'sendPasswordReset'])
             ->middleware('throttle:5,1');

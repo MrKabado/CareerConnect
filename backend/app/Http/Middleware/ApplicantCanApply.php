@@ -31,10 +31,10 @@ class ApplicantCanApply
             ], 403);
         }
 
-        if ($user->email_verified_at === null || $user->identityVerification?->status !== 'verified') {
+        if ($user->email_verified_at === null) {
             return response()->json([
-                'message' => 'Verify your email address and identity before submitting applications.',
-                'code' => 'application_ineligible',
+                'message' => 'Verify your email address before submitting applications.',
+                'code' => 'email_verification_required',
             ], 403);
         }
 

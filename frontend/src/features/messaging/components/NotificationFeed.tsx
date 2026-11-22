@@ -30,7 +30,7 @@ export default function NotificationFeed({
   return (
     <section
       aria-label="Notifications"
-      className="absolute top-full right-0 z-50 mt-2 flex max-h-[min(620px,calc(100dvh-5rem))] w-[360px] max-w-[calc(100vw-2rem)] flex-col overflow-hidden rounded-2xl border border-[#e5eeec] bg-white shadow-[0_16px_40px_rgba(27,54,52,0.18)] max-[680px]:fixed max-[680px]:inset-0 max-[680px]:z-[70] max-[680px]:mt-0 max-[680px]:h-dvh max-[680px]:max-h-none max-[680px]:w-full max-[680px]:max-w-none max-[680px]:rounded-none"
+      className="absolute top-full right-0 z-50 mt-2 flex max-h-[min(620px,calc(100dvh-5rem))] w-[360px] max-w-[calc(100vw-2rem)] flex-col overflow-hidden rounded-2xl border border-[#e5eeec] bg-white shadow-[0_16px_40px_rgba(27,54,52,0.18)] max-[680px]:fixed max-[680px]:top-16 max-[680px]:right-3 max-[680px]:left-3 max-[680px]:z-[70] max-[680px]:mt-0 max-[680px]:max-h-[calc(100dvh-5rem)] max-[680px]:w-auto max-[680px]:max-w-none"
       role="dialog"
     >
       <header className="flex items-center justify-between border-b border-[#edf1f1] px-5 py-4">
@@ -50,7 +50,7 @@ export default function NotificationFeed({
         </button>
       </header>
 
-      <div className="min-h-0 flex-1 overflow-y-auto">
+      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain [-webkit-overflow-scrolling:touch]">
         {error && <p className="p-5 text-sm text-[#a2534c]" role="alert">{error}</p>}
         {!error && loading && <p className="p-5 text-sm text-[#687b7e]">Loading notifications…</p>}
         {!error && !loading && items.length === 0 && (

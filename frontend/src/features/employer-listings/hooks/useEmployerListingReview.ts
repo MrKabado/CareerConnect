@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router";
 import { publishListing } from "@/features/employer-listings/api";
-import { fallbackListing } from "@/features/employer-listings/constants";
 import {
   getEmployerListingsSnapshot,
   saveEmployerListing,
@@ -13,7 +12,6 @@ import type {
   ReviewDraftValues,
   ReviewListing,
 } from "@/features/employer-listings/types";
-import { useCompanyProfile } from "@/features/companies/useCompanyProfile";
 import { useEmployerStatus } from "@/features/employer-registration/useEmployerStatus";
 
 function createDraft(listing: ReviewListing): ReviewDraftValues {
@@ -26,7 +24,7 @@ function createDraft(listing: ReviewListing): ReviewDraftValues {
     schedule: listing.hiring.schedule,
     workspace: listing.hiring.workspace,
     schoolPartnerships: listing.hiring.schoolPartnerships,
-    acceptedCourses: "Computer Science, Information Technology, Software Engineering",
+    acceptedCourses: "",
     description: listing.description,
     responsibilities: listing.responsibilities.join("\n"),
   };
@@ -66,12 +64,12 @@ export function getStatusLabel(status: OnboardingStatus) {
   return "Pending confirmation";
 }
 
-export function useEmployerListingReview(initialListing: ReviewListing = fallbackListing) {
+export function useEmployerListingReview(initialListing: ReviewListing) {
   const navigate = useNavigate();
   const listing = initialListing;
 
   const { employer } = useEmployerStatus();
-  const companyName = useCompanyProfile(employer?.companyName ?? "Maya Philippines").name;
+  const companyName = employer?.companyName ?? "";
 
   const [draft, setDraft] = useState<ReviewDraftValues>(() => createDraft(listing));
   const [isDialogOpen, setIsDialogOpen] = useState(false);

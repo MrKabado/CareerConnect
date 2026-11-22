@@ -179,13 +179,6 @@ export function computeStages(
   profile: VerificationStageInput,
   employerStatus?: string,
 ): CompanyVerificationStage[] {
-  if (profile.name === "Maya Philippines" && employerStatus === "approved") {
-    return companyVerificationStageDefinitions.map((stage) => ({
-      ...stage,
-      status: "complete",
-    }));
-  }
-
   const statuses: Record<CompanyVerificationStageId, CompanyVerificationStageStatus> = {
     email_verification: employerStatus && employerStatus !== "email_unverified" ? "complete" : "not_started",
     company_information: isCompanyInformationComplete(profile) ? "complete" : hasMeaningfulText(profile.name) || hasMeaningfulText(profile.industry) || hasMeaningfulText(profile.overview) ? "in_progress" : "not_started",

@@ -1,7 +1,6 @@
 import { BriefcaseBusiness, Grid2X2, Menu, Users, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router";
-import { useVerifications } from "../hooks/useVerification";
 import { useAuth } from "@/features/auth/useAuth";
 
 const navItems = [
@@ -37,7 +36,11 @@ function HeaderIcon({ name, size = 18 }: { name: HeaderIconName; size?: number }
   );
 }
 
-export default function Header() {
+export default function Header({
+  pendingVerificationCount,
+}: {
+  pendingVerificationCount: number;
+}) {
   const { pathname } = useLocation();
   const navigate = useNavigate();
   const { user, logout } = useAuth();
@@ -45,7 +48,6 @@ export default function Header() {
   const [accountOpen, setAccountOpen] = useState(false);
   const [logoutError, setLogoutError] = useState<string | null>(null);
   const accountRef = useRef<HTMLDivElement>(null);
-  const { pendingCount } = useVerifications();
   const adminInitials =
     user?.name
       .trim()
@@ -111,14 +113,14 @@ export default function Header() {
               </span>
             )}
             {item.label}
-            {"badge" in item && pendingCount > 0 && <span className="grid size-[18px] shrink-0 place-items-center rounded-full bg-[#e9a46f] text-[10px] font-bold leading-none text-white">{pendingCount}</span>}
+            {"badge" in item && pendingVerificationCount > 0 && <span className="grid size-[18px] shrink-0 place-items-center rounded-full bg-[#e9a46f] text-[10px] font-bold leading-none text-white">{pendingVerificationCount}</span>}
           </Link>
         ))}
       </nav>
       <div className="flex items-center justify-self-end gap-5 max-[680px]:gap-2.5">
-        <Link className="relative inline-flex size-9 items-center justify-center text-[#65787a] [-webkit-tap-highlight-color:transparent] focus-visible:outline-[3px] focus-visible:outline-[#67c9c1] focus-visible:outline-offset-[3px]" aria-label={`Notifications${pendingCount > 0 ? `, ${pendingCount} pending verifications` : ""}`} to="/admin/verifications" title="Review pending verifications">
+        <Link className="relative inline-flex size-9 items-center justify-center text-[#65787a] [-webkit-tap-highlight-color:transparent] focus-visible:outline-[3px] focus-visible:outline-[#67c9c1] focus-visible:outline-offset-[3px]" aria-label={`Notifications${pendingVerificationCount > 0 ? `, ${pendingVerificationCount} pending verifications` : ""}`} to="/admin/verifications" title="Review pending verifications">
           <HeaderIcon name="bell" />
-          {pendingCount > 0 && <span className="absolute -top-0.5 -right-0.5 grid min-h-4 min-w-4 place-items-center rounded-full border border-white bg-[#d94a3d] px-1 text-[9px] font-bold text-white">{pendingCount > 9 ? "9+" : pendingCount}</span>}
+          {pendingVerificationCount > 0 && <span className="absolute -top-0.5 -right-0.5 grid min-h-4 min-w-4 place-items-center rounded-full border border-white bg-[#d94a3d] px-1 text-[9px] font-bold text-white">{pendingVerificationCount > 9 ? "9+" : pendingVerificationCount}</span>}
         </Link>
         <div ref={accountRef} className="relative max-[680px]:hidden">
           <button

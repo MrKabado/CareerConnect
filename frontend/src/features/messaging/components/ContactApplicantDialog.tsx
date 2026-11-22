@@ -46,6 +46,8 @@ export default function ContactApplicantDialog({
 
   useEffect(() => {
     const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
     const frame = window.requestAnimationFrame(() => firstFocusRef.current?.focus());
 
     function handleKeyDown(event: KeyboardEvent) {
@@ -73,6 +75,7 @@ export default function ContactApplicantDialog({
     return () => {
       window.cancelAnimationFrame(frame);
       document.removeEventListener("keydown", handleKeyDown);
+      document.body.style.overflow = previousOverflow;
       if (previousFocus?.isConnected) previousFocus.focus();
     };
   }, [onClose]);
@@ -105,7 +108,7 @@ export default function ContactApplicantDialog({
 
   return (
     <div
-      className="fixed inset-0 z-[80] flex items-center justify-center bg-[#162b2b]/55 p-4"
+      className="fixed inset-0 z-[80] flex items-center justify-center overflow-y-auto overscroll-contain bg-[#162b2b]/55 p-4 max-[600px]:p-3"
       onMouseDown={(event) => {
         if (event.target === event.currentTarget && !sending) onClose();
       }}
@@ -113,11 +116,11 @@ export default function ContactApplicantDialog({
       <section
         aria-labelledby="contact-applicant-title"
         aria-modal="true"
-        className="w-full max-w-xl overflow-hidden rounded-2xl border border-[#e5eeec] bg-white shadow-[0_24px_70px_rgba(0,0,0,0.28)]"
+        className="flex max-h-[calc(100dvh-2rem)] w-full max-w-xl flex-col overflow-hidden rounded-2xl border border-[#e5eeec] bg-white shadow-[0_24px_70px_rgba(0,0,0,0.28)] max-[600px]:max-h-[calc(100dvh-1.5rem)]"
         ref={dialogRef}
         role="dialog"
       >
-        <header className="flex items-start justify-between gap-4 border-b border-[#edf1f1] px-6 py-5">
+        <header className="flex shrink-0 items-start justify-between gap-4 border-b border-[#edf1f1] px-6 py-5">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[#078b8d]">New conversation</p>
             <h2 className="mt-1 text-lg font-bold text-[#263a3c]" id="contact-applicant-title">
@@ -136,7 +139,7 @@ export default function ContactApplicantDialog({
           </button>
         </header>
 
-        <form className="space-y-4 p-6" onSubmit={handleSubmit}>
+        <form className="min-h-0 space-y-4 overflow-y-auto overscroll-contain p-6 [-webkit-overflow-scrolling:touch]" onSubmit={handleSubmit}>
           <div>
             <label className="mb-1.5 block text-xs font-semibold text-[#526365]" htmlFor="contact-template">
               Start with a template <span className="font-normal text-[#829092]">(optional)</span>

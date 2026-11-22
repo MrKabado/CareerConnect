@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { useOutletContext } from "react-router";
+import { Link, useOutletContext } from "react-router";
 import VerificationRow from "../../components/admin/VerificationRow";
 import DocumentPreviewModal from "../../components/admin/modals/DocumentPreviewModal";
 import { PageHeader, SearchBar, Select } from "../../components/common";
@@ -142,6 +142,25 @@ export default function VerificationPage() {
           </div>
         }
       />
+
+      <nav
+        aria-label="Verification categories"
+        className="mb-5 inline-flex flex-wrap gap-1 rounded-xl border border-[#e5eceb] bg-[#f7faf9] p-1"
+      >
+        <Link
+          aria-current="page"
+          className="rounded-lg bg-white px-4 py-2 text-xs font-semibold text-[#087879] shadow-sm"
+          to="/admin/verifications"
+        >
+          Employer verification
+        </Link>
+        <Link
+          className="rounded-lg px-4 py-2 text-xs font-semibold text-[#687b7e] hover:bg-white hover:text-[#087879]"
+          to="/admin/applicant-verifications"
+        >
+          Applicant identity
+        </Link>
+      </nav>
 
       <div className="mb-4 flex flex-wrap gap-2.5 max-[680px]:flex-col">
         <SearchBar className="w-full sm:w-72 max-[680px]:w-full" value={query} onChange={setQuery} placeholder="Search companies" />

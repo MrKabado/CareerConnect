@@ -24,6 +24,13 @@ export type RegistrationDetails = {
   role: "applicant" | "employer";
 };
 
+export type EmployerRegistrationDetails = Omit<RegistrationDetails, "role"> & {
+  company_name: string;
+  company_size: string;
+  industry: string;
+  website: string;
+};
+
 type RegistrationResponse = {
   message: string;
   user?: AuthUser;
@@ -51,6 +58,13 @@ type EmailVerificationResponse = {
 export const authApi = {
   register(details: RegistrationDetails) {
     return apiRequest<RegistrationResponse>("/register", {
+      method: "POST",
+      data: details,
+    });
+  },
+
+  registerEmployer(details: EmployerRegistrationDetails) {
+    return apiRequest<RegistrationResponse>("/register/employer", {
       method: "POST",
       data: details,
     });

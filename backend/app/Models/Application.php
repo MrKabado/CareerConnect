@@ -21,6 +21,7 @@ class Application extends Model
 
     protected $fillable = [
         'resume_id',
+        'cover_letter_document_id',
         'status',
         'resume_original_filename',
         'resume_mime_type',
@@ -55,6 +56,11 @@ class Application extends Model
     public function resume(): BelongsTo
     {
         return $this->belongsTo(Resume::class);
+    }
+
+    public function coverLetterDocument(): BelongsTo
+    {
+        return $this->belongsTo(ApplicantDocument::class, 'cover_letter_document_id');
     }
 
     public function statusHistories(): HasMany

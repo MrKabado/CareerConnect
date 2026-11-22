@@ -15,7 +15,6 @@ export default function ApplicantMessagesPageContent() {
     filteredConversations,
     handleSend,
     chooseConversation,
-    isDemoPreview,
     messages,
     messagesError,
     messagesLoading,
@@ -46,11 +45,6 @@ export default function ApplicantMessagesPageContent() {
       <Header />
       <main className="mx-auto flex w-full max-w-284 flex-1 flex-col px-6 py-8 max-[680px]:px-4 max-[680px]:py-5">
         <div className="mb-6">
-          {isDemoPreview && (
-            <p className="mb-4 rounded-lg border border-[#f1dfb8] bg-[#fff9eb] px-4 py-2.5 text-xs font-medium text-[#785c28]">
-              Demo preview · Viewing Jamie Dela Cruz’s messages
-            </p>
-          )}
           <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[#078b8d]">
             Your conversations
           </p>

@@ -7,11 +7,13 @@ Laravel 12 JSON API using MySQL and Sanctum bearer tokens. Public registration s
 1. Copy `.env.example` to `.env`, set a unique `DB_PASSWORD` and `DB_ROOT_PASSWORD`, and keep `.env` out of version control.
 2. Generate the application key with `docker compose run --rm backend php artisan key:generate`.
 3. Start MySQL and Laravel from this directory with `docker compose up --build -d`. The backend runs pending migrations on startup.
-4. Seed fictional local demo accounts and records with `docker compose exec -T backend php artisan db:seed --class=LocalDemoSeeder --force`.
-5. In `frontend`, copy `.env.example` to `.env`, confirm `VITE_API_BASE_URL=http://localhost:8000/api`, install dependencies with `npm install`, and start Vite with `npm run dev -- --host 127.0.0.1`.
-6. Open `http://localhost:5173`. Configure `FRONTEND_URL` in `backend/.env` to the browser-accessible frontend origin when it differs from the default.
+4. Configure `ADMIN_SEED_NAME`, `ADMIN_SEED_EMAIL`, and `ADMIN_SEED_PASSWORD` in `.env`, then create the bootstrap admin with `docker compose exec -T backend php artisan db:seed --class=AdminUserSeeder --force`.
+5. In `frontend`, copy `.env.example` to `.env`, confirm `VITE_API_BASE_URL=http://192.168.254.125:8000/api`, install dependencies with `npm install`, and start Vite with `npm run dev`. Vite is configured to listen on all network interfaces at port 5173.
+6. Open `http://192.168.254.125:5173` from this computer or another device on the same LAN. Configure `FRONTEND_URL` in `backend/.env` to the browser-accessible frontend origin when it differs from the default. If other devices cannot connect, allow inbound TCP ports 5173 and 8000 through the host firewall.
 
-Required local environment values are `APP_KEY`, `DB_PASSWORD`, and `DB_ROOT_PASSWORD` in `backend/.env`, and `VITE_API_BASE_URL` in `frontend/.env`. `DB_DATABASE` and `DB_USERNAME` have Compose defaults. Use unique local database passwords; do not commit either `.env` file.
+To clear the entire database and recreate only the configured admin bootstrap, run `docker compose exec -T backend php artisan migrate:fresh --seed --force` from this directory. This permanently deletes all database records and reruns every migration; do not run it against data you need.
+
+Required local environment values are `APP_KEY`, `DB_PASSWORD`, and `DB_ROOT_PASSWORD` in `backend/.env`, and `VITE_API_BASE_URL` in `frontend/.env`. `DB_DATABASE` and `DB_USERNAME` have Compose defaults. `USE_DELETE_USERS` controls the temporary admin account-deletion action; it defaults to `false` and should only be enabled for testing. Use unique local database passwords; do not commit either `.env` file.
 
 To stop Vite, press `Ctrl+C` in its terminal. To stop the Docker services, run `docker compose down` from `backend`. The named `mysql_data` volume and backend `storage` bind mount persist across stop/start and container recreation. **Do not use `docker compose down -v`** unless you intentionally want to delete the local database volume.
 
@@ -25,21 +27,9 @@ The example environment uses Laravel's `log` mailer. Configure `MAIL_MAILER` and
 
 The API uses `Authorization: Bearer <token>` and JSON responses. Sensitive endpoints (login, registration, OTP, and password reset) are rate limited. Email codes are hashed at rest, expire after ten minutes, and are deleted after use.
 
-## Local seed credentials
+## Admin bootstrap
 
-The demo seeder creates predictable local accounts for testing. Passwords for all seeded users are:
-
-```text
-Password123!
-```
-
-Accounts:
-
-- Admin: `admin@careerconnect.test`
-- Employer: `employer1@careerconnect.test` and `employer2@careerconnect.test`
-- Applicants: `applicant1@careerconnect.test`, `applicant2@careerconnect.test`, and `applicant3@careerconnect.test`
-
-If you want to override the seeded admin values, set `ADMIN_SEED_NAME`, `ADMIN_SEED_EMAIL`, and `ADMIN_SEED_PASSWORD` in `.env` before running the seeders.
+The default database seeder creates only the configured administrator; it does not add demo users, companies, listings, or applications. Set `ADMIN_SEED_NAME`, `ADMIN_SEED_EMAIL`, and `ADMIN_SEED_PASSWORD` in `.env` before seeding.
 
 ## Phase 1 API
 
@@ -71,8 +61,10 @@ If you want to override the seeded admin values, set `ADMIN_SEED_NAME`, `ADMIN_S
 
 - Applicants manage resume metadata and private files through `GET|POST|DELETE /api/applicant/resume`; `GET /api/applicant/resume/download` streams the current resume after authentication. Uploads accept validated PDF and DOCX files up to `RESUME_MAX_SIZE_KB` (5120 by default) and use `MEDIA_STORAGE_DISK` (`local` by default, or authenticated Cloudinary raw storage).
 - Employers create or update their company profile through `GET|PUT /api/employer/company`; logo uploads and removal use `POST|DELETE /api/employer/company/logo` and accept JPG, PNG, or WebP images up to 2 MB.
+- Employer registration uses `POST /api/register/employer` to save the company name, size, industry, and website selected in Step 1. The company-information step keeps that size and validates ISO country codes and formatted phone numbers.
 - Employer verification files are listed, uploaded, replaced, downloaded, and removed through `/api/employer/verification/documents`. Business registration and permit uploads accept PDF, JPG, or PNG files up to 5 MB; these files remain private and downloads are scoped to their owning employer.
-- Applicant profile photos use `POST|DELETE /api/applicant/profile/photo`, accept JPG, PNG, or WebP images up to 2 MB, and are served from the local public disk. Cover-letter uploads and company photo galleries are not supported by the backend and remain demo-only in the frontend.
+- Verification submission requires a complete company profile and both required documents. Duplicate submissions are blocked while approval is pending or after approval; rejected requests can be corrected and resubmitted. Employers must sign in again after approval.
+- Applicant profile photos use `POST|DELETE /api/applicant/profile/photo`, accept JPG, PNG, or WebP images up to 2 MB, and are served from the local public disk. Cover-letter uploads and company photo galleries are not supported by the backend and remain browser-local in the frontend.
 - Apply with `POST /api/jobs/{jobListing}/applications`. Applications require an active applicant with verified email and identity, an open eligible listing, matching seeker preferences, required OJT details for OJT listings, and a current resume. Optional cover letters are text, up to 10,000 characters.
 - Applicant history is available from `GET /api/applicant/applications` and `GET /api/applicant/applications/{application}`. Status history and the resume snapshot for an owned application are available through `GET /api/applicant/applications/{application}/status-history` and `GET /api/applicant/applications/{application}/resume`.
 - Employers review only applications to their own listings through `GET /api/employer/applications`, `GET /api/employer/applications/{application}`, and `PATCH /api/employer/applications/{application}/status`. The associated submitted resume is streamed securely from `GET /api/employer/applications/{application}/resume`.

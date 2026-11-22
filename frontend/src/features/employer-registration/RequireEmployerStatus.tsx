@@ -41,6 +41,7 @@ export default function RequireEmployerStatus({
   const verification = useCompanyVerification();
   const [serverStatus, setServerStatus] = useState<string | null>(null);
   const [companyProfileComplete, setCompanyProfileComplete] = useState(false);
+  const [requiresReauthentication, setRequiresReauthentication] = useState(false);
   const [serverStatusError, setServerStatusError] = useState<string | null>(null);
   const [isServerStatusLoading, setIsServerStatusLoading] = useState(false);
   const [retryStatus, setRetryStatus] = useState(0);
@@ -53,12 +54,14 @@ export default function RequireEmployerStatus({
     if (!usesBackendStatus || !token) return;
 
     let active = true;
-    employerVerificationFilesApi
-      .status(token)
+    const loadStatus = () => {
+      void employerVerificationFilesApi.status(token)
       .then((response) => {
         if (active) {
           setServerStatus(response.status);
           setCompanyProfileComplete(response.company_profile_complete);
+          setRequiresReauthentication(response.requires_reauthentication);
+          setServerStatusError(null);
         }
       })
       .catch((requestError: unknown) => {
@@ -76,11 +79,18 @@ export default function RequireEmployerStatus({
       .finally(() => {
         if (active) setIsServerStatusLoading(false);
       });
+    };
+
+    loadStatus();
+    const intervalId = access === "under-review"
+      ? window.setInterval(loadStatus, 30000)
+      : null;
 
     return () => {
       active = false;
+      if (intervalId !== null) window.clearInterval(intervalId);
     };
-  }, [retryStatus, token, usesBackendStatus]);
+  }, [access, retryStatus, token, usesBackendStatus]);
 
 
   if (
@@ -145,6 +155,10 @@ export default function RequireEmployerStatus({
 
     if (serverStatus === null) {
       return <PageSkeleton className="min-h-dvh" label="Loading employer status" />;
+    }
+
+    if (serverStatus === "verified" && requiresReauthentication) {
+      return <Navigate replace to="/employer/approved" />;
     }
 
     if (access === "verification") {

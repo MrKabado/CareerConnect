@@ -4,20 +4,22 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\Resume;
+use App\Services\ApplicantFileValidator;
 use App\Services\ResumeStorage;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Validation\ValidationException;
 use RuntimeException;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 use Throwable;
-use ZipArchive;
 
 class ApplicantResumeController extends Controller
 {
-    public function __construct(private readonly ResumeStorage $resumeStorage) {}
+    public function __construct(
+        private readonly ResumeStorage $resumeStorage,
+        private readonly ApplicantFileValidator $fileValidator,
+    ) {}
 
     public function show(Request $request): JsonResponse
     {
@@ -36,13 +38,7 @@ class ApplicantResumeController extends Controller
 
         /** @var UploadedFile $file */
         $file = $request->file('resume');
-        $requestedFilename = mb_strtolower(basename(str_replace('\\', '/', $file->getClientOriginalName())));
-        if (! in_array($requestedFilename, ['resume.pdf', 'resume.docx'], true)) {
-            throw ValidationException::withMessages([
-                'resume' => ['Rename the resume file to resume.pdf or resume.docx before uploading.'],
-            ]);
-        }
-        [$extension, $mimeType] = $this->validatedFileType($file);
+        [$extension, $mimeType] = $this->fileValidator->validatePdfOrDocx($file, 'resume');
         $user = $request->user();
         $stored = $this->resumeStorage->store($file, $user->id, $extension);
 
@@ -131,54 +127,6 @@ class ApplicantResumeController extends Controller
             'is_current' => $resume->is_current,
             'created_at' => $resume->created_at?->toISOString(),
         ];
-    }
-
-    private function validatedFileType(UploadedFile $file): array
-    {
-        $extension = strtolower($file->getClientOriginalExtension());
-
-        if ($extension === 'pdf') {
-            $handle = fopen($file->getRealPath(), 'rb');
-            $signature = $handle === false ? '' : (string) fread($handle, 5);
-            if (is_resource($handle)) {
-                fclose($handle);
-            }
-
-            if ($signature !== '%PDF-' || $file->getMimeType() !== 'application/pdf') {
-                throw ValidationException::withMessages([
-                    'resume' => ['The resume must be a valid PDF document.'],
-                ]);
-            }
-
-            return ['pdf', 'application/pdf'];
-        }
-
-        if ($extension === 'docx') {
-            $archive = new ZipArchive;
-            $opened = $archive->open($file->getRealPath());
-            $valid = $opened === true
-                && $archive->locateName('[Content_Types].xml') !== false
-                && $archive->locateName('word/document.xml') !== false;
-
-            if ($opened === true) {
-                $archive->close();
-            }
-
-            if (! $valid) {
-                throw ValidationException::withMessages([
-                    'resume' => ['The resume must be a valid DOCX document.'],
-                ]);
-            }
-
-            return [
-                'docx',
-                'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-            ];
-        }
-
-        throw ValidationException::withMessages([
-            'resume' => ['The resume must be a valid PDF or DOCX document.'],
-        ]);
     }
 
     private function safeOriginalFilename(UploadedFile $file): string
