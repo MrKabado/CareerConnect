@@ -2,16 +2,16 @@ import { BriefcaseBusiness, Grid2X2, Menu, Users, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router";
 import { useAuth } from "@/features/auth/useAuth";
+import RoleNotificationBell from "@/features/notifications/RoleNotificationBell";
 
 const navItems = [
   { label: "Reports", to: "/admin", icon: null },
   { label: "Verifications", to: "/admin/verifications", icon: BriefcaseBusiness, badge: true },
   { label: "Categories", to: "/admin/categories", icon: Grid2X2 },
   { label: "Job Approvals", to: "/admin/job-approvals", icon: BriefcaseBusiness },
+  { label: "Job Listings", to: "/admin/job-listings", icon: BriefcaseBusiness },
   { label: "Users", to: "/admin/users", icon: Users },
 ] as const;
-
-type HeaderIconName = "bell";
 
 function ReportIcon({ className = "size-[15px]" }: { className?: string }) {
   return (
@@ -22,18 +22,6 @@ function ReportIcon({ className = "size-[15px]" }: { className?: string }) {
       className={`${className} object-contain opacity-75 transition-opacity group-hover:opacity-100`}
       draggable={false}
     />
-  );
-}
-
-function HeaderIcon({ name, size = 18 }: { name: HeaderIconName; size?: number }) {
-  const paths: Record<HeaderIconName, React.ReactNode> = {
-    bell: <><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9m-8 12a2 2 0 0 0 4 0" /></>,
-  };
-
-  return (
-    <svg aria-hidden="true" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
-      {paths[name]}
-    </svg>
   );
 }
 
@@ -93,13 +81,13 @@ export default function Header({
   }
 
   return (
-    <header className="sticky top-0 z-40 grid h-[72px] grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center border-b border-[#e9efee] bg-white/95 px-[max(40px,calc((100vw-1136px)/2))] shadow-[0_1px_0_rgba(29,49,51,.02)] backdrop-blur-xl max-[920px]:h-[64px] max-[920px]:px-6 max-[680px]:h-[60px] max-[680px]:grid-cols-[1fr_auto] max-[680px]:px-4">
+    <header className="sticky top-0 z-40 grid h-[72px] grid-cols-[minmax(180px,0.75fr)_minmax(0,1.5fr)_minmax(150px,0.75fr)] items-center border-b border-[#e9efee] bg-white/95 px-[max(24px,calc((100vw-1180px)/2))] shadow-[0_1px_0_rgba(29,49,51,.02)] backdrop-blur-xl max-[920px]:h-[64px] max-[920px]:grid-cols-[minmax(150px,0.8fr)_minmax(0,1.2fr)_minmax(120px,0.8fr)] max-[920px]:px-4 max-[680px]:h-[60px] max-[680px]:grid-cols-[1fr_auto] max-[680px]:px-4">
       <Link className="inline-flex items-center justify-self-start gap-2.5 whitespace-nowrap text-[17px] font-bold tracking-[-0.55px] text-[#263a3c] max-[680px]:gap-2 max-[680px]:text-base focus-visible:outline-[3px] focus-visible:outline-[#67c9c1] focus-visible:outline-offset-[3px]" to="/" aria-label="CareerConnect home">
         <span className="grid size-7.75 place-items-center rounded-[10px] bg-[#078b8d] text-[19px] font-bold tracking-[-1px] text-white max-[680px]:size-7 max-[680px]:rounded-lg max-[680px]:text-[17px]">C</span>
         <span>Career<span className="text-[#078b8d]">Connect</span></span>
         <span className="ml-1 rounded-md bg-[#eef7f6] px-2 py-1 text-[10px] font-semibold text-[#078b8d] max-[680px]:hidden">Admin</span>
       </Link>
-      <nav className="flex h-full items-stretch justify-self-center gap-4 max-[1100px]:gap-2 max-[680px]:hidden" aria-label="Admin navigation">
+      <nav className="flex h-full min-w-0 items-stretch justify-self-stretch overflow-x-auto overscroll-x-contain px-1 max-[680px]:hidden [scrollbar-width:thin]" aria-label="Admin navigation">
         {navItems.map((item) => (
           <Link
             className={`group ${isActive(item.to)
@@ -119,10 +107,7 @@ export default function Header({
         ))}
       </nav>
       <div className="flex items-center justify-self-end gap-5 max-[680px]:gap-2.5">
-        <Link className="relative inline-flex size-9 items-center justify-center text-[#65787a] [-webkit-tap-highlight-color:transparent] focus-visible:outline-[3px] focus-visible:outline-[#67c9c1] focus-visible:outline-offset-[3px]" aria-label={`Notifications${pendingVerificationCount > 0 ? `, ${pendingVerificationCount} pending verifications` : ""}`} to="/admin/verifications" title="Review pending verifications">
-          <HeaderIcon name="bell" />
-          {pendingVerificationCount > 0 && <span className="absolute -top-0.5 -right-0.5 grid min-h-4 min-w-4 place-items-center rounded-full border border-white bg-[#d94a3d] px-1 text-[9px] font-bold text-white">{pendingVerificationCount > 9 ? "9+" : pendingVerificationCount}</span>}
-        </Link>
+        <RoleNotificationBell role="admin" />
         <div ref={accountRef} className="relative max-[680px]:hidden">
           <button
             aria-expanded={accountOpen}

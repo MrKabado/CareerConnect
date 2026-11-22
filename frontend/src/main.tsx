@@ -19,6 +19,7 @@ import ReportsPage from "@/page/admin/ReportsPage";
 import UsersPage from "@/page/admin/StatCard";
 import VerificationPage from "@/page/admin/VerificationPage";
 import JobListingApprovalsPage from "@/page/admin/JobListingApprovalsPage";
+import AdminJobListingsPage from "@/page/admin/AdminJobListingsPage";
 import {
   ApplicationsPage,
   ApplicantMessagesPage,
@@ -56,7 +57,7 @@ createRoot(document.getElementById("root")!).render(
       <Suspense fallback={<PageSkeleton label="Loading page" />}>
         <Routes>
           <Route element={<GuestLayout />}>
-            <Route path="/" element={<HomePage />} />
+            <Route path="/" element={<RequireGuest><HomePage /></RequireGuest>} />
           </Route>
           <Route path="/job-search" element={<JobSearchPage />} />
           <Route path="/ojt-search" element={<OjtSearchPage />} />
@@ -68,8 +69,8 @@ createRoot(document.getElementById("root")!).render(
           <Route path="/company/:companyName" element={<CompanyProfilePage />} />
           <Route path="/apply/:jobId" element={<RequireAuth><RequireRole role="applicant"><JobApplicationPage /></RequireRole></RequireAuth>} />
           <Route path="/login" element={<RequireGuest><LoginPage /></RequireGuest>} />
-          <Route path="/forgot-password" element={<ForgotPasswordPage />} />
-          <Route path="/verify-email" element={<VerifyEmailPage />} />
+          <Route path="/forgot-password" element={<RequireGuest><ForgotPasswordPage /></RequireGuest>} />
+          <Route path="/verify-email" element={<RequireGuest><VerifyEmailPage /></RequireGuest>} />
           <Route
             path="/employer/register"
             element={
@@ -223,6 +224,7 @@ createRoot(document.getElementById("root")!).render(
             <Route path="applicant-verifications" element={<ApplicantIdentityVerificationPage />} />
             <Route path="categories" element={<CategoriesPage />} />
             <Route path="job-approvals" element={<JobListingApprovalsPage />} />
+            <Route path="job-listings" element={<AdminJobListingsPage />} />
             <Route path="users" element={<UsersPage />} />
           </Route>
           <Route path="/reports" element={<Navigate to="/admin" replace />} />

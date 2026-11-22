@@ -113,6 +113,8 @@ it('supports custom categories, applicant limits, expiration, manual closure and
         'employment_type' => 'full_time',
         'applicant_limit' => 5,
         'expires_at' => now()->addMonth()->toDateString(),
+        'salary_min' => 30000,
+        'salary_max' => 50000,
     ])->assertCreated();
     $listingId = $response->json('data.id');
     $this->assertDatabaseHas('categories', [
@@ -240,6 +242,46 @@ it('validates listing fields and stores OJT allowance separately from job salary
         'allowance_amount' => 5000,
         'duration_hours' => 486,
     ]);
+});
+
+it('requires salary information before publishing but allows draft listings without salary', function (): void {
+    $employer = User::factory()->create(['role' => 'employer']);
+    listingTestCompany($employer, true);
+    $category = Category::create(['name' => 'Finance']);
+    $token = $employer->createToken('employer')->plainTextToken;
+
+    $draft = $this->withToken($token)->postJson('/api/jobs', listingTestPayload($category, [
+        'salary_min' => null,
+        'salary_max' => null,
+    ]))->assertCreated();
+    $listingId = $draft->json('data.id');
+
+    $this->withToken($token)->patchJson("/api/jobs/{$listingId}/status", ['status' => 'open'])
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors(['salary_min', 'salary_max']);
+
+    $this->withToken($token)->putJson("/api/jobs/{$listingId}", listingTestPayload($category, [
+        'salary_min' => 40000,
+        'salary_max' => 60000,
+    ]))->assertOk();
+    $this->withToken($token)->patchJson("/api/jobs/{$listingId}/status", ['status' => 'open'])
+        ->assertOk();
+});
+
+it('allows admins to safely soft-delete listings while protecting application records', function (): void {
+    $admin = User::factory()->create(['role' => 'admin']);
+    $employer = User::factory()->create(['role' => 'employer']);
+    $category = Category::create(['name' => 'Safe Delete']);
+    $listing = listingTestRecord($employer, $category);
+
+    $this->withToken($admin->createToken('admin')->plainTextToken)
+        ->deleteJson("/api/admin/jobs/{$listing->id}")
+        ->assertOk();
+    $this->assertSoftDeleted('job_listings', ['id' => $listing->id]);
+
+    $this->app['auth']->forgetGuards();
+    $employerToken = $employer->createToken('employer')->plainTextToken;
+    $this->withToken($employerToken)->getJson('/api/admin/jobs')->assertForbidden();
 });
 
 it('requires an active employer and approved company before opening a listing', function (): void {
@@ -373,6 +415,29 @@ it('filters public opportunities by the normalized company slug', function (): v
         ->assertJsonPath('data.0.company.name', 'Jerson Jay, Inc.');
 });
 
+it('separates Job and OJT listings in public tab queries', function (): void {
+    $employer = User::factory()->create(['role' => 'employer']);
+    $category = Category::create(['name' => 'Mixed Search']);
+    $job = listingTestRecord($employer, $category, ['title' => 'Regular Developer']);
+    $ojt = listingTestRecord($employer, $category, [
+        'title' => 'Intern Developer',
+        'listing_type' => 'ojt',
+        'employment_type' => null,
+        'salary_min' => null,
+        'salary_max' => null,
+    ]);
+
+    $this->getJson('/api/jobs?listing_type=job')
+        ->assertOk()
+        ->assertJsonPath('data.0.id', $job->id)
+        ->assertJsonMissingPath('data.1');
+
+    $this->getJson('/api/jobs?listing_type=ojt')
+        ->assertOk()
+        ->assertJsonPath('data.0.id', $ojt->id)
+        ->assertJsonMissingPath('data.1');
+});
+
 it('combines public filters and paginates in a predictable order', function (): void {
     $employer = User::factory()->create(['role' => 'employer']);
     $technology = Category::create(['name' => 'Technology']);
@@ -465,6 +530,49 @@ it('allows admins to deactivate and restore listings with an audit trail', funct
         'action' => 'deactivated',
         'reason' => 'Listing contains misleading compensation details.',
     ]);
+});
+
+it('lists all employer listings for admins', function (): void {
+    $admin = User::factory()->create(['role' => 'admin']);
+    $employer = User::factory()->create(['role' => 'employer']);
+    $category = Category::create(['name' => 'Monitoring']);
+    $listing = listingTestRecord($employer, $category, [
+        'required_skills' => ['PHP'],
+        'experience_required' => false,
+    ]);
+    $applicant = User::factory()->create(['role' => 'applicant']);
+    $profile = $applicant->applicantProfile()->create([
+        'looking_for_jobs' => true,
+        'looking_for_ojt' => false,
+        'experience_level' => 'fresh_graduate',
+    ]);
+    $profile->skills()->create([
+        'name' => 'PHP',
+        'normalized_name' => 'php',
+    ]);
+    $resume = $applicant->resumes()->create([
+        'storage_path' => 'test-resumes/admin-monitor.pdf',
+        'original_filename' => 'resume.pdf',
+        'mime_type' => 'application/pdf',
+        'file_size' => 100,
+        'is_current' => true,
+    ]);
+    $application = $applicant->applications()->make([
+        'resume_id' => $resume->id,
+        'status' => 'pending',
+        'resume_original_filename' => 'resume.pdf',
+        'resume_mime_type' => 'application/pdf',
+        'resume_file_size' => 100,
+        'applied_at' => now(),
+    ]);
+    $application->jobListing()->associate($listing);
+    $application->save();
+
+    $token = $admin->createToken('admin')->plainTextToken;
+    $this->withToken($token)->getJson('/api/admin/jobs')
+        ->assertOk()
+        ->assertJsonPath('data.0.applicant_count', 1);
+
 });
 
 it('restricts admin listing management to administrators', function (): void {

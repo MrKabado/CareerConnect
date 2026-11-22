@@ -105,6 +105,7 @@ it('returns role-scoped dashboard totals from persisted records', function (): v
         ->assertJsonPath('data.active_job_listings', 1)
         ->assertJsonPath('data.total_applications', 3)
         ->assertJsonPath('data.pending_applications', 1)
+        ->assertJsonPath('data.closed_listings', 1)
         ->assertJsonStructure(['data' => ['recommendations']]);
 
     $this->app['auth']->forgetGuards();

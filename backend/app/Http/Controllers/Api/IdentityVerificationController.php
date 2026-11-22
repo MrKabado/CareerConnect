@@ -3,14 +3,17 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Mail\RoleNotificationMail;
 use App\Models\ActivityLog;
 use App\Models\IdentityVerification;
 use App\Models\User;
 use App\Services\MediaStorage;
+use App\Services\NotificationService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Validation\Rule;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 use Symfony\Component\HttpKernel\Exception\ConflictHttpException;
@@ -22,6 +25,30 @@ class IdentityVerificationController extends Controller
     public function status(Request $request): JsonResponse
     {
         $verification = $request->user()->identityVerification;
+
+        $identityVerification->loadMissing('user');
+        $applicant = $identityVerification->user;
+        $approved = $reviewedVerification->status === 'verified';
+        $title = $approved ? 'Identity verification approved' : 'Identity verification needs changes';
+        $message = $approved
+            ? 'Congratulations! Your identity verification was approved.'
+            : 'Your identity verification was rejected: '.$reviewedVerification->rejection_reason;
+        app(NotificationService::class)->send(
+            $applicant,
+            'applicant_identity_'.$reviewedVerification->status,
+            $title,
+            $message,
+            [
+                'dedupe_key' => 'applicant_identity_review-'.$reviewedVerification->id,
+                'identity_verification_id' => $reviewedVerification->id,
+                'verification_status' => $reviewedVerification->status,
+            ],
+        );
+        Mail::to($applicant->email)->send(new RoleNotificationMail(
+            $title,
+            $message,
+            $applicant->name,
+        ));
 
         return response()->json([
             'verification' => $verification === null ? null : [
@@ -121,6 +148,20 @@ class IdentityVerificationController extends Controller
                 $oldStorage['asset_id'],
                 'raw',
                 'authenticated',
+            );
+        }
+
+        foreach (User::query()->where('role', 'admin')->get(['id', 'name', 'email']) as $admin) {
+            app(NotificationService::class)->send(
+                $admin,
+                'applicant_identity_submitted',
+                'Applicant verification submitted',
+                sprintf('%s submitted identity verification documents for review.', $request->user()->name),
+                [
+                    'dedupe_key' => 'applicant_identity-'.$request->user()->id,
+                    'applicant_id' => $request->user()->id,
+                    'applicant_name' => $request->user()->name,
+                ],
             );
         }
 

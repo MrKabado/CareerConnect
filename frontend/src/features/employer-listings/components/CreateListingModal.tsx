@@ -285,11 +285,6 @@ export default function CreateListingModal({
                 </label>
               )}
 
-              <div className="mt-3 rounded-[10px] border border-[#dfeae8] bg-[#edf9f6] px-3 py-2 text-[10px] leading-5 text-[#476368]">
-                <span className="mr-2 text-[#0d8fa2]">•</span>
-                Company support and eligible counselors will be included from employer onboarding.
-              </div>
-
               {error && <p className="mt-3 text-xs text-red-700" role="alert">{error}</p>}
               <div className="mt-5 flex items-center justify-between gap-3 border-t border-[#edf1f0] pt-4">
                 <button type="button" onClick={onBack} className="rounded-xl border border-[#dfe8e7] bg-white px-3 py-2 text-[11px] font-semibold text-[#4a6467] transition hover:border-[#d0e2e0]">

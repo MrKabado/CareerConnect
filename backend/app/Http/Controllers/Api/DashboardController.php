@@ -203,7 +203,9 @@ class DashboardController extends Controller
                 'total_applications' => $company === null ? 0 : (clone $applications)->count(),
                 'pending_applications' => $pendingApplications,
                 'upcoming_interviews' => $upcomingInterviews,
-                'closed_listings' => $company === null ? 0 : (clone $listings)->whereIn('status', ['closed', 'full', 'expired'])->count(),
+                'closed_listings' => $company === null
+                    ? 0
+                    : $company->jobListings()->where('status', 'closed')->count(),
                 'total_applicants' => $company === null ? 0 : (clone $applications)->distinct('applicant_id')->count('applicant_id'),
                 'hired_applicants' => $company === null ? 0 : (clone $applications)->where('status', 'hired')->count(),
                 'recommendations' => $recommendations,

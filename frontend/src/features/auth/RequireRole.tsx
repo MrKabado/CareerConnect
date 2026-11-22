@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { Navigate } from "react-router";
 import { useAuth } from "@/features/auth/useAuth";
+import { roleLandingPath } from "@/features/auth/roleLandingPath";
 
 export default function RequireRole({
   role,
@@ -16,7 +17,7 @@ export default function RequireRole({
   }
 
   if (user.role !== role) {
-    return <Navigate replace to="/job-search" />;
+    return <Navigate replace to={roleLandingPath(user.role)} />;
   }
 
   return children;

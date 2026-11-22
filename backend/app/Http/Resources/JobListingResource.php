@@ -26,7 +26,9 @@ class JobListingResource extends JsonResource
             'experience_required' => $this->experience_required ?? false,
             'minimum_experience_years' => $this->minimum_experience_years,
             'applicant_limit' => $this->applicant_limit,
-            'applicant_count' => $this->relationLoaded('applications') ? $this->applications->count() : $this->applications()->count(),
+            'applicant_count' => $this->applications_count
+                ?? ($this->relationLoaded('applications') ? $this->applications->count() : $this->applications()->count()),
+            'applications_count' => $this->applications_count ?? null,
             'expires_at' => $this->expires_at?->toISOString(),
             'custom_category_name' => $this->custom_category_name,
             'approval_status' => $this->approval_status ?? 'not_required',
@@ -54,6 +56,11 @@ class JobListingResource extends JsonResource
             'company' => $this->whenLoaded('company', fn (): array => [
                 'name' => $this->company->name,
                 'city' => $this->company->city,
+                'employer' => $this->company->relationLoaded('user') && $this->company->user ? [
+                    'id' => $this->company->user->id,
+                    'name' => $this->company->user->name,
+                    'email' => $this->company->user->email,
+                ] : null,
                 'logo_path' => $this->company->logo_path,
                 'logo_url' => $this->company->logo_path
                     ? app(MediaStorage::class)->publicImageUrl($this->company->logo_disk, $this->company->logo_path)

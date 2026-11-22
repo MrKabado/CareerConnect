@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Mail\ApplicantNoteMail;
+use App\Mail\RoleNotificationMail;
 use App\Models\ActivityLog;
 use App\Models\ApplicantDocument;
 use App\Models\ApplicantOjtDetail;
@@ -241,6 +242,11 @@ class ApplicationController extends Controller
                     'job_listing_title' => $application->jobListing->title,
                 ],
             );
+            Mail::to($employer->email)->send(new RoleNotificationMail(
+                'New application received',
+                'A new applicant applied to '.$application->jobListing->title.'.',
+                $employer->name,
+            ));
             if ($fullReached) {
                 app(NotificationService::class)->send(
                     $employer,
@@ -599,6 +605,20 @@ class ApplicationController extends Controller
                         'public_reason' => $validated['public_reason'] ?? null,
                     ],
                 );
+            }
+
+            $notificationTitle = $updated[0]->status === 'hired'
+                ? 'Congratulations! You have been hired'
+                : 'Application status updated';
+            $notificationMessage = $updated[0]->status === 'hired'
+                ? 'Congratulations! You have been hired for '.$jobTitle.' by '.$companyName.'.'
+                : 'Your application for '.$jobTitle.' is now '.$updated[0]->status.'.';
+            if ($updated[0]->applicant?->email) {
+                Mail::to($updated[0]->applicant->email)->send(new RoleNotificationMail(
+                    $notificationTitle,
+                    $notificationMessage,
+                    $updated[0]->applicant->name,
+                ));
             }
         }
 

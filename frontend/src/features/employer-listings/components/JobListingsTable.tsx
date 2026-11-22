@@ -8,9 +8,10 @@ type JobListingsBoardProps = {
   setSelectedId: (value: string) => void;
   onStatusChange: (id: string, status: "draft" | "open" | "closed") => void;
   onEdit: (listing: EmployerListing) => void;
+  onView: (listing: EmployerListing) => void;
 };
 
-export default function JobListingsBoard({ listings, selectedId, setSelectedId, onStatusChange, onEdit }: JobListingsBoardProps) {
+export default function JobListingsBoard({ listings, selectedId, setSelectedId, onStatusChange, onEdit, onView }: JobListingsBoardProps) {
   const selectedListing = listings.find((listing) => listing.id === selectedId) ?? null;
 
   return (
@@ -126,6 +127,13 @@ export default function JobListingsBoard({ listings, selectedId, setSelectedId, 
               ) : null}
             </div>
           )}
+          <button
+            className="mt-5 inline-flex w-full items-center justify-center rounded-xl border border-[#dfe8e7] bg-white px-4 py-2.5 text-sm font-semibold text-[#087879]"
+            onClick={() => onView(selectedListing)}
+            type="button"
+          >
+            View details
+          </button>
           {selectedListing.status !== "deactivated" && (
             <button
               className="mt-5 inline-flex w-full items-center justify-center rounded-xl border border-[#dfe8e7] bg-white px-4 py-2.5 text-sm font-semibold text-[#087879]"

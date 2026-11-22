@@ -3,6 +3,10 @@ import { filterOptions } from "@/features/employer-listings/hooks/useEmployerJob
 import { useEmployerJobListings } from "@/features/employer-listings/hooks/useEmployerJobListings";
 import CreateListingModal from "@/features/employer-listings/components/CreateListingModal";
 import JobListingsBoard from "@/features/employer-listings/components/JobListingsTable";
+import Modal from "@/components/common/Modal";
+import ListingDetailsModal from "@/features/employer-listings/components/ListingDetailsModal";
+import { useState } from "react";
+import type { EmployerListing } from "@/features/employer-listings/listings";
 
 function SummaryCard({ label, value, detail, tone }: { label: string; value: number; detail: string; tone: string }) {
   const visibilityLabel =
@@ -28,6 +32,7 @@ function SummaryCard({ label, value, detail, tone }: { label: string; value: num
 }
 
 export default function EmployerJobListingsPageContent() {
+  const [viewedListing, setViewedListing] = useState<EmployerListing | null>(null);
   const {
     companyProfile,
     listings,
@@ -57,6 +62,9 @@ export default function EmployerJobListingsPageContent() {
     error,
     retry,
     updateListingStatus,
+    closingListingId,
+    setClosingListingId,
+    confirmCloseListing,
   } = useEmployerJobListings();
 
   return (
@@ -109,6 +117,7 @@ export default function EmployerJobListingsPageContent() {
                 setSelectedId={setSelectedId}
                 onStatusChange={updateListingStatus}
                 onEdit={openEditModal}
+                onView={setViewedListing}
               />
             )}
           </div>
@@ -132,6 +141,23 @@ export default function EmployerJobListingsPageContent() {
         onSaveDraft={handleSaveDraft}
         onPublish={handlePublish}
       />
+      {closingListingId !== null && (
+        <Modal
+          title="Close listing?"
+          subtitle="Existing applicants and application history will be preserved."
+          onClose={() => setClosingListingId(null)}
+          widthClass="max-w-md"
+        >
+          <div className="px-6 pb-6">
+            <p className="text-sm leading-6 text-[#5b7072]">The listing will stop accepting new applications and will be removed from public search.</p>
+            <div className="mt-5 flex justify-end gap-2">
+              <button className="rounded-lg border border-[#dfe8e7] px-4 py-2 text-sm font-semibold text-[#526365]" disabled={isSaving} type="button" onClick={() => setClosingListingId(null)}>Cancel</button>
+              <button className="rounded-lg bg-[#a7464b] px-4 py-2 text-sm font-semibold text-white disabled:opacity-60" disabled={isSaving} type="button" onClick={() => void confirmCloseListing()}>{isSaving ? "Closing…" : "Confirm close"}</button>
+            </div>
+          </div>
+        </Modal>
+      )}
+      <ListingDetailsModal listing={viewedListing} onClose={() => setViewedListing(null)} />
     </EmployerWorkspaceLayout>
   );
 }

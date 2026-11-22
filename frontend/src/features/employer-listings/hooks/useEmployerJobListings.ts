@@ -197,6 +197,7 @@ export function useEmployerJobListings() {
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [editingListingId, setEditingListingId] = useState<number | null>(null);
+  const [closingListingId, setClosingListingId] = useState<number | null>(null);
 
   const load = useCallback(async () => {
     if (!token) return;
@@ -314,6 +315,12 @@ export function useEmployerJobListings() {
       setError("Complete the required listing details before saving.");
       return;
     }
+    if (publishAfterSaving
+      && newListingType === "job"
+      && (!newListingForm.salaryMin || !newListingForm.salaryMax)) {
+      setError("Salary minimum and maximum are required before publishing this job listing.");
+      return;
+    }
     if (newListingType === "job"
       && newListingForm.experienceRequirement === "with_experience"
       && (!/^\d+$/.test(newListingForm.minimumExperienceYears)
@@ -338,11 +345,13 @@ export function useEmployerJobListings() {
         );
         setSelectedId(updated.id);
         closeCreateModal();
+        window.dispatchEvent(new Event("careerconnect:employer-listings-changed"));
         return;
       }
       const response = await employerListingsApi.create(token, createPayload(newListingForm, newListingType));
       const created = toListing(response.data);
       setListings((current) => [created, ...current]);
+      window.dispatchEvent(new Event("careerconnect:employer-listings-changed"));
       setSelectedId(created.id);
       if (publishAfterSaving) {
         try {
@@ -385,7 +394,15 @@ export function useEmployerJobListings() {
 
   async function updateListingStatus(id: string, status: "draft" | "open" | "closed") {
     if (!token || !/^\d+$/.test(id)) return;
-    if (status === "closed" && !window.confirm("Close this listing? Existing applicants and records will be preserved.")) {
+    const listing = listings.find((item) => item.id === id);
+    if (status === "open"
+      && listing?.type === "Job"
+      && (!listing.salaryMin || !listing.salaryMax)) {
+      setError("Salary minimum and maximum are required before publishing this job listing.");
+      return;
+    }
+    if (status === "closed") {
+      setClosingListingId(Number(id));
       return;
     }
     setError(null);
@@ -393,8 +410,27 @@ export function useEmployerJobListings() {
       const response = await employerListingsApi.updateStatus(token, Number(id), status);
       const updated = toListing(response.listing);
       setListings((current) => current.map((listing) => listing.id === id ? updated : listing));
+      window.dispatchEvent(new Event("careerconnect:employer-listings-changed"));
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : "Unable to update listing status.");
+    }
+  }
+
+  async function confirmCloseListing() {
+    if (closingListingId === null) return;
+    if (!token) return;
+    setIsSaving(true);
+    setError(null);
+    try {
+      const response = await employerListingsApi.updateStatus(token, closingListingId, "closed");
+      const updated = toListing(response.listing);
+      setListings((current) => current.map((listing) => listing.id === String(closingListingId) ? updated : listing));
+      window.dispatchEvent(new Event("careerconnect:employer-listings-changed"));
+      setClosingListingId(null);
+    } catch (requestError) {
+      setError(requestError instanceof Error ? requestError.message : "Unable to close listing.");
+    } finally {
+      setIsSaving(false);
     }
   }
 
@@ -431,5 +467,8 @@ export function useEmployerJobListings() {
       void load();
     },
     updateListingStatus,
+    closingListingId,
+    setClosingListingId,
+    confirmCloseListing,
   };
 }

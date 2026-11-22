@@ -13,6 +13,7 @@ import type {
 } from "@/features/employer-registration/types";
 import { useEmployerStatus } from "@/features/employer-registration/useEmployerStatus";
 import { useCompanyVerification } from "@/features/company-verification/useCompanyVerification";
+import { roleLandingPath } from "@/features/auth/roleLandingPath";
 
 function canAccess(
   status: EmployerStatus | null,
@@ -105,7 +106,9 @@ export default function RequireEmployerStatus({
     (access === "verification" || access === "under-review") &&
     !isAuthenticatedEmployer
   ) {
-    if (authStatus === "authenticated") return <Navigate replace to="/job-search" />;
+    if (authStatus === "authenticated" && user) {
+      return <Navigate replace to={roleLandingPath(user.role)} />;
+    }
     if (authStatus === "error") {
       return (
         <main className="grid min-h-dvh place-items-center px-6 text-center">
@@ -198,8 +201,8 @@ export default function RequireEmployerStatus({
     );
   }
 
-  if (authStatus === "authenticated" && user?.role !== "employer" && access !== "register") {
-    return <Navigate replace to="/job-search" />;
+  if (authStatus === "authenticated" && user && user.role !== "employer" && access !== "register") {
+    return <Navigate replace to={roleLandingPath(user.role)} />;
   }
 
 

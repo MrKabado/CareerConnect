@@ -13,6 +13,32 @@ class NotificationService
         $interviewId = $metadata['interview_id'] ?? null;
         $applicationId = $metadata['application_id'] ?? null;
         $status = $metadata['status'] ?? null;
+        $dedupeKey = $metadata['dedupe_key'] ?? null;
+
+        if ($dedupeKey !== null) {
+            $existing = $recipient->notifications()
+                ->where('type', CareerConnectNotification::class)
+                ->get()
+                ->first(function (DatabaseNotification $notification) use ($dedupeKey): bool {
+                    $metadata = $notification->data['metadata'] ?? [];
+
+                    return ($metadata['dedupe_key'] ?? null) === $dedupeKey;
+                });
+
+            if ($existing !== null) {
+                $existing->forceFill([
+                    'data' => [
+                        'event' => $event,
+                        'title' => $title,
+                        'message' => $message,
+                        'metadata' => $metadata,
+                    ],
+                    'read_at' => null,
+                ])->save();
+
+                return;
+            }
+        }
 
         if ($interviewId !== null) {
             $existing = $recipient->notifications()

@@ -173,8 +173,8 @@ it('notifies applicants about changed interview schedules and cancellation witho
         ->assertOk()
         ->assertJsonPath('message', 'Interview schedule is unchanged.');
 
-    expect($applicant->notifications()->count())->toBe(2)
-        ->and($applicant->notifications->first(fn ($notification): bool => $notification->data['event'] === 'interview_rescheduled'))->not->toBeNull();
+    expect($applicant->notifications()->count())->toBe(1)
+        ->and($applicant->notifications()->first()->data['event'])->toBe('interview_rescheduled');
 
     $this->app['auth']->forgetGuards();
     $this->withToken($token)->postJson("/api/employer/interviews/{$interview->id}/cancel", [
@@ -185,7 +185,7 @@ it('notifies applicants about changed interview schedules and cancellation witho
         ->assertUnprocessable();
 
     $latest = $applicant->notifications()->get()->first(fn ($notification): bool => $notification->data['event'] === 'interview_cancelled');
-    expect($applicant->notifications()->count())->toBe(3)
+    expect($applicant->notifications()->count())->toBe(1)
         ->and($latest)->not->toBeNull()
         ->and($latest->data['event'])->toBe('interview_cancelled')
         ->and($latest->data['metadata']['status'])->toBe('cancelled')

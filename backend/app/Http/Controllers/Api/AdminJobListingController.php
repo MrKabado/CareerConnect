@@ -31,6 +31,7 @@ class AdminJobListingController extends Controller
 
         $listings = JobListing::query()
             ->with($this->listingRelations())
+            ->withCount('applications')
             ->when(isset($filters['status']), fn (Builder $query): Builder => $query->where('status', $filters['status']))
             ->when(isset($filters['approval_status']), fn (Builder $query): Builder => $query->where('approval_status', $filters['approval_status']))
             ->when(isset($filters['listing_type']), fn (Builder $query): Builder => $query->where('listing_type', $filters['listing_type']))
@@ -38,7 +39,10 @@ class AdminJobListingController extends Controller
                 $keyword = '%'.$filters['keyword'].'%';
                 $query->where(fn (Builder $search): Builder => $search
                     ->where('title', 'like', $keyword)
-                    ->orWhere('location', 'like', $keyword));
+                    ->orWhere('location', 'like', $keyword)
+                    ->orWhereHas('company', fn (Builder $company): Builder => $company
+                        ->where('name', 'like', $keyword)
+                        ->orWhereHas('user', fn (Builder $user): Builder => $user->where('name', 'like', $keyword))));
             })
             ->orderByDesc('created_at')
             ->orderByDesc('id')
@@ -51,6 +55,22 @@ class AdminJobListingController extends Controller
     public function show(JobListing $jobListing): JobListingResource
     {
         return new JobListingResource($jobListing->load($this->listingRelations(true)));
+    }
+
+    public function destroy(Request $request, JobListing $jobListing): JsonResponse
+    {
+        DB::transaction(function () use ($request, $jobListing): void {
+            $jobListing->adminActions()->create([
+                'admin_user_id' => $request->user()->id,
+                'action' => 'deactivated',
+                'reason' => 'Listing deleted by administrator.',
+            ]);
+            $jobListing->delete();
+        });
+
+        return response()->json([
+            'message' => 'Listing deleted safely. Existing applications and historical records remain preserved.',
+        ]);
     }
 
     public function deactivate(DeactivateJobListingRequest $request, JobListing $jobListing): JsonResponse
@@ -200,7 +220,8 @@ class AdminJobListingController extends Controller
     {
         $relations = [
             'category:id,name',
-            'company:id,name,city,logo_path,logo_disk',
+            'company:id,name,city,logo_path,logo_disk,user_id',
+            'company.user:id,name,email',
             'ojtDetails:job_listing_id,duration_hours,allowance_type,allowance_amount,slots,accepted_courses,moa_accepted',
         ];
 

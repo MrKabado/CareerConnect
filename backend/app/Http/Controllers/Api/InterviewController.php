@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Mail\RoleNotificationMail;
 use App\Models\Application;
 use App\Models\Interview;
 use App\Models\InterviewHistory;
@@ -13,6 +14,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 
@@ -484,5 +486,12 @@ class InterviewController extends Controller
                 'cancellation_reason' => $interview->cancellation_reason,
             ],
         );
+        if ($interview->applicant?->email) {
+            Mail::to($interview->applicant->email)->send(new RoleNotificationMail(
+                $title,
+                $message,
+                $interview->applicant->name,
+            ));
+        }
     }
 }

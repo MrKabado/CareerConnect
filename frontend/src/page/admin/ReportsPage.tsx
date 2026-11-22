@@ -6,7 +6,6 @@ import {
   Briefcase,
   Building2,
   CheckCircle2,
-  Download,
   FileText,
   ShieldCheck,
   Users,
@@ -20,7 +19,6 @@ import {
   type AdminActivityRecord,
   type AdminDashboardStats,
 } from "@/features/admin/backendApi";
-import { downloadCsv } from "../../utils/csv";
 
 const emptyStats: AdminDashboardStats = {
   total_applicants: 0,
@@ -110,34 +108,11 @@ export default function ReportsPage() {
     void loadActivity();
   }, [loadActivity]);
 
-  const reportStats = [
-    ["Applicants", stats.total_applicants],
-    ["Employers", stats.total_employers],
-    ["Job listings", stats.total_job_listings],
-    ["Active job listings", stats.active_job_listings],
-    ["Applications", stats.total_applications],
-    ["Pending verifications", stats.pending_verifications.total],
-  ] as const;
-
-  function exportReport() {
-    downloadCsv("careerconnect-live-report.csv", [
-      ["Metric", "Current total"],
-      ...reportStats.map(([label, value]) => [label, String(value)]),
-      ["Pending applicant verifications", String(stats.pending_verifications.applicants)],
-      ["Pending employer verifications", String(stats.pending_verifications.employers)],
-    ]);
-  }
-
   return (
     <section>
       <PageHeader
         title="Reports overview"
         subtitle="Live totals from the CareerConnect database."
-        actions={
-          <Button variant="outline" className="h-10" icon={<Download size={14} />} onClick={exportReport} disabled={isLoading || Boolean(error)}>
-            Export report
-          </Button>
-        }
       />
 
       {error && (

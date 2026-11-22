@@ -379,8 +379,8 @@ export default function MainBody({
           }),
         ]);
         if (requestId !== jobsRequestId.current) return;
-        setApiJobs(response.data.map(toFrontendListing));
-        setApiOjtOpportunities(ojtResponse.data.map(toOjtOpportunity));
+        setApiJobs(Array.from(new Map(response.data.map((listing) => [listing.id, toFrontendListing(listing)])).values()));
+        setApiOjtOpportunities(Array.from(new Map(ojtResponse.data.map((listing) => [listing.id, toOjtOpportunity(listing)])).values()));
         setJobsPage(response.meta.current_page);
         setJobsLastPage(response.meta.last_page);
         setOjtPage(ojtResponse.meta.current_page);
@@ -411,7 +411,7 @@ export default function MainBody({
         per_page: 50,
         page: jobsPage + 1,
       });
-      setApiJobs((current) => [...current, ...response.data.map(toFrontendListing)]);
+      setApiJobs((current) => Array.from(new Map([...current, ...response.data.map(toFrontendListing)].map((job) => [job.id, job])).values()));
       setJobsPage(response.meta.current_page);
       setJobsLastPage(response.meta.last_page);
     } catch (requestError) {
@@ -434,10 +434,12 @@ export default function MainBody({
         per_page: 50,
         page: ojtPage + 1,
       });
-      setApiOjtOpportunities((current) => [
-        ...current,
-        ...response.data.map(toOjtOpportunity),
-      ]);
+      setApiOjtOpportunities((current) =>
+        Array.from(new Map([
+          ...current,
+          ...response.data.map(toOjtOpportunity),
+        ].map((opportunity) => [opportunity.id, opportunity])).values()),
+      );
       setOjtPage(response.meta.current_page);
       setOjtLastPage(response.meta.last_page);
     } catch (requestError) {
@@ -537,15 +539,37 @@ export default function MainBody({
     null,
   );
   const showOjtOpportunities =
-    (audience === "ojt-seeker" && activeTab !== "Jobs") ||
-    (audience === "job-seeker" && activeTab === "OJT");
+    activeTab === "OJT";
   const visibleOjtOpportunities = useMemo(() => {
-    if (
-      activeTab === "Jobs" ||
-      (audience === "ojt-seeker" && !hasOjtPreferences) ||
-      (audience === "job-seeker" && activeTab !== "OJT")
-    ) {
+    if (activeTab === "Jobs") {
       return [];
+    }
+
+    if (activeTab === "OJT") {
+      const query = search.trim().toLocaleLowerCase();
+      return apiOjtOpportunities
+        .filter((opportunity) => {
+          const matchesSaved =
+            !showSavedOnly || savedOpportunities.includes(`ojt:${opportunity.id}`);
+          const matchesWorkSetup =
+            !selectedWorkSetup ||
+            opportunity.workSetup.toLowerCase() === selectedWorkSetup.toLowerCase();
+          const matchesEmployment =
+            employmentTypes.length === 0 ||
+            employmentTypes.includes(opportunity.employmentType);
+          const matchesSearch =
+            !query ||
+            `${opportunity.title} ${opportunity.company} ${opportunity.skills.join(" ")}`
+              .toLocaleLowerCase()
+              .includes(query);
+          return matchesSaved && matchesWorkSetup && matchesEmployment && matchesSearch;
+        })
+        .map((opportunity) => ({
+          ...opportunity,
+          matchScore: 100,
+          requiredHours: null,
+        }))
+        .sort((left, right) => left.title.localeCompare(right.title));
     }
 
     const ojtAnswers =
@@ -593,7 +617,6 @@ export default function MainBody({
     answers,
     audience,
     employmentTypes,
-    hasOjtPreferences,
     search,
     savedOpportunities,
     showSavedOnly,
@@ -1033,6 +1056,12 @@ export default function MainBody({
               Loading current listings…
             </p>
           )}
+          {activeTab === "For you" && visibleOjtOpportunities.map((opportunity) => (
+            <OjtOpportunityCard
+              key={`for-you-${opportunity.id}`}
+              opportunity={opportunity}
+            />
+          ))}
           {visibleJobs.map((job) => {
             const applicationStatus = listingStatuses[job.listingId];
             const isRejected = applicationStatus?.status === "rejected";

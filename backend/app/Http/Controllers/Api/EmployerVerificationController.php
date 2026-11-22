@@ -3,15 +3,19 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Mail\RoleNotificationMail;
 use App\Models\ActivityLog;
 use App\Models\Company;
 use App\Models\CompanyVerification;
+use App\Models\User;
 use App\Models\VerificationDocument;
 use App\Services\MediaStorage;
+use App\Services\NotificationService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Validation\Rule;
 use RuntimeException;
 use Symfony\Component\HttpFoundation\StreamedResponse;
@@ -21,6 +25,7 @@ use Throwable;
 class EmployerVerificationController extends Controller
 {
     private const REAUTHENTICATION_ABILITY = 'company-verification:reauthenticate';
+
     private const ADDITIONAL_ISO_COUNTRY_CODES = 'BG BH EG GB GD GE';
 
     private const ISO_COUNTRY_CODES = 'AD AE AF AG AI AL AM AO AQ AR AS AT AU AW AX AZ BA BB BD BE BF BI BJ BL BM BN BO BQ BR BS BT BV BW BY BZ CA CC CD CF CG CH CI CK CL CM CN CO CR CU CV CW CX CY CZ DE DJ DK DM DO DZ EC EE EH ER ES ET FI FJ FK FM FO FR GA GF GG GH GI GL GM GN GP GQ GR GS GT GU GW GY HK HM HN HR HT HU ID IE IL IM IN IO IQ IR IS IT JE JM JO JP KE KG KH KI KM KN KP KR KW KY KZ LA LB LC LI LK LR LS LT LU LV LY MA MC MD ME MF MG MH MK ML MM MN MO MP MQ MR MS MT MU MV MW MX MY MZ NA NC NE NF NG NI NL NO NP NR NU NZ OM PA PE PF PG PH PK PL PM PN PR PS PT PW PY QA RE RO RS RU RW SA SB SC SD SE SG SH SI SJ SK SL SM SN SO SR SS ST SV SX SY SZ TC TD TF TG TH TJ TK TL TM TN TO TR TT TV TW TZ UA UG UM US UY UZ VA VC VE VG VI VN VU WF WS XK YE YT ZA ZM ZW';
@@ -38,6 +43,33 @@ class EmployerVerificationController extends Controller
             ->when(isset($validated['status']), fn ($query, string $status) => $query->where('status', $status))
             ->latest('updated_at')
             ->paginate(min(max($request->integer('per_page', 15), 1), 50));
+
+        $companyVerification->loadMissing(['company.user']);
+        $employer = $companyVerification->company?->user;
+        if ($employer !== null) {
+            $approved = $companyVerification->fresh()->status === 'verified';
+            $title = $approved ? 'Company verification approved' : 'Company verification needs changes';
+            $message = $approved
+                ? 'Congratulations! '.$companyVerification->company->name.' was approved. You can now access your employer account.'
+                : 'Your company verification was rejected: '.$companyVerification->fresh()->rejection_reason;
+            app(NotificationService::class)->send(
+                $employer,
+                'employer_verification_'.$companyVerification->fresh()->status,
+                $title,
+                $message,
+                [
+                    'dedupe_key' => 'employer_verification_review-'.$companyVerification->id,
+                    'company_id' => $companyVerification->company_id,
+                    'company_name' => $companyVerification->company->name,
+                    'verification_status' => $companyVerification->fresh()->status,
+                ],
+            );
+            Mail::to($employer->email)->send(new RoleNotificationMail(
+                $title,
+                $message,
+                $employer->name,
+            ));
+        }
 
         return response()->json([
             'data' => $verifications->getCollection()->map(fn (CompanyVerification $verification): array => [
@@ -562,6 +594,21 @@ class EmployerVerificationController extends Controller
                 'message' => 'Business registration and permit documents are required before submitting.',
                 'code' => 'verification_incomplete',
             ], 422);
+        }
+
+        foreach (User::query()->where('role', 'admin')->get(['id', 'name', 'email']) as $admin) {
+            app(NotificationService::class)->send(
+                $admin,
+                'employer_verification_submitted',
+                'Employer verification submitted',
+                sprintf('%s submitted company verification documents for review.', $company->name),
+                [
+                    'dedupe_key' => 'employer_verification-'.$verification->id,
+                    'company_id' => $company->id,
+                    'company_name' => $company->name,
+                    'verification_status' => 'pending',
+                ],
+            );
         }
 
         return response()->json([

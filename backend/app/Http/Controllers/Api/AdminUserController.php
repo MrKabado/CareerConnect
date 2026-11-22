@@ -4,13 +4,16 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\AdminUpdateUserRequest;
+use App\Mail\RoleNotificationMail;
 use App\Models\ActivityLog;
 use App\Models\OtpCode;
 use App\Models\User;
+use App\Services\NotificationService;
 use App\Services\OtpCodeService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Validation\Rule;
 
 class AdminUserController extends Controller
@@ -154,6 +157,23 @@ class AdminUserController extends Controller
                 $user->tokens()->delete();
             }
         });
+
+        $active = $validated['account_status'] === 'active';
+        $title = $active ? 'Account access restored' : 'Account access suspended';
+        $message = $active
+            ? 'Your CareerConnect account is active again.'
+            : 'Your CareerConnect account has been suspended by an administrator.';
+        app(NotificationService::class)->send(
+            $user,
+            'account_status_changed',
+            $title,
+            $message,
+            [
+                'dedupe_key' => 'account_status-'.$user->id.'-'.$validated['account_status'],
+                'account_status' => $validated['account_status'],
+            ],
+        );
+        Mail::to($user->email)->send(new RoleNotificationMail($title, $message, $user->name));
 
         return response()->json([
             'message' => 'Account status updated.',

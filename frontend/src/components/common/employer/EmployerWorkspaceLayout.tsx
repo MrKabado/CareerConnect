@@ -6,6 +6,7 @@ import { useAuth } from "@/features/auth/useAuth";
 import { getEmployerMessagingActor } from "@/features/messaging/api";
 import { useUnreadCount } from "@/features/messaging/hooks";
 import { employerVerificationFilesApi } from "@/features/employer-verification/backendApi";
+import RoleNotificationBell from "@/features/notifications/RoleNotificationBell";
 
 const navigationItems = [
   { label: "Overview", to: "/employer/overview" },
@@ -128,6 +129,7 @@ function EmployerHeader() {
         >
           {mobileMenuOpen ? <X size={20} /> : <Menu size={20} />}
         </button>
+        <RoleNotificationBell role="employer" />
         <Link
           aria-current={messagesActive ? "page" : undefined}
           aria-label={`Messages${unreadCount > 0 ? `, ${unreadCount} unread` : ""}`}

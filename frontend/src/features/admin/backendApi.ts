@@ -147,7 +147,7 @@ export const adminApi = {
     );
   },
 
-  jobs(token: string, filters: { approval_status?: string; status?: string; page?: number } = {}) {
+  jobs(token: string, filters: { approval_status?: string; status?: string; listing_type?: "job" | "ojt"; keyword?: string; page?: number } = {}) {
     return apiRequest<{
       data: Array<{
         id: number;
@@ -158,12 +158,21 @@ export const adminApi = {
         approval_status: "not_required" | "pending" | "approved" | "rejected";
         approval_reason: string | null;
         category: { id: number; name: string } | null;
-        company: { name: string } | null;
+        applications_count: number | null;
+        applicant_count: number;
+        company: { name: string; employer: { id: number; name: string; email: string } | null } | null;
         created_at: string | null;
         admin_actions: Array<{ action: string; reason: string | null; created_at: string | null }> | null;
       }>;
       meta: { current_page: number; last_page: number; total: number };
     }>("/admin/jobs", { params: { ...filters, per_page: 50 } }, token);
+  },
+  deleteJob(token: string, id: number) {
+    return apiRequest<{ message: string }>(
+      `/admin/jobs/${id}`,
+      { method: "DELETE" },
+      token,
+    );
   },
 
   approveJobCategory(token: string, id: number) {
@@ -181,6 +190,7 @@ export const adminApi = {
       token,
     );
   },
+
 
   deleteCategory(token: string, id: string) {
     return apiRequest<{ message: string }>(

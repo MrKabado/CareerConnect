@@ -2,12 +2,7 @@ import type { ReactNode } from "react";
 import { Navigate } from "react-router";
 import { PageSkeleton } from "@/components/ui/skeleton";
 import { useAuth } from "@/features/auth/useAuth";
-
-function dashboardPath(role: "admin" | "applicant" | "employer") {
-  if (role === "admin") return "/admin";
-  if (role === "employer") return "/employer/overview";
-  return "/profile";
-}
+import { roleLandingPath } from "@/features/auth/roleLandingPath";
 
 export default function RequireGuest({ children }: { children: ReactNode }) {
   const { status, user } = useAuth();
@@ -21,7 +16,7 @@ export default function RequireGuest({ children }: { children: ReactNode }) {
   }
 
   if (status === "authenticated" && user) {
-    return <Navigate replace to={dashboardPath(user.role)} />;
+    return <Navigate replace to={roleLandingPath(user.role)} />;
   }
 
   return children;

@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\ActivityLog;
 use App\Models\User;
+use App\Services\NotificationService;
 use App\Services\OtpCodeService;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\JsonResponse;
@@ -135,6 +136,19 @@ class AuthController extends Controller
                 'role' => $user->role,
             ],
         ]);
+        foreach (User::query()->where('role', 'admin')->get(['id', 'name', 'email']) as $admin) {
+            app(NotificationService::class)->send(
+                $admin,
+                'account_registered',
+                'New account registered',
+                sprintf('%s registered as %s.', $user->name, $user->role),
+                [
+                    'dedupe_key' => 'account_registered-'.$user->id,
+                    'user_id' => $user->id,
+                    'role' => $user->role,
+                ],
+            );
+        }
         $this->otpCodes->send($user->email, 'email_verification');
         $onboardingToken = $user->role === 'applicant'
             ? $user->createToken(

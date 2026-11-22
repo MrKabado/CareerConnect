@@ -541,6 +541,12 @@ export async function listNotifications(actor: MessagingActor): Promise<Notifica
         "applicant_note",
         "applicant_hired",
         "application_status_changed",
+        "applicant_identity_verified",
+        "applicant_identity_rejected",
+        "applicant_identity_verified",
+        "applicant_identity_rejected",
+        "employment_ended",
+        "account_status_changed",
       ].includes(item.event ?? ""))
       .map((item): NotificationItem => {
         const metadata = item.metadata ?? {};

@@ -9,6 +9,7 @@ import jobSearchNavIcon from "@/assets/Icon (9).svg";
 import profileNavIcon from "@/assets/Icon (10).svg";
 import { useUnreadCount } from "@/features/messaging/hooks";
 import { applicantFilesApi } from "@/features/user-profile/backendApi";
+import RoleNotificationBell from "@/features/notifications/RoleNotificationBell";
 
 const navItems = [
   { label: "Search Job", to: "/job-search", icon: jobSearchNavIcon },
@@ -183,6 +184,7 @@ export default function Header() {
         ref={dropdownAreaRef}
       >
         {isApplicant && <MessagesIconLink unreadCount={unreadCount} />}
+        {isApplicant && <RoleNotificationBell role="applicant" />}
         <button
           aria-expanded={mobileMenuOpen}
           aria-label={mobileMenuOpen ? "Close navigation" : "Open navigation"}

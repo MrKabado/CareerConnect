@@ -10,6 +10,7 @@ use App\Models\ActivityLog;
 use App\Models\Category;
 use App\Models\Company;
 use App\Models\JobListing;
+use App\Services\NotificationService;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -17,6 +18,7 @@ use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Validation\ValidationException;
 
 class EmployerJobListingController extends Controller
 {
@@ -131,6 +133,14 @@ class EmployerJobListingController extends Controller
 
         DB::transaction(function () use ($listing, $validated): void {
             $listing->fill($this->listingAttributes($validated))->save();
+            if ($listing->status === 'open'
+                && $listing->listing_type === 'job'
+                && ($listing->salary_min === null || $listing->salary_max === null)) {
+                throw ValidationException::withMessages([
+                    'salary_min' => ['Salary information is required before publishing this job listing.'],
+                    'salary_max' => ['Salary information is required before publishing this job listing.'],
+                ]);
+            }
 
             if (isset($validated['custom_category_name'])) {
                 $category = Category::find($validated['category_id']);
@@ -187,6 +197,14 @@ class EmployerJobListingController extends Controller
                 'code' => 'company_not_verified',
             ], 403);
         }
+        if ($status === 'open'
+            && $listing->listing_type === 'job'
+            && ($listing->salary_min === null || $listing->salary_max === null)) {
+            throw ValidationException::withMessages([
+                'salary_min' => ['Salary information is required before publishing this job listing.'],
+                'salary_max' => ['Salary information is required before publishing this job listing.'],
+            ]);
+        }
         if ($status === 'open' && ! $listing->category?->is_active) {
             return response()->json([
                 'message' => 'Custom categories must be approved by an administrator before publishing.',
@@ -228,6 +246,19 @@ class EmployerJobListingController extends Controller
             default => $listing->published_at,
         };
         $listing->save();
+
+        app(NotificationService::class)->send(
+            $request->user(),
+            'listing_status_changed',
+            'Listing status updated',
+            sprintf('%s is now %s.', $listing->title, $status),
+            [
+                'dedupe_key' => 'listing_status-'.$listing->id.'-'.$status,
+                'job_listing_id' => $listing->id,
+                'job_listing_title' => $listing->title,
+                'listing_status' => $status,
+            ],
+        );
 
         ActivityLog::create([
             'user_id' => $request->user()->id,

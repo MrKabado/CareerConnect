@@ -44,6 +44,13 @@ export function useEmployerOverview() {
     // The request updates state only after its promise settles.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void load();
+    const handleListingChanged = () => void load();
+    window.addEventListener("careerconnect:employer-listings-changed", handleListingChanged);
+    window.addEventListener("focus", handleListingChanged);
+    return () => {
+      window.removeEventListener("careerconnect:employer-listings-changed", handleListingChanged);
+      window.removeEventListener("focus", handleListingChanged);
+    };
   }, [load]);
 
   return {

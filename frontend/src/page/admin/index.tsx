@@ -1,4 +1,3 @@
-import { downloadCsv } from "../../utils/csv";
 import { Link } from "react-router";
 
 type IconName = "users" | "building" | "briefcase" | "applications" | "check" | "download" | "clock" | "bell" | "chevron";
@@ -36,21 +35,6 @@ const jobs = [
 ];
 
 export default function HomeAdmin() {
-  const exportReport = () => {
-    downloadCsv("careerconnect-report.csv", [
-      ["Metric", "Value", "Change"],
-      ...stats.map((stat) => [stat.label, stat.value, stat.change]),
-      [],
-      ["Most-applied jobs", "Level", "Applications"],
-      ...jobs.map(([title, level, count]) => [title, level, count]),
-      [],
-      ["Platform health", "Value"],
-      ["Application completion", "94%"],
-      ["Verified employers", "96%"],
-      ["Active users", "10,804"],
-    ]);
-  };
-
   return (
     <main className="min-h-[calc(100vh-98px)] bg-[#f4f8f8] px-0 py-0 text-[#263638]">
       <div className="mx-auto max-w-[1120px] max-[1120px]:px-4">
@@ -60,9 +44,6 @@ export default function HomeAdmin() {
             <h1 className="mt-1 text-[22px] font-bold tracking-[-0.35px] text-[#263638]">Reports overview</h1>
             <p className="mt-1 text-[12px] text-[#718181]">Monitor platform activity, growth, and marketplace health.</p>
           </div>
-          <button onClick={exportReport} className="mt-[24px] inline-flex h-8 items-center gap-2 rounded-md border border-[#edf1f1] bg-white px-3 text-[11px] font-medium text-[#627274] shadow-[0_1px_2px_rgba(38,58,59,.05)] max-[680px]:mt-0 max-[680px]:w-full max-[680px]:justify-center">
-            <Icon name="download" className="size-3.5" /> Export report
-          </button>
         </div>
 
         <section className="grid grid-cols-5 gap-3 max-lg:grid-cols-3 max-md:grid-cols-2 max-sm:grid-cols-1">

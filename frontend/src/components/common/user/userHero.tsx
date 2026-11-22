@@ -3,8 +3,6 @@ import { Link } from "react-router";
 type HeroProps = {
   search: string;
   onSearchChange: (value: string) => void;
-  audience: "job-seeker" | "ojt-seeker";
-  onAudienceChange: (audience: "job-seeker" | "ojt-seeker") => void;
   profileTags: string[];
 };
 
@@ -26,8 +24,6 @@ function HeroIcon({ name, size = 19 }: { name: HeroIconName; size?: number }) {
 export default function Hero({
   search,
   onSearchChange,
-  audience,
-  onAudienceChange,
   profileTags,
 }: HeroProps) {
   return (
@@ -37,24 +33,6 @@ export default function Hero({
           <span className="inline-flex items-center gap-2 rounded-[20px] border border-[#f0e8d4] bg-[#fff9e9] px-[11px] py-[7px] text-[10px] font-semibold tracking-[0.08px] text-[#8b6a28]"><span className="size-[6px] rounded-full bg-[#e9ae45]" />1,240 new opportunities this week</span>
           <h1 className="mt-4 mb-[7px] text-[clamp(32px,2.85vw,38px)] leading-[1.12] font-bold tracking-[-1.45px] text-[#263638] max-[680px]:mt-[14px] max-[680px]:max-w-[420px] max-[680px]:text-[clamp(31px,9vw,40px)] max-[680px]:tracking-[-1.35px]">Find work that feels <span className="text-[#0d9290]">meaningful.</span></h1>
           <p className="text-[14px] leading-[1.55] text-[#77888a] max-[680px]:max-w-[390px] max-[680px]:text-xs">Discover roles matched to your experience, ambitions, and preferences from onboarding.</p>
-        </div>
-        <div className="absolute top-[46px] right-[max(40px,calc((100vw-1136px)/2))] flex items-center gap-[10px] max-[920px]:right-6 max-[680px]:static max-[680px]:mt-[17px]">
-          <button
-            aria-pressed={audience === "job-seeker"}
-            className={`inline-flex min-h-[38px] items-center justify-center gap-2 whitespace-nowrap rounded-[9px] px-4 text-xs font-semibold transition-[background,transform] duration-[140ms] active:translate-y-px max-[680px]:min-h-9 focus-visible:outline-[3px] focus-visible:outline-[#67c9c1] focus-visible:outline-offset-[3px] ${audience === "job-seeker" ? "bg-[#07888a] text-white hover:bg-[#066f72]" : "border border-[#d9e8e6] bg-white/80 text-[#426568] hover:bg-white"}`}
-            onClick={() => onAudienceChange("job-seeker")}
-            type="button"
-          >
-            Job seeker
-          </button>
-          <button
-            aria-pressed={audience === "ojt-seeker"}
-            className={`inline-flex min-h-[38px] items-center justify-center gap-2 whitespace-nowrap rounded-[9px] px-4 text-xs font-semibold transition-[background,transform] duration-[140ms] active:translate-y-px max-[680px]:min-h-9 focus-visible:outline-[3px] focus-visible:outline-[#67c9c1] focus-visible:outline-offset-[3px] ${audience === "ojt-seeker" ? "bg-[#07888a] text-white hover:bg-[#066f72]" : "border border-[#d9e8e6] bg-white/80 text-[#426568] hover:bg-white"}`}
-            onClick={() => onAudienceChange("ojt-seeker")}
-            type="button"
-          >
-            OJT seeker
-          </button>
         </div>
 
         <form className="mt-[34px] flex gap-2 rounded-[13px] border border-[#e7eeee] bg-white p-2 shadow-[0_9px_22px_rgba(54,103,99,0.08)] max-[680px]:mt-[21px] max-[680px]:flex-col max-[680px]:gap-0 max-[680px]:rounded-[11px] max-[680px]:p-[7px]" onSubmit={(event) => { event.preventDefault(); document.getElementById("jobs")?.scrollIntoView({ behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" }); }}>
