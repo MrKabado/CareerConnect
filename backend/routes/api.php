@@ -134,6 +134,7 @@ Route::middleware(['auth:sanctum', 'account.active', 'abilities:*', 'throttle:60
 
     Route::middleware('role:admin')->prefix('admin')->group(function (): void {
         Route::get('/dashboard', [DashboardController::class, 'admin']);
+        Route::get('/activity', [DashboardController::class, 'adminActivity']);
         Route::get('/jobs', [AdminJobListingController::class, 'index']);
         Route::get('/jobs/{jobListing}', [AdminJobListingController::class, 'show'])->whereNumber('jobListing');
         Route::post('/jobs/{jobListing}/deactivate', [AdminJobListingController::class, 'deactivate'])->whereNumber('jobListing');

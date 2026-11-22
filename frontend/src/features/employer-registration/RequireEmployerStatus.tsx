@@ -1,7 +1,6 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { Navigate } from "react-router";
 import {
-  employerRegistrationApi,
   getEmployerStatusPath,
 } from "@/features/employer-registration/api";
 import { useAuth } from "@/features/auth/useAuth";
@@ -40,8 +39,8 @@ export default function RequireEmployerStatus({
   const { employer, status } = useEmployerStatus();
   const { user, token, status: authStatus, error: authError, refresh } = useAuth();
   const verification = useCompanyVerification();
-  const [demoError, setDemoError] = useState<string | null>(null);
   const [serverStatus, setServerStatus] = useState<string | null>(null);
+  const [companyProfileComplete, setCompanyProfileComplete] = useState(false);
   const [serverStatusError, setServerStatusError] = useState<string | null>(null);
   const [isServerStatusLoading, setIsServerStatusLoading] = useState(false);
   const [retryStatus, setRetryStatus] = useState(0);
@@ -49,19 +48,18 @@ export default function RequireEmployerStatus({
   const usesBackendStatus =
     isAuthenticatedEmployer &&
     (access === "verification" || access === "under-review" || access === "dashboard");
-  const isMayaDemoSetup =
-    import.meta.env.DEV && access === "dashboard" && !employer && !isAuthenticatedEmployer;
 
   useEffect(() => {
     if (!usesBackendStatus || !token) return;
 
     let active = true;
-    setIsServerStatusLoading(true);
-    setServerStatusError(null);
     employerVerificationFilesApi
       .status(token)
       .then((response) => {
-        if (active) setServerStatus(response.status);
+        if (active) {
+          setServerStatus(response.status);
+          setCompanyProfileComplete(response.company_profile_complete);
+        }
       })
       .catch((requestError: unknown) => {
         if (!active) return;
@@ -84,21 +82,6 @@ export default function RequireEmployerStatus({
     };
   }, [retryStatus, token, usesBackendStatus]);
 
-  useEffect(() => {
-    if (!isMayaDemoSetup) return;
-
-    try {
-      employerRegistrationApi.createMayaDemoForDevelopment();
-    } catch (error) {
-      window.setTimeout(() => {
-        setDemoError(
-          error instanceof Error
-            ? error.message
-            : "Unable to set up the Maya Philippines demo account.",
-        );
-      }, 0);
-    }
-  }, [isMayaDemoSetup]);
 
   if (
     authStatus === "loading" &&
@@ -110,8 +93,7 @@ export default function RequireEmployerStatus({
 
   if (
     (access === "verification" || access === "under-review") &&
-    !isAuthenticatedEmployer &&
-    !isMayaDemoSetup
+    !isAuthenticatedEmployer
   ) {
     if (authStatus === "authenticated") return <Navigate replace to="/job-search" />;
     if (authStatus === "error") {
@@ -166,7 +148,15 @@ export default function RequireEmployerStatus({
     }
 
     if (access === "verification") {
-      if (serverStatus === "incomplete" || serverStatus === "rejected") return children;
+      if (
+        (serverStatus === "incomplete" || serverStatus === "rejected") &&
+        companyProfileComplete
+      ) {
+        return children;
+      }
+      if (serverStatus === "incomplete" || serverStatus === "rejected") {
+        return <Navigate replace to="/employer/verification/company-info" />;
+      }
       return (
         <Navigate
           replace
@@ -198,21 +188,6 @@ export default function RequireEmployerStatus({
     return <Navigate replace to="/job-search" />;
   }
 
-  if (isMayaDemoSetup) {
-    return (
-      <main className="flex min-h-screen items-center justify-center bg-[#edf3f2] px-4">
-        <div className="max-w-sm rounded-2xl border border-[#d8e6e3] bg-white p-6 text-center shadow-lg">
-          <h1 className="text-lg font-bold text-[#243a3c]">
-            {demoError ? "Demo account setup failed" : "Setting up Maya Philippines"}
-          </h1>
-          <p className="mt-2 text-sm text-[#647578]">
-            {demoError ??
-              "Preparing an approved employer account for the development dashboard."}
-          </p>
-        </div>
-      </main>
-    );
-  }
 
   if (access === "dashboard" && employer) {
     if (verification.dashboardReady) {

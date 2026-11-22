@@ -1,10 +1,25 @@
 import { useCallback, useEffect, useState } from "react";
-import { Briefcase, Building2, Download, FileText, Users } from "lucide-react";
+import {
+  Activity,
+  AlertTriangle,
+  ArrowRight,
+  Briefcase,
+  Building2,
+  CheckCircle2,
+  Download,
+  FileText,
+  ShieldCheck,
+  Users,
+} from "lucide-react";
 import { Link } from "react-router";
 import StatCard from "../../components/admin/StatCard";
 import { Button, Card, PageHeader } from "../../components/common";
 import { useAuth } from "@/features/auth/useAuth";
-import { adminApi, type AdminDashboardStats } from "@/features/admin/backendApi";
+import {
+  adminApi,
+  type AdminActivityRecord,
+  type AdminDashboardStats,
+} from "@/features/admin/backendApi";
 import { downloadCsv } from "../../utils/csv";
 
 const emptyStats: AdminDashboardStats = {
@@ -16,17 +31,45 @@ const emptyStats: AdminDashboardStats = {
   total_applications: 0,
 };
 
+function formatActivityTime(value: string | null): string {
+  if (!value) return "Date unavailable";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "Date unavailable";
+  const elapsedMinutes = Math.max(0, Math.floor((Date.now() - date.getTime()) / 60000));
+  if (elapsedMinutes < 1) return "Just now";
+  if (elapsedMinutes < 60) return `${elapsedMinutes}m ago`;
+  const elapsedHours = Math.floor(elapsedMinutes / 60);
+  if (elapsedHours < 24) return `${elapsedHours}h ago`;
+  const elapsedDays = Math.floor(elapsedHours / 24);
+  if (elapsedDays < 7) return `${elapsedDays}d ago`;
+  return new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric" }).format(date);
+}
+
+function activityIcon(action: string) {
+  if (action.includes("verification")) return ShieldCheck;
+  if (action.includes("application")) return FileText;
+  if (action.includes("listing")) return Briefcase;
+  if (action.includes("registered")) return Users;
+  if (action.includes("status")) return AlertTriangle;
+  return Activity;
+}
+
 export default function ReportsPage() {
   const { token } = useAuth();
   const [stats, setStats] = useState(emptyStats);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [activities, setActivities] = useState<AdminActivityRecord[]>([]);
 
   const load = useCallback(async () => {
     if (!token) return;
     try {
-      const response = await adminApi.dashboard(token);
+      const [response, activityResponse] = await Promise.all([
+        adminApi.dashboard(token),
+        adminApi.activity(token),
+      ]);
       setStats(response.data);
+      setActivities(activityResponse.data);
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : "Unable to load platform statistics.");
     } finally {
@@ -76,31 +119,102 @@ export default function ReportsPage() {
         </div>
       )}
       <div aria-busy={isLoading} className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        <StatCard label="Applicants" value={isLoading ? "—" : stats.total_applicants.toLocaleString()} icon={Users} />
-        <StatCard label="Employers" value={isLoading ? "—" : stats.total_employers.toLocaleString()} icon={Building2} />
-        <StatCard label="Job listings" value={isLoading ? "—" : stats.total_job_listings.toLocaleString()} icon={Briefcase} />
-        <StatCard label="Active listings" value={isLoading ? "—" : stats.active_job_listings.toLocaleString()} icon={Briefcase} />
-        <StatCard label="Applications" value={isLoading ? "—" : stats.total_applications.toLocaleString()} icon={FileText} />
-        <StatCard label="Pending verifications" value={isLoading ? "—" : stats.pending_verifications.total.toLocaleString()} icon={Users} />
+        <StatCard tone="blue" label="Applicants" value={isLoading ? "—" : stats.total_applicants.toLocaleString()} icon={Users} />
+        <StatCard tone="teal" label="Employers" value={isLoading ? "—" : stats.total_employers.toLocaleString()} icon={Building2} />
+        <StatCard tone="green" label="Job listings" value={isLoading ? "—" : stats.total_job_listings.toLocaleString()} icon={Briefcase} />
+        <StatCard tone="blue" label="Active listings" value={isLoading ? "—" : stats.active_job_listings.toLocaleString()} icon={Briefcase} />
+        <StatCard tone="amber" label="Applications" value={isLoading ? "—" : stats.total_applications.toLocaleString()} icon={FileText} />
+        <StatCard tone="red" label="Pending verifications" value={isLoading ? "—" : stats.pending_verifications.total.toLocaleString()} icon={Users} />
       </div>
 
-      <div className="mt-4 grid gap-4 lg:grid-cols-2">
-        <Card className="p-6">
-          <h2 className="text-[15px] font-semibold">Pending review</h2>
-          <dl className="mt-4 space-y-3 text-[13px]">
-            <div className="flex justify-between"><dt className="text-muted">Applicant verifications</dt><dd className="font-medium">{isLoading ? "—" : stats.pending_verifications.applicants}</dd></div>
-            <div className="flex justify-between"><dt className="text-muted">Employer verifications</dt><dd className="font-medium">{isLoading ? "—" : stats.pending_verifications.employers}</dd></div>
-          </dl>
-          <Link to="/admin/verifications" className="mt-4 inline-flex h-9 w-full items-center justify-center rounded-lg bg-brand-600 text-[13px] font-medium text-white hover:bg-brand-700">
-            Review employer requests
-          </Link>
+      <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,1.45fr)_minmax(280px,.55fr)]">
+        <Card className="overflow-hidden p-0">
+          <div className="flex items-center justify-between border-b border-line px-5 py-4">
+            <div>
+              <h2 className="text-[15px] font-semibold text-ink">Recent activity</h2>
+              <p className="mt-1 text-xs text-muted">Latest platform and administrator events</p>
+            </div>
+            <Activity size={17} className="text-brand-700" />
+          </div>
+          {isLoading ? (
+            <p className="px-5 py-8 text-center text-xs text-muted">Loading recent activity…</p>
+          ) : activities.length === 0 ? (
+            <div className="px-5 py-8 text-center">
+              <CheckCircle2 size={22} className="mx-auto text-emerald-600" />
+              <p className="mt-2 text-sm font-semibold text-ink">No recent activity</p>
+              <p className="mt-1 text-xs text-muted">New platform events will appear here.</p>
+            </div>
+          ) : (
+            <ul className="divide-y divide-line">
+              {activities.map((activity) => {
+                const Icon = activityIcon(activity.action);
+                return (
+                  <li key={activity.id} className="flex items-start gap-3 px-5 py-3.5">
+                    <span className="mt-0.5 grid size-8 shrink-0 place-items-center rounded-lg bg-brand-50 text-brand-700">
+                      <Icon size={15} />
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-xs font-semibold text-ink">{activity.title}</p>
+                      <p className="mt-0.5 truncate text-[11px] text-muted">
+                        {activity.description}
+                        {activity.actor_name ? ` · ${activity.actor_name}` : ""}
+                      </p>
+                    </div>
+                    <time className="shrink-0 text-[10px] text-muted">{formatActivityTime(activity.created_at)}</time>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
         </Card>
-        <Card className="p-6">
-          <h2 className="text-[15px] font-semibold">Database totals</h2>
-          <p className="mt-3 text-xs leading-5 text-muted">
-            These values come from the admin dashboard API. Month-over-month growth and most-applied listing analytics are not exposed by the current API.
-          </p>
-        </Card>
+
+        <div className="grid content-start gap-4">
+          <Card className="p-5">
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-[15px] font-semibold text-ink">Quick actions</h2>
+                <p className="mt-1 text-xs text-muted">Frequent admin tasks</p>
+              </div>
+              <ArrowRight size={16} className="text-brand-700" />
+            </div>
+            <div className="mt-4 grid gap-2">
+              <Link to="/admin/verifications" className="flex h-10 items-center justify-between rounded-lg border border-line px-3 text-xs font-semibold text-ink hover:border-brand-100 hover:bg-brand-50">
+                <span className="flex items-center gap-2"><ShieldCheck size={15} className="text-brand-700" />Review verifications</span>
+                {stats.pending_verifications.total > 0 && <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[10px] text-amber-700">{stats.pending_verifications.total}</span>}
+              </Link>
+              <Link to="/admin/users" className="flex h-10 items-center gap-2 rounded-lg border border-line px-3 text-xs font-semibold text-ink hover:border-blue-100 hover:bg-blue-50">
+                <Users size={15} className="text-blue-700" />Manage users
+              </Link>
+              <Link to="/admin/categories" className="flex h-10 items-center gap-2 rounded-lg border border-line px-3 text-xs font-semibold text-ink hover:border-emerald-100 hover:bg-emerald-50">
+                <Briefcase size={15} className="text-emerald-700" />Manage categories
+              </Link>
+            </div>
+          </Card>
+
+          <Card className="p-5">
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-[15px] font-semibold text-ink">Needs attention</h2>
+                <p className="mt-1 text-xs text-muted">Items requiring review</p>
+              </div>
+              <AlertTriangle size={16} className="text-amber-600" />
+            </div>
+            {stats.pending_verifications.total > 0 ? (
+              <Link to="/admin/verifications" className="mt-4 flex items-start gap-3 rounded-lg border border-amber-100 bg-amber-50/60 p-3">
+                <span className="mt-0.5 grid size-8 shrink-0 place-items-center rounded-lg bg-white text-amber-700"><ShieldCheck size={15} /></span>
+                <span>
+                  <span className="block text-xs font-semibold text-ink">{stats.pending_verifications.total} pending verification{stats.pending_verifications.total === 1 ? "" : "s"}</span>
+                  <span className="mt-1 block text-[11px] text-muted">Review employer and applicant submissions.</span>
+                </span>
+              </Link>
+            ) : (
+              <div className="mt-4 rounded-lg border border-emerald-100 bg-emerald-50/60 p-3">
+                <p className="text-xs font-semibold text-emerald-800">Everything is up to date.</p>
+                <p className="mt-1 text-[11px] text-muted">No supported review items are pending.</p>
+              </div>
+            )}
+          </Card>
+        </div>
       </div>
     </section>
   );

@@ -3,10 +3,12 @@ import { Link, useNavigate } from "react-router";
 import OnboardingButton from "@/components/features/onboarding/shared/onboardingbutton";
 import { employerRegistrationApi } from "@/features/employer-registration/api";
 import { useEmployerStatus } from "@/features/employer-registration/useEmployerStatus";
+import { useAuth } from "@/features/auth/useAuth";
 
 export default function EmployerEmailVerification() {
   const navigate = useNavigate();
   const { employer } = useEmployerStatus();
+  const { verifyEmail } = useAuth();
   const [code, setCode] = useState("");
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -32,8 +34,9 @@ export default function EmployerEmailVerification() {
     setError(null);
     setIsVerifying(true);
     try {
-      await employerRegistrationApi.verifyEmailCode(code);
-      navigate("/employer/verification", { replace: true });
+      await verifyEmail(employer?.workEmail ?? "", code);
+      await employerRegistrationApi.setStatus("docs_required");
+      navigate("/employer/verification/company-info", { replace: true });
     } catch (verificationError) {
       setError(verificationError instanceof Error ? verificationError.message : "Unable to verify your email.");
     } finally {
@@ -50,9 +53,6 @@ export default function EmployerEmailVerification() {
           Confirm {employer?.workEmail ?? "your work email"} to continue setting up your employer account.
         </p>
 
-        <div className="mt-5 rounded-lg border border-[#dcece8] bg-[#f2f9f7] px-3 py-2.5 text-[10px] leading-5 text-[#587675]">
-          Development code: <strong className="font-bold">123456</strong>. Real email delivery is a TODO for backend integration.
-        </div>
 
         <form className="mt-5 space-y-4" onSubmit={submit}>
           <div>

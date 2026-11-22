@@ -16,6 +16,7 @@ class Company extends Model
         'company_size',
         'address',
         'city',
+        'industry',
         'website',
         'description',
         'contact_name',

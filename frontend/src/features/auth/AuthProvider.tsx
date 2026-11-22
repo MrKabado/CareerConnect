@@ -124,7 +124,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUser(response.user);
       setError(null);
       setStatus("authenticated");
-      return response.user;
+      return { user: response.user, token: response.token };
     },
     [],
   );

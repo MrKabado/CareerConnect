@@ -1,18 +1,16 @@
 import {
   useEffect,
-  useMemo,
   useRef,
   useState,
   useSyncExternalStore,
 } from "react";
 import { Link } from "react-router";
 import { getCompanyProfileUrl } from "@/features/companies/companyProfiles";
-import { jobListings } from "@/features/jobs/jobListings";
+import { formatListingPay, publicJobsApi } from "@/features/jobs/backendApi";
 import {
   savedOpportunityStore,
   type SavedOpportunityType,
 } from "@/features/jobs/savedOpportunities";
-import { ojtOpportunities } from "@/components/common/user/ojtOpportunityData";
 
 type SavedOffer = {
   id: string;
@@ -97,54 +95,43 @@ export default function SavedOpportunitiesModal({
     savedOpportunityStore.getSnapshot,
     () => [],
   );
-  const savedOffers = useMemo(
-    () =>
-      savedIds.flatMap((key): SavedOffer[] => {
-        const [type, id] = key.split(":");
-        if (type === "job") {
-          const job = jobListings.find((listing) => listing.id === id);
-          return job
-            ? [
-                {
-                  id: job.id,
-                  type,
-                  title: job.title,
-                  company: job.company,
-                  initials: job.initials,
-                  details: [job.location, job.arrangement, job.salary].filter(
-                    Boolean,
-                  ),
-                },
-              ]
-            : [];
-        }
+  const [savedOffers, setSavedOffers] = useState<SavedOffer[]>([]);
 
-        if (type === "ojt") {
-          const opportunity = ojtOpportunities.find(
-            (listing) => listing.id === id,
-          );
-          return opportunity
-            ? [
-                {
-                  id: opportunity.id,
-                  type,
-                  title: opportunity.title,
-                  company: opportunity.company,
-                  initials: opportunity.initials,
-                  details: [
-                    opportunity.location,
-                    opportunity.workSetup,
-                    opportunity.allowance,
-                  ].filter(Boolean),
-                },
-              ]
-            : [];
+  useEffect(() => {
+    let active = true;
+    void Promise.all(
+      savedIds.map(async (key): Promise<SavedOffer | null> => {
+        const [type, rawId] = key.split(":");
+        if (type !== "job" && type !== "ojt") return null;
+        try {
+          const listing = await publicJobsApi.show(Number(rawId));
+          const company = listing.company?.name ?? "Company unavailable";
+          return {
+            id: String(listing.id),
+            type,
+            title: listing.title,
+            company,
+            initials: company.slice(0, 1).toUpperCase(),
+            details: [
+              listing.location,
+              listing.work_setup === "onsite"
+                ? "On-site"
+                : listing.work_setup.charAt(0).toUpperCase() + listing.work_setup.slice(1),
+              formatListingPay(listing),
+            ].filter(Boolean),
+          };
+        } catch {
+          return null;
         }
-
-        return [];
       }),
-    [savedIds],
-  );
+    ).then((offers) => {
+      if (active) setSavedOffers(offers.filter((offer): offer is SavedOffer => offer !== null));
+    });
+
+    return () => {
+      active = false;
+    };
+  }, [savedIds]);
 
   return (
     <div

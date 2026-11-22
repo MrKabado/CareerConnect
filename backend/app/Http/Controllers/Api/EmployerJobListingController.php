@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\JobListingRequest;
 use App\Http\Requests\UpdateJobListingStatusRequest;
 use App\Http\Resources\JobListingResource;
+use App\Models\ActivityLog;
 use App\Models\Company;
 use App\Models\JobListing;
 use Illuminate\Database\Eloquent\Builder;
@@ -75,6 +76,19 @@ class EmployerJobListingController extends Controller
             return $listing;
         });
 
+        ActivityLog::create([
+            'user_id' => $request->user()->id,
+            'actor_id' => $request->user()->id,
+            'action' => 'job_listing.created',
+            'subject_type' => JobListing::class,
+            'subject_id' => $listing->id,
+            'payload' => [
+                'description' => sprintf('%s created the %s listing', $company->name, $listing->title),
+                'company_name' => $company->name,
+                'listing_title' => $listing->title,
+            ],
+        ]);
+
         return (new JobListingResource($listing->load($this->listingRelations())))
             ->response()
             ->setStatusCode(201);
@@ -132,6 +146,19 @@ class EmployerJobListingController extends Controller
             default => $listing->published_at,
         };
         $listing->save();
+
+        ActivityLog::create([
+            'user_id' => $request->user()->id,
+            'actor_id' => $request->user()->id,
+            'action' => 'job_listing.status_changed',
+            'subject_type' => JobListing::class,
+            'subject_id' => $listing->id,
+            'payload' => [
+                'description' => sprintf('%s changed to %s', $listing->title, $status),
+                'listing_title' => $listing->title,
+                'status' => $status,
+            ],
+        ]);
 
         return response()->json([
             'message' => 'Listing status updated.',

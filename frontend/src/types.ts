@@ -1,4 +1,4 @@
-export type VerificationStatus = "pending" | "approved" | "rejected";
+export type VerificationStatus = "incomplete" | "pending" | "approved" | "rejected";
 export type UserRole = "Applicant" | "Employer" | "Admin";
 export type UserStatus = "Active" | "Inactive";
 export type CategoryIcon =

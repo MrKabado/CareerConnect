@@ -5,8 +5,8 @@ return [
     'resume_max_size_kb' => max(1, (int) env('RESUME_MAX_SIZE_KB', 5120)),
     'media_storage_disk' => env('MEDIA_STORAGE_DISK', env('RESUME_STORAGE_DISK', 'local')),
     'admin_seed' => [
-        'name' => env('ADMIN_SEED_NAME'),
-        'email' => env('ADMIN_SEED_EMAIL'),
-        'password' => env('ADMIN_SEED_PASSWORD'),
+        'name' => env('ADMIN_SEED_NAME', 'System Administrator'),
+        'email' => env('ADMIN_SEED_EMAIL', 'admin@gmail.com'),
+        'password' => env('ADMIN_SEED_PASSWORD', 'Password123?'),
     ],
 ];

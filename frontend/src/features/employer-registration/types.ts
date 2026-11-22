@@ -24,6 +24,7 @@ export type EmployerRegistrationInput = Omit<
   "id" | "status" | "rejectionReason"
 > & {
   password: string;
+  passwordConfirmation: string;
   termsAccepted: boolean;
 };
 

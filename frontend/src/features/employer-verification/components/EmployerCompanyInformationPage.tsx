@@ -34,6 +34,7 @@ export default function EmployerCompanyInformationPage() {
   const [address, setAddress] = useState("");
   const [city, setCity] = useState("");
   const [contactPhone, setContactPhone] = useState("");
+  const [otherIndustry, setOtherIndustry] = useState("");
   const [isLoading, setIsLoading] = useState(Boolean(token));
   const [isSaving, setIsSaving] = useState(false);
   const [information, setInformation] = useState<CompanyVerificationInformation>(
@@ -65,6 +66,10 @@ export default function EmployerCompanyInformationPage() {
         setCategories(categoryResponse.data);
         if (!savedCompany) return;
         setCategoryId(savedCompany.category_id ? String(savedCompany.category_id) : "");
+        if (!savedCompany.category_id && savedCompany.industry) {
+          setCategoryId("other");
+          setOtherIndustry(savedCompany.industry);
+        }
         setAddress(savedCompany.address ?? "");
         setCity(savedCompany.city ?? "");
         setContactPhone(savedCompany.contact_phone ?? "");
@@ -75,6 +80,7 @@ export default function EmployerCompanyInformationPage() {
           teamSize: savedCompany.company_size ?? "",
           overview: savedCompany.description ?? "",
           industry:
+            (savedCompany as typeof savedCompany & { industry?: string | null }).industry ??
             categoryResponse.data.find((category) => category.id === savedCompany.category_id)?.name ??
             current.industry,
         }));
@@ -107,7 +113,23 @@ export default function EmployerCompanyInformationPage() {
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError(null);
-    if (!isCompanyVerificationInformationComplete(information)) {
+    const selectedIndustry =
+      categoryId === "other"
+        ? otherIndustry.trim()
+        : categories.find((category) => String(category.id) === categoryId)?.name ??
+          information.industry.trim();
+    if (categoryId === "other" && !otherIndustry.trim()) {
+      setError("Enter your company industry.");
+      return;
+    }
+    if (categoryId && categoryId !== "other") {
+      updateField("industry", selectedIndustry);
+    }
+    const effectiveInformation =
+      categoryId === "other"
+        ? { ...information, industry: otherIndustry.trim() }
+        : { ...information, industry: selectedIndustry };
+    if (!isCompanyVerificationInformationComplete(effectiveInformation)) {
       setError(
         "Check the company details and provide an overview of at least 100 non-space characters.",
       );
@@ -130,19 +152,28 @@ export default function EmployerCompanyInformationPage() {
 
     setIsSaving(true);
     try {
+      const normalizedWebsite =
+        information.website.trim() &&
+        /^https?:\/\//i.test(information.website.trim())
+          ? information.website.trim()
+          : `https://${information.website.trim()}`;
       await employerCompanyApi.save(token, {
-        name: information.legalName.trim(),
-        category_id: Number(categoryId),
-        company_size: information.teamSize,
+        name: effectiveInformation.legalName.trim(),
+        category_id: categoryId === "other" ? null : Number(categoryId),
+        company_size: effectiveInformation.teamSize,
         address: address.trim(),
         city: city.trim(),
-        website: information.website.trim(),
-        description: information.overview.trim(),
+        industry: selectedIndustry,
+        website: normalizedWebsite,
+        description: effectiveInformation.overview.trim(),
         contact_name: user.name,
         contact_phone: contactPhone.trim(),
         contact_email: user.email,
       });
-      companyVerificationApi.saveCompanyInformation(information);
+      companyVerificationApi.saveCompanyInformation({
+        ...effectiveInformation,
+        website: normalizedWebsite,
+      });
       navigate("/employer/verification", { replace: true });
     } catch (caught) {
       setError(
@@ -216,6 +247,23 @@ export default function EmployerCompanyInformationPage() {
                 ))}
               </select>
             </label>
+            {categoryId === "other" && (
+              <label className="block">
+                <span className="mb-1.5 block text-xs font-semibold text-[#526365]">
+                  Other industry
+                </span>
+                <input
+                  className={inputClassName}
+                  onChange={(event) => {
+                    setOtherIndustry(event.currentTarget.value);
+                    updateField("industry", event.currentTarget.value);
+                  }}
+                  placeholder="Enter your industry"
+                  required
+                  value={otherIndustry}
+                />
+              </label>
+            )}
             <label className="block">
               <span className="mb-1.5 block text-xs font-semibold text-[#526365]">
                 Registration number
@@ -239,7 +287,7 @@ export default function EmployerCompanyInformationPage() {
                 onChange={(event) => updateField("website", event.currentTarget.value)}
                 placeholder="https://example.com"
                 required
-                type="url"
+                type="text"
                 value={information.website}
               />
             </label>
@@ -250,8 +298,16 @@ export default function EmployerCompanyInformationPage() {
               <select
                 className={inputClassName}
                 onChange={(event) => {
-                  updateField("industry", event.currentTarget.selectedOptions[0]?.text ?? "");
-                  setCategoryId(event.currentTarget.value);
+                  const value = event.currentTarget.value;
+                  setCategoryId(value);
+                  if (value === "other") {
+                    updateField("industry", "");
+                  } else {
+                    updateField(
+                      "industry",
+                      event.currentTarget.selectedOptions[0]?.text ?? "",
+                    );
+                  }
                 }}
                 required
                 value={categoryId}
@@ -260,6 +316,7 @@ export default function EmployerCompanyInformationPage() {
                 {categories.map((category) => (
                   <option key={category.id} value={category.id}>{category.name}</option>
                 ))}
+                <option value="other">Other</option>
               </select>
             </label>
             <label className="block">
@@ -372,6 +429,7 @@ const employerCompanyApi = {
         company_size: string | null;
         address: string | null;
         city: string | null;
+        industry: string | null;
         website: string | null;
         description: string | null;
         contact_phone: string | null;
@@ -387,10 +445,11 @@ const employerCompanyApi = {
     token: string,
     company: {
       name: string;
-      category_id: number;
+      category_id: number | null;
       company_size: string;
       address: string;
       city: string;
+      industry: string;
       website: string;
       description: string;
       contact_name: string;

@@ -63,7 +63,7 @@ function EmployerHeader() {
       <Link
         aria-label="CareerConnect employer overview"
         className="inline-flex items-center justify-self-start gap-2.5 whitespace-nowrap text-[18px] font-bold tracking-[-0.55px] text-[#263a3c] focus-visible:outline-[3px] focus-visible:outline-[#67c9c1] focus-visible:outline-offset-[3px] max-[680px]:gap-2 max-[680px]:text-base"
-        to="/employer/overview"
+        to="/"
       >
         <span className="grid size-7.75 place-items-center rounded-[10px] bg-[#078b8d] text-[19px] font-bold tracking-[-1px] text-white max-[680px]:size-7 max-[680px]:rounded-lg max-[680px]:text-[17px]">
           C

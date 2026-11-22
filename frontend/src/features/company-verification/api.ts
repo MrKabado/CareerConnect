@@ -242,7 +242,12 @@ export function isCompanyVerificationInformationComplete(
           ? information.website
           : `https://${information.website}`,
       );
-      return website.protocol === "http:" || website.protocol === "https:";
+      return (
+        (website.protocol === "http:" || website.protocol === "https:") &&
+        website.hostname.includes(".") &&
+        !website.username &&
+        !website.password
+      );
     } catch {
       return false;
     }
@@ -478,21 +483,6 @@ export const companyVerificationApi = {
     return () => listeners.delete(listener);
   },
 
-  async requestWorkEmailCode() {
-    const result = await employerRegistrationApi.requestEmailVerificationCode();
-    updateRecord((record) => ({ ...record, emailCodeRequested: true }));
-    // TODO(backend): Deliver the verification code to the employer work email.
-    return result;
-  },
-
-  async verifyWorkEmail(code: string) {
-    const employer = await employerRegistrationApi.verifyEmailCode(code);
-    updateRecord((record) => ({
-      ...record,
-      emailVerifiedAt: new Date().toISOString(),
-    }));
-    return employer;
-  },
 
   saveCompanyInformation(information: CompanyVerificationInformation) {
     updateRecord((record) => ({ ...record, companyInformation: information }));

@@ -71,6 +71,28 @@ it('allows employers to manage their company profile, logo, and verification sta
         ->assertJsonPath('status', 'pending');
 });
 
+it('creates a company shell when an employer uploads documents before completing company information', function (): void {
+    Storage::fake('local');
+    $owner = User::factory()->create([
+        'role' => 'employer',
+        'name' => 'Pending Employer',
+        'email' => 'pending-employer@example.com',
+    ]);
+    $ownerToken = $owner->createToken('owner')->plainTextToken;
+
+    expect(Company::query()->where('user_id', $owner->id)->exists())->toBeFalse();
+
+    $this->withToken($ownerToken)->postJson('/api/employer/verification/documents', [
+        'type' => 'business_registration',
+        'document' => UploadedFile::fake()->create('registration.pdf', 100, 'application/pdf'),
+    ])->assertCreated();
+
+    $company = Company::query()->where('user_id', $owner->id)->firstOrFail();
+    expect($company->name)->toBe('Pending Company Profile')
+        ->and($company->contact_name)->toBe('Pending Employer')
+        ->and($company->contact_email)->toBe('pending-employer@example.com');
+});
+
 it('keeps employer verification documents private and supports replacement and removal', function (): void {
     Storage::fake('local');
     $owner = User::factory()->create(['role' => 'employer']);

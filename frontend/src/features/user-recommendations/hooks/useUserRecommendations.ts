@@ -1,11 +1,11 @@
-import { useMemo, useState, useSyncExternalStore } from "react";
+import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import type { RecommendedJob } from "@/components/common/user/recommendationComponents";
 import { useAuth } from "@/features/auth/useAuth";
-import { jobListings } from "@/features/jobs/jobListings";
 import { getJobMatch } from "@/features/jobs/jobMatching";
+import type { JobListing } from "@/features/jobs/jobListings";
 import { getOjtMatch } from "@/features/jobs/ojtMatching";
-import type { ScoredOjtOpportunity } from "@/features/jobs/ojtMatching";
-import { ojtOpportunities } from "@/components/common/user/ojtOpportunityData";
+import type { OjtOpportunity, ScoredOjtOpportunity } from "@/features/jobs/ojtMatching";
+import { formatListingPay, listingText, publicJobsApi, type PublicJobListing } from "@/features/jobs/backendApi";
 import { onboardingStore } from "@/features/onboarding/store";
 import { ojtProfileExample } from "@/features/onboarding/ojtProfileExample";
 import { savedOpportunityStore } from "@/features/jobs/savedOpportunities";
@@ -27,6 +27,88 @@ export type CombinedRecommendation =
       postedHoursAgo: number;
       opportunity: ScoredOjtOpportunity;
     };
+
+function toRecommendedListing(listing: PublicJobListing): JobListing {
+  const company = listing.company?.name ?? "Company unavailable";
+  const publishedAt = listing.published_at ? new Date(listing.published_at) : null;
+  const hoursSincePublished =
+    publishedAt && !Number.isNaN(publishedAt.getTime())
+      ? Math.max(0, Math.floor((Date.now() - publishedAt.getTime()) / 3_600_000))
+      : 0;
+
+  return {
+    id: String(listing.id),
+    listingId: listing.id,
+    company,
+    initials: company.slice(0, 1).toUpperCase(),
+    title: listing.title,
+    category: listing.category?.name ?? "Uncategorized",
+    location: listing.location,
+    countryCode: "",
+    country: "",
+    city: listing.company?.city ?? "",
+    arrangement:
+      listing.work_setup === "onsite"
+        ? "On-site"
+        : listing.work_setup.charAt(0).toUpperCase() + listing.work_setup.slice(1),
+    employmentType:
+      listing.employment_type
+        ? ({ full_time: "Full-time", part_time: "Part-time", contract: "Contract" } as const)[listing.employment_type]
+        : "Not specified",
+    salary: formatListingPay(listing),
+    posted: publishedAt && !Number.isNaN(publishedAt.getTime())
+      ? new Intl.RelativeTimeFormat("en", { numeric: "auto" }).format(
+          -Math.max(1, hoursSincePublished >= 24 ? Math.floor(hoursSincePublished / 24) : hoursSincePublished),
+          hoursSincePublished >= 24 ? "day" : "hour",
+        )
+      : "Date not available",
+    postedHoursAgo: hoursSincePublished,
+    description: listing.description,
+    skills: listingText(listing.requirements),
+  };
+}
+
+function toOjtOpportunity(listing: PublicJobListing): OjtOpportunity {
+  const company = listing.company?.name ?? "Company unavailable";
+  const publishedAt = listing.published_at ? new Date(listing.published_at) : null;
+  let posted = "Date not available";
+  if (publishedAt && !Number.isNaN(publishedAt.getTime())) {
+    const hours = Math.max(0, Math.floor((Date.now() - publishedAt.getTime()) / 3_600_000));
+    const amount = hours >= 24 ? Math.max(1, Math.floor(hours / 24)) : Math.max(1, hours);
+    posted = new Intl.RelativeTimeFormat("en", { numeric: "auto" }).format(
+      -amount,
+      hours >= 24 ? "day" : "hour",
+    );
+  }
+
+  return {
+    id: String(listing.id),
+    company,
+    initials: company.slice(0, 1).toUpperCase(),
+    title: listing.title,
+    trainingFields: listing.category?.name ? [listing.category.name] : [],
+    location: listing.location,
+    city: listing.company?.city ?? "",
+    countryCode: "",
+    hoursCapacity: listing.ojt?.duration_hours ?? null,
+    moaAvailable: listing.ojt?.moa_accepted ?? null,
+    eligibleCourses: listing.ojt?.accepted_courses ?? [],
+    workSetup:
+      listing.work_setup === "onsite"
+        ? "Onsite"
+        : listing.work_setup.charAt(0).toUpperCase() + listing.work_setup.slice(1),
+    employmentType: "Internship",
+    allowance:
+      listing.ojt?.allowance_type === "unpaid"
+        ? "Unpaid"
+        : listing.ojt?.allowance_amount == null
+          ? ""
+          : `₱${listing.ojt.allowance_amount.toLocaleString()} allowance`,
+    skills: listingText(listing.requirements),
+    posted,
+    description: listing.description,
+  };
+}
 
 function getPostedHoursAgo(posted: string) {
   if (posted.toLocaleLowerCase() === "today") return 0;
@@ -57,6 +139,30 @@ export function useUserRecommendations() {
     savedOpportunityStore.getSnapshot,
     () => [],
   );
+  const [apiJobs, setApiJobs] = useState<JobListing[]>([]);
+  const [apiOjtOpportunities, setApiOjtOpportunities] = useState<OjtOpportunity[]>([]);
+
+  useEffect(() => {
+    let active = true;
+    void Promise.all([
+      publicJobsApi.list({ listing_type: "job", per_page: 50 }),
+      publicJobsApi.list({ listing_type: "ojt", per_page: 50 }),
+    ])
+      .then(([jobs, ojts]) => {
+        if (!active) return;
+        setApiJobs(jobs.data.map(toRecommendedListing));
+        setApiOjtOpportunities(ojts.data.map(toOjtOpportunity));
+      })
+      .catch(() => {
+        if (!active) return;
+        setApiJobs([]);
+        setApiOjtOpportunities([]);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const hasJobSeekerPreferences =
     onboarding.isComplete &&
@@ -68,7 +174,7 @@ export function useUserRecommendations() {
       answers.preferredLocations.length > 0);
 
   const recommendations = useMemo(() => {
-    const matchingJobs: RecommendedJob[] = jobListings.map((job) => {
+    const matchingJobs: RecommendedJob[] = apiJobs.map((job) => {
       const match = hasJobSeekerPreferences ? getJobMatch(job, answers) : null;
       return {
         ...job,
@@ -82,7 +188,7 @@ export function useUserRecommendations() {
         ? left.postedHoursAgo - right.postedHoursAgo
         : (right.matchScore ?? -1) - (left.matchScore ?? -1),
     );
-  }, [answers, hasJobSeekerPreferences, sort]);
+  }, [answers, apiJobs, hasJobSeekerPreferences, sort]);
 
   const ojtRecommendations = useMemo(() => {
     const ojtAnswers = {
@@ -105,11 +211,11 @@ export function useUserRecommendations() {
           : ojtProfileExample.preferredLocations,
     };
 
-    return ojtOpportunities
+    return apiOjtOpportunities
       .map((opportunity) => getOjtMatch(opportunity, ojtAnswers))
       .filter((opportunity) => opportunity !== null)
       .sort((left, right) => right.matchScore - left.matchScore);
-  }, [answers]);
+  }, [answers, apiOjtOpportunities]);
 
   const combinedRecommendations = useMemo(() => {
     const combined: CombinedRecommendation[] = [

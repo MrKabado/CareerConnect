@@ -51,7 +51,9 @@ class ApplicantProfileController extends Controller
 
         DB::transaction(function () use ($validated, $request, $profile): void {
             if (array_key_exists('name', $validated)) {
-                $request->user()->update(['name' => trim($validated['name'])]);
+                $request->user()->update([
+                    'name' => mb_convert_case(trim($validated['name']), MB_CASE_TITLE, 'UTF-8'),
+                ]);
             }
 
             $profile->fill(array_intersect_key($validated, array_flip(['phone', 'city'])));

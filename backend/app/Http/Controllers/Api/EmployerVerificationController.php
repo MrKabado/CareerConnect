@@ -70,6 +70,7 @@ class EmployerVerificationController extends Controller
 
         return response()->json([
             'status' => $verification?->status ?? 'incomplete',
+            'company_profile_complete' => $company !== null && $this->isProfileComplete($company),
             'company' => $company ? [
                 'id' => $company->id,
                 'name' => $company->name,
@@ -105,6 +106,7 @@ class EmployerVerificationController extends Controller
                     'company_size' => $company->company_size,
                     'address' => $company->address,
                     'city' => $company->city,
+                    'industry' => $company->industry,
                     'website' => $company->website,
                     'description' => $company->description,
                     'contact_name' => $company->contact_name,
@@ -157,12 +159,20 @@ class EmployerVerificationController extends Controller
             ]);
         }
 
+        if ($request->filled('website')) {
+            $website = trim((string) $request->input('website'));
+            if (! preg_match('/^https?:\/\//i', $website)) {
+                $request->merge(['website' => 'https://'.$website]);
+            }
+        }
+
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:255'],
             'category_id' => ['nullable', 'exists:categories,id'],
             'company_size' => ['nullable', Rule::in(['1-10', '11-50', '51-200', '201-500', '500+'])],
             'address' => ['nullable', 'string', 'max:255'],
             'city' => ['nullable', 'string', 'max:100'],
+            'industry' => ['nullable', 'string', 'max:100'],
             'website' => ['nullable', 'url'],
             'description' => ['nullable', 'string', 'max:1000'],
             'contact_name' => ['nullable', 'string', 'max:255'],
@@ -180,6 +190,7 @@ class EmployerVerificationController extends Controller
         $company->user_id = $user->id;
         $company->save();
 
+        $this->getOrCreateVerification($company);
         $this->syncVerificationStatus($company);
 
         return response()->json([
@@ -245,7 +256,14 @@ class EmployerVerificationController extends Controller
 
     public function deleteLogo(Request $request): JsonResponse
     {
-        $company = $request->user()->company()->firstOrFail();
+        $company = $request->user()->company()->first();
+        if ($company === null) {
+            return response()->json([
+                'message' => 'No company profile or logo was found.',
+                'company' => null,
+            ]);
+        }
+
         $path = $company->logo_path;
 
         if ($path !== null) {
@@ -276,7 +294,14 @@ class EmployerVerificationController extends Controller
             'document' => ['required', 'file', 'mimes:pdf,jpg,jpeg,png', 'extensions:pdf,jpg,jpeg,png', 'max:5120'],
         ]);
 
-        $company = $request->user()->company()->firstOrFail();
+        $company = $request->user()->company()->firstOrCreate(
+            [],
+            [
+                'name' => 'Pending Company Profile',
+                'contact_name' => $request->user()->name,
+                'contact_email' => $request->user()->email,
+            ],
+        );
         $verification = $this->getOrCreateVerification($company);
         $file = $request->file('document');
         $stored = $this->mediaStorage->storePrivateFile(
@@ -470,6 +495,18 @@ class EmployerVerificationController extends Controller
         $verification->rejection_note = null;
         $verification->save();
 
+        ActivityLog::create([
+            'user_id' => $company->user_id,
+            'actor_id' => $request->user()->id,
+            'action' => 'employer.verification_submitted',
+            'subject_type' => CompanyVerification::class,
+            'subject_id' => $verification->id,
+            'payload' => [
+                'description' => sprintf('%s submitted company verification documents', $company->name),
+                'company_name' => $company->name,
+            ],
+        ]);
+
         return response()->json([
             'message' => 'Company verification submitted for review.',
             'status' => 'pending',
@@ -574,7 +611,6 @@ class EmployerVerificationController extends Controller
     {
         return $company->name !== null
             && trim((string) $company->name) !== ''
-            && $company->category_id !== null
             && $company->company_size !== null
             && $company->address !== null
             && $company->city !== null
@@ -638,6 +674,7 @@ class EmployerVerificationController extends Controller
             'company_size' => $company->company_size,
             'address' => $company->address,
             'city' => $company->city,
+            'industry' => $company->industry,
             'website' => $company->website,
             'description' => $company->description,
             'contact_name' => $company->contact_name,

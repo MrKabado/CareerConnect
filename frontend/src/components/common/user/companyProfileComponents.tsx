@@ -23,7 +23,7 @@ export function CompanyProfileHeader() {
         <Link
           aria-label="CareerConnect home"
           className="inline-flex items-center gap-2 text-[13px] font-bold tracking-[-0.3px] text-[#263a3c] focus-visible:outline-[3px] focus-visible:outline-[#67c9c1] focus-visible:outline-offset-2"
-          to="/job-search"
+          to="/"
         >
           <span className="grid size-7 place-items-center rounded-[8px] bg-[#078b98] text-[12px] font-bold text-white">
             C
@@ -35,7 +35,7 @@ export function CompanyProfileHeader() {
         <div className="flex items-center gap-4">
           <Link
             className="text-[9px] font-semibold text-[#738385] hover:text-[#07878b] focus-visible:outline-[3px] focus-visible:outline-[#67c9c1] focus-visible:outline-offset-2"
-            to="/job-search"
+            to="/"
           >
             Back to jobs
           </Link>

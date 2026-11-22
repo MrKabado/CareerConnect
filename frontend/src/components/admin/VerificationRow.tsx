@@ -5,11 +5,13 @@ import type { EmployerVerification } from "../../types";
 interface VerificationRowProps {
   item: EmployerVerification;
   onPreview: (id: string, documentId: string) => void;
+  isLoadingPreview?: boolean;
 }
 
 export default function VerificationRow({
   item,
   onPreview,
+  isLoadingPreview = false,
 }: VerificationRowProps) {
   return (
     <Card className="grid min-h-[106px] items-center gap-5 rounded-[14px] px-5 py-5 transition-all hover:border-brand-100 hover:-translate-y-px md:grid-cols-[minmax(240px,1fr)_minmax(290px,.72fr)_auto] max-[680px]:gap-4">
@@ -53,9 +55,18 @@ export default function VerificationRow({
         <Button
           variant="outline"
           onClick={() => onPreview(item.id, item.documents[0]?.id ?? "")}
+          disabled={isLoadingPreview}
+          aria-busy={isLoadingPreview}
           className="h-8 border-transparent bg-[#eef7f6] px-3 text-[10px] text-brand-700 hover:bg-[#e2f2ef] hover:text-brand-700"
         >
-          <p className="text-[#028090] font-semibold">          Review documents</p>
+          {isLoadingPreview ? (
+            <>
+              <span aria-hidden="true" className="size-3 animate-spin rounded-full border-2 border-current border-r-transparent" />
+              <span className="font-semibold">Loading…</span>
+            </>
+          ) : (
+            <span className="font-semibold text-[#028090]">Review documents</span>
+          )}
         </Button>
       </div>
     </Card>

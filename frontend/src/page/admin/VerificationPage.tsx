@@ -11,6 +11,7 @@ type StatusFilter = "all" | VerificationStatus;
 
 const STATUS_OPTIONS = [
   { value: "all", label: "All statuses" },
+  { value: "incomplete", label: "Incomplete" },
   { value: "pending", label: "Pending" },
   { value: "approved", label: "Approved" },
   { value: "rejected", label: "Rejected" },
@@ -28,6 +29,7 @@ export default function VerificationPage() {
   const [previewItem, setPreviewItem] = useState<EmployerVerification | null>(null);
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [isLoadingPreview, setIsLoadingPreview] = useState(false);
+  const [loadingPreviewId, setLoadingPreviewId] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [objectUrls, setObjectUrls] = useState<string[]>([]);
 
@@ -55,6 +57,7 @@ export default function VerificationPage() {
     closePreview();
     setPreview({ id, documentId, rejecting: false });
     setIsLoadingPreview(true);
+    setLoadingPreviewId(id);
     setPreviewError(null);
     const createdUrls: string[] = [];
     try {
@@ -84,7 +87,14 @@ export default function VerificationPage() {
         submittedAt: submitted && !Number.isNaN(submitted.getTime())
           ? new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric" }).format(submitted)
           : "Date unavailable",
-        status: data.status === "verified" ? "approved" : data.status === "rejected" ? "rejected" : "pending",
+        status:
+          data.status === "verified"
+            ? "approved"
+            : data.status === "rejected"
+              ? "rejected"
+              : data.status === "incomplete"
+                ? "incomplete"
+                : "pending",
         rejectionReason: data.rejection_reason ?? undefined,
         documents,
       };
@@ -95,6 +105,7 @@ export default function VerificationPage() {
       setPreviewError(requestError instanceof Error ? requestError.message : "Unable to load the private verification documents.");
     } finally {
       setIsLoadingPreview(false);
+      setLoadingPreviewId(null);
     }
   }
 
@@ -117,9 +128,18 @@ export default function VerificationPage() {
         title="Employer verification"
         subtitle="Review submitted business documents before employers can publish jobs."
         actions={
-          <span className="inline-flex rounded-full border border-amber-100 bg-amber-50 px-3.5 py-2 text-[12px] font-semibold text-amber-700">
-            {pendingCount} pending review
-          </span>
+          <div className="flex flex-wrap gap-2">
+            <button
+              className="inline-flex h-10 items-center justify-center rounded-xl border border-line bg-white px-4 text-xs font-semibold text-muted shadow-sm hover:border-brand-100 hover:text-brand-700"
+              onClick={retry}
+              type="button"
+            >
+              Refresh
+            </button>
+            <span className="inline-flex h-10 items-center rounded-xl border border-amber-100 bg-amber-50 px-4 text-xs font-semibold text-amber-700">
+              {pendingCount} pending review
+            </span>
+          </div>
         }
       />
 
@@ -145,6 +165,7 @@ export default function VerificationPage() {
               <VerificationRow
                 key={item.id}
                 item={item}
+                isLoadingPreview={loadingPreviewId === item.id}
                 onPreview={(id, documentId) => void openPreview(id, documentId)}
               />
             ))

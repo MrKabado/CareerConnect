@@ -1,11 +1,8 @@
 import { useState, type FormEvent } from "react";
 import { useNavigate } from "react-router";
 import { useAuth } from "@/features/auth/useAuth";
-import {
-  employerRegistrationApi,
-  getEmployerStatusPath,
-} from "@/features/employer-registration/api";
 import LoginPageView from "@/components/ui/LoginPageView";
+import { employerVerificationFilesApi } from "@/features/employer-verification/backendApi";
 
 export default function LoginPage() {
   const { login } = useAuth();
@@ -25,22 +22,28 @@ export default function LoginPage() {
 
     try {
       const email = String(formData.get("email") ?? "");
-      const authenticatedUser = await login(
+      const loginResult = await login(
         {
           email,
           password: String(formData.get("password") ?? ""),
         },
         formData.has("remember"),
       );
-      if (authenticatedUser.role === "admin") {
+      if (loginResult.user.role === "admin") {
         navigate("/admin", { replace: true });
-      } else if (authenticatedUser.role === "employer") {
-        navigate(
-          getEmployerStatusPath(
-            employerRegistrationApi.getSnapshot()?.status,
-          ),
-          { replace: true },
-        );
+      } else if (loginResult.user.role === "employer") {
+        const verification = await employerVerificationFilesApi.status(loginResult.token);
+        if (verification.status === "pending") {
+          navigate("/employer/under-review", { replace: true });
+        } else if (verification.status === "verified") {
+          navigate("/employer/overview", { replace: true });
+        } else if (verification.status === "rejected") {
+          navigate("/employer/verification", { replace: true });
+        } else if (verification.company_profile_complete) {
+          navigate("/employer/verification", { replace: true });
+        } else {
+          navigate("/employer/verification/company-info", { replace: true });
+        }
       } else {
         navigate("/onboarding", { replace: true });
       }

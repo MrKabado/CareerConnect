@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\ActivityLog;
 use App\Models\Application;
 use App\Models\CompanyVerification;
 use App\Models\IdentityVerification;
@@ -13,6 +14,47 @@ use Illuminate\Http\Request;
 
 class DashboardController extends Controller
 {
+    public function adminActivity(): JsonResponse
+    {
+        $logs = ActivityLog::query()
+            ->with(['user:id,name,email', 'actor:id,name,email'])
+            ->latest('created_at')
+            ->limit(10)
+            ->get();
+
+        $data = $logs->map(function (ActivityLog $log): array {
+            $labels = [
+                'admin.user_status_updated' => 'Account access changed',
+                'admin.user_updated' => 'User account updated',
+                'admin.company_verification_reviewed' => 'Employer verification reviewed',
+                'admin.identity_verification_reviewed' => 'Applicant verification reviewed',
+                'account.registered' => 'New account registered',
+                'employer.verification_submitted' => 'Employer verification submitted',
+                'job_listing.created' => 'New job listing created',
+                'job_listing.status_changed' => 'Job listing status changed',
+                'application.submitted' => 'New job application submitted',
+            ];
+
+            $action = (string) $log->action;
+            $payload = $log->payload ?? [];
+
+            return [
+                'id' => $log->id,
+                'action' => $action,
+                'title' => $labels[$action] ?? 'Platform activity',
+                'description' => is_string($payload['description'] ?? null)
+                    ? $payload['description']
+                    : 'CareerConnect system update',
+                'actor_name' => $log->actor?->name,
+                'subject_name' => $log->user?->name
+                    ?? (is_string($payload['company_name'] ?? null) ? $payload['company_name'] : null),
+                'created_at' => $log->created_at?->toISOString(),
+            ];
+        });
+
+        return response()->json(['data' => $data]);
+    }
+
     public function admin(): JsonResponse
     {
         return response()->json([

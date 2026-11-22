@@ -1,6 +1,7 @@
 import type { OnboardingAnswers } from "@/features/onboarding/store";
 import type { OnboardingErrors } from "@/features/onboarding/schemas";
 import PasswordInput from "@/components/ui/PasswordInput";
+import { toNameCase } from "@/features/auth/nameFormatting";
 
 type OjtStep2Props = {
   answers: OnboardingAnswers;
@@ -37,7 +38,7 @@ export default function OjtStep2({
           className={inputClassName}
           disabled={disabled}
           id="onboarding-name"
-          onChange={(event) => onChange("name", event.target.value)}
+          onChange={(event) => onChange("name", toNameCase(event.target.value))}
           placeholder="e.g. Jamie Dela Cruz"
           maxLength={255}
           value={answers.name}
@@ -91,7 +92,7 @@ export default function OjtStep2({
             >
               Password <span className="text-[#d34c4c]">*</span>
             </label>
-            <span className="text-[9px] text-[#8a9899] max-[600px]:text-[8px]">At least 8 characters</span>
+            <span className="text-[9px] text-[#8a9899] max-[600px]:text-[8px]">12+ chars, uppercase, lowercase, number, symbol</span>
           </div>
           <PasswordInput
             aria-invalid={Boolean(errors.password)}

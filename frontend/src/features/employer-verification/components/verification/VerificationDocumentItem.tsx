@@ -36,7 +36,7 @@ export default function VerificationDocumentItem({
           <span className="ml-1 text-[#ba564d]" aria-hidden="true">*</span>
         </span>
         <span className="mt-1 block text-xs text-[#78888a]">
-          PDF, JPG, or PNG · up to 5 MB
+          PDF, JPG, or PNG · up to 5 MB per file. If the file is larger, compress or reduce its size before uploading.
         </span>
         <input
           accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png"

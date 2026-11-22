@@ -96,9 +96,11 @@ createRoot(document.getElementById("root")!).render(
           <Route
             path="/employer/verification/company-info"
             element={
-              <RequireEmployerStatus access="verification">
-                <EmployerCompanyInformationPage />
-              </RequireEmployerStatus>
+              <RequireAuth>
+                <RequireRole role="employer">
+                  <EmployerCompanyInformationPage />
+                </RequireRole>
+              </RequireAuth>
             }
           />
           <Route
@@ -119,7 +121,7 @@ createRoot(document.getElementById("root")!).render(
               <RequireEmployerStatus access="under-review">
                 <EmployerRoutePlaceholder
                   title="Your company is under review"
-                  description="Verification usually takes 1 to 2 business days."
+                  description="A CareerConnect administrator is reviewing your submitted company documents. Verification usually takes 1 to 2 business days. You will keep access to this status page while the review is pending."
                 />
               </RequireEmployerStatus>
             }

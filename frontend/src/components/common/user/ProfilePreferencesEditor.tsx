@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import type { OnboardingAnswers } from "@/features/onboarding/store";
 import { ProfilePanel } from "@/components/common/user/profileComponents";
+import { toNameCase } from "@/features/auth/nameFormatting";
 
 export type ProfilePreferencesDraft = Pick<
   OnboardingAnswers,
@@ -286,7 +287,7 @@ export default function ProfilePreferencesEditor({
               <div className="grid grid-cols-2 gap-3 max-[460px]:grid-cols-1">
                 <TextField
                   label="Full name"
-                  onChange={(name) => setDraft((current) => ({ ...current, name }))}
+                  onChange={(name) => setDraft((current) => ({ ...current, name: toNameCase(name) }))}
                   value={draft.name}
                 />
                 <TextField

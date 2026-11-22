@@ -5,21 +5,16 @@ namespace Database\Seeders;
 use App\Models\User;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\Hash;
-use InvalidArgumentException;
 
 class AdminUserSeeder extends Seeder
 {
     public function run(): void
     {
-        $credentials = config('careerconnect.admin_seed');
-
-        if (! is_string($credentials['name']) || trim($credentials['name']) === ''
-            || ! is_string($credentials['email']) || trim($credentials['email']) === ''
-            || ! is_string($credentials['password']) || strlen($credentials['password']) < 12) {
-            throw new InvalidArgumentException(
-                'Set ADMIN_SEED_NAME, ADMIN_SEED_EMAIL, and a 12-character ADMIN_SEED_PASSWORD before seeding an admin.',
-            );
-        }
+        $credentials = [
+            'name' => 'System Administrator',
+            'email' => 'admin@gmail.com',
+            'password' => 'Password123?',
+        ];
 
         $user = User::firstOrNew(['email' => $credentials['email']]);
 

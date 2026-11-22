@@ -25,8 +25,15 @@ export const onboardingSchemas: Record<
       errors.email = "Enter a valid email address.";
     }
 
-    if (answers.password.length < 8) {
-      errors.password = "Use at least 8 characters.";
+    if (
+      answers.password.length < 12 ||
+      !/[a-z]/.test(answers.password) ||
+      !/[A-Z]/.test(answers.password) ||
+      !/\d/.test(answers.password) ||
+      !/[^A-Za-z0-9]/.test(answers.password)
+    ) {
+      errors.password =
+        "Use at least 12 characters with uppercase, lowercase, numbers, and symbols.";
     }
 
     if (!answers.passwordConfirmation) {

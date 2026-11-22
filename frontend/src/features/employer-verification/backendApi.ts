@@ -80,6 +80,7 @@ export const employerVerificationFilesApi = {
   status(token: string) {
     return apiRequest<{
       status: "incomplete" | "pending" | "verified" | "rejected";
+      company_profile_complete: boolean;
       rejection_reason: string | null;
       rejection_note: string | null;
     }>("/employer/verification", {}, token);

@@ -16,7 +16,7 @@ export function useVerifyEmail() {
   const [codeRequested, setCodeRequested] = useState(codeWasSent);
   const [notice, setNotice] = useState(
     codeWasSent
-      ? "If this email has an account that needs verification, a code has been sent. You can resend it below."
+      ? "A 6-digit verification code was sent to your email. Enter it below."
       : null,
   );
   const [error, setError] = useState<string | null>(null);
@@ -38,7 +38,7 @@ export function useVerifyEmail() {
       await authApi.requestEmailVerificationCode(email.trim());
       setCodeRequested(true);
       setNotice(
-        "If this email has an account that needs verification, a code has been sent.",
+        "A 6-digit verification code was sent to your email.",
       );
     } catch (requestError) {
       setError(

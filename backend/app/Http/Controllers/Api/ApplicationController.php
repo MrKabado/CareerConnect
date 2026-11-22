@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\ActivityLog;
 use App\Models\Application;
 use App\Models\ApplicationStatusHistory;
 use App\Models\JobListing;
@@ -132,6 +133,18 @@ class ApplicationController extends Controller
                 'public_reason' => null,
                 'internal_reason' => null,
                 'created_at' => now(),
+            ]);
+
+            ActivityLog::create([
+                'user_id' => $applicant->id,
+                'actor_id' => $applicant->id,
+                'action' => 'application.submitted',
+                'subject_type' => Application::class,
+                'subject_id' => $application->id,
+                'payload' => [
+                    'description' => sprintf('%s applied to %s', $applicant->name, $listing->title),
+                    'listing_title' => $listing->title,
+                ],
             ]);
 
             return [$application, $existingApplication !== null];

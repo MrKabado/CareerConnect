@@ -39,6 +39,12 @@ export default function EmployerVerificationPageContent() {
           Upload the required business registration and business permit documents.
           Your files are stored privately and only authorized reviewers can access them.
         </p>
+        <p className="mt-2 rounded-lg border border-[#dfe9e7] bg-[#f7faf9] px-3 py-2 text-xs leading-5 text-[#657779]">
+          PDF, JPG, or PNG is accepted. Maximum 5 MB per file; compress or resize files that exceed the limit.
+        </p>
+        <p className="mt-2 text-xs leading-5 text-[#718082]">
+          After submission, a CareerConnect administrator will review the documents and approve or reject the company.
+        </p>
         <Link
           className="mt-3 inline-block text-xs font-semibold text-[#087879] underline underline-offset-2"
           to="/employer/verification/company-info"

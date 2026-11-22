@@ -1,15 +1,20 @@
 import { useState, type FormEvent, type ReactNode } from "react";
 import { Link, useNavigate } from "react-router";
 import { employerRegistrationApi } from "@/features/employer-registration/api";
-import { validateEmployerRegistration } from "@/features/employer-registration/schemas";
+import {
+  normalizeWebsite,
+  validateEmployerRegistration,
+} from "@/features/employer-registration/schemas";
 import type { EmployerRegistrationInput } from "@/features/employer-registration/types";
 import PasswordInput from "@/components/ui/PasswordInput";
+import { toNameCase as formatNameCase } from "@/features/auth/nameFormatting";
 
 const initialForm: EmployerRegistrationInput = {
   firstName: "",
   lastName: "",
   workEmail: "",
   password: "",
+  passwordConfirmation: "",
   companyName: "",
   website: "",
   companySize: "",
@@ -90,8 +95,18 @@ export default function EmployerRegistrationForm() {
 
     setIsSubmitting(true);
     try {
-      await employerRegistrationApi.register(form);
-      navigate("/employer/verify-email", { replace: true });
+      const employer = await employerRegistrationApi.register({
+        ...form,
+        firstName: formatNameCase(form.firstName),
+        lastName: formatNameCase(form.lastName),
+        website: normalizeWebsite(form.website),
+      });
+      navigate(
+        employer.status === "email_unverified"
+          ? "/employer/verify-email"
+          : "/employer/verification",
+        { replace: true },
+      );
     } catch (error) {
       setSubmitError(
         error instanceof Error ? error.message : "Unable to create your account.",
@@ -156,10 +171,22 @@ export default function EmployerRegistrationForm() {
               <h3 className="sr-only" id="employer-person-heading">Your details</h3>
               <div className="grid grid-cols-2 gap-3 max-[520px]:grid-cols-1">
                 <Field error={errors.firstName} label="First name *">
-                  <input autoComplete="given-name" className={inputClassName} onChange={(event) => update("firstName", event.target.value)} placeholder="e.g. Mika" value={form.firstName} />
+                  <input
+                    autoComplete="given-name"
+                    className={inputClassName}
+                    onChange={(event) => update("firstName", formatNameCase(event.target.value))}
+                    placeholder="e.g. Mika"
+                    value={form.firstName}
+                  />
                 </Field>
                 <Field error={errors.lastName} label="Last name *">
-                  <input autoComplete="family-name" className={inputClassName} onChange={(event) => update("lastName", event.target.value)} placeholder="e.g. Santos" value={form.lastName} />
+                  <input
+                    autoComplete="family-name"
+                    className={inputClassName}
+                    onChange={(event) => update("lastName", formatNameCase(event.target.value))}
+                    placeholder="e.g. Santos"
+                    value={form.lastName}
+                  />
                 </Field>
               </div>
               <div className="mt-3">
@@ -173,14 +200,30 @@ export default function EmployerRegistrationForm() {
                     autoComplete="new-password"
                     className={inputClassName}
                     id="employer-password"
-                    minLength={8}
+                    minLength={12}
                     onChange={(event) => update("password", event.target.value)}
                     placeholder="Create a secure password"
                     required
                     value={form.password}
                   />
                 </Field>
-                <p className="mt-1 text-right text-[8px] text-[#9aa6a7]">At least 8 characters</p>
+                <p className="mt-1 text-right text-[8px] text-[#9aa6a7]">
+                  12+ characters with uppercase, lowercase, number, and symbol
+                </p>
+              </div>
+              <div className="mt-3">
+                <Field error={errors.passwordConfirmation} label="Confirm password *">
+                  <PasswordInput
+                    autoComplete="new-password"
+                    className={inputClassName}
+                    id="employer-password-confirmation"
+                    minLength={12}
+                    onChange={(event) => update("passwordConfirmation", event.target.value)}
+                    placeholder="Enter your password again"
+                    required
+                    value={form.passwordConfirmation}
+                  />
+                </Field>
               </div>
             </section>
 

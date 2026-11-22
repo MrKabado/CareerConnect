@@ -10,7 +10,7 @@ import type { Category } from "../../types";
 type ModalState = { mode: "create" } | { mode: "edit"; category: Category } | null;
 
 export default function CategoriesPage() {
-  const { categories, addCategory, updateCategory } = useCategories();
+  const { categories, addCategory, updateCategory, deleteCategory, isLoading, error, retry } = useCategories();
   const [modal, setModal] = useState<ModalState>(null);
   const [query, setQuery] = useState("");
 
@@ -27,7 +27,7 @@ export default function CategoriesPage() {
         actions={
           <Button
             icon={<Plus size={14} />}
-            className="h-10"
+            className="h-11 rounded-xl bg-[#078b8d] px-5 text-sm shadow-[0_6px_16px_rgba(7,139,141,.16)]"
             onClick={() => setModal({ mode: "create" })}
           >
             Create category
@@ -48,12 +48,28 @@ export default function CategoriesPage() {
         <span className="shrink-0 whitespace-nowrap text-[10px] text-[#718181]">{filteredCategories.length} categories</span>
       </div>
 
+      {error && (
+        <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-xs text-red-700">
+          <span>{error}</span>
+          <button className="ml-3 font-semibold underline" onClick={() => void retry()} type="button">Try again</button>
+        </div>
+      )}
+
       <div className="grid gap-[16px] sm:grid-cols-2 lg:grid-cols-3">
+        {isLoading && (
+          <div className="col-span-full rounded-xl border border-line bg-white px-5 py-10 text-center text-sm text-muted">
+            Loading categories…
+          </div>
+        )}
         {filteredCategories.map((category) => (
           <CategoryCard
             key={category.id}
             category={category}
             onEdit={(c) => setModal({ mode: "edit", category: c })}
+            onDelete={async (c) => {
+              if (!window.confirm(`Delete category "${c.name}"?`)) return;
+              await deleteCategory(c.id);
+            }}
           />
         ))}
       </div>

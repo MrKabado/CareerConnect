@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\ActivityLog;
 use App\Models\User;
 use App\Services\OtpCodeService;
 use Illuminate\Database\QueryException;
@@ -45,6 +46,7 @@ class AuthController extends Controller
         ]);
 
         $validated['role'] = $forcedRole ?? ($validated['role'] ?? 'applicant');
+        $validated['name'] = mb_convert_case(trim($validated['name']), MB_CASE_TITLE, 'UTF-8');
         $existingUser = User::where('email', $validated['email'])->first();
 
         if ($existingUser !== null) {
@@ -80,6 +82,17 @@ class AuthController extends Controller
         }
 
         $user->refresh();
+        ActivityLog::create([
+            'user_id' => $user->id,
+            'actor_id' => null,
+            'action' => 'account.registered',
+            'subject_type' => User::class,
+            'subject_id' => $user->id,
+            'payload' => [
+                'description' => sprintf('%s registered as %s', $user->name, $user->role),
+                'role' => $user->role,
+            ],
+        ]);
         $this->otpCodes->send($user->email, 'email_verification');
         $onboardingToken = $user->role === 'applicant'
             ? $user->createToken(
@@ -99,8 +112,7 @@ class AuthController extends Controller
     private function resumeApplicantVerification(User $user, string $registrationRole): ?JsonResponse
     {
         if (
-            $registrationRole === 'applicant'
-            && $user->role === 'applicant'
+            $user->role === $registrationRole
             && $user->account_status === 'active'
             && $user->email_verified_at === null
         ) {

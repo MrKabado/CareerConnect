@@ -29,6 +29,9 @@ class CategoryController extends Controller
     {
         $categories = Category::query()
             ->when($request->boolean('activeOnly', false), fn ($query) => $query->where('is_active', true))
+            ->withCount([
+                'jobListings as active_job_count' => fn ($query) => $query->where('status', 'open'),
+            ])
             ->orderBy('name')
             ->get();
 
@@ -36,7 +39,9 @@ class CategoryController extends Controller
             'data' => $categories->map(fn (Category $category): array => [
                 'id' => $category->id,
                 'name' => $category->name,
+                'description' => $category->description,
                 'is_active' => $category->is_active,
+                'job_count' => (int) $category->active_job_count,
             ]),
         ]);
     }
@@ -45,11 +50,13 @@ class CategoryController extends Controller
     {
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:100', 'unique:categories,name'],
+            'description' => ['sometimes', 'nullable', 'string', 'max:500'],
             'is_active' => ['sometimes', 'boolean'],
         ]);
 
         $category = Category::create([
             'name' => trim($validated['name']),
+            'description' => $validated['description'] ?? null,
             'is_active' => $validated['is_active'] ?? true,
         ]);
 
@@ -58,6 +65,7 @@ class CategoryController extends Controller
             'category' => [
                 'id' => $category->id,
                 'name' => $category->name,
+                'description' => $category->description,
                 'is_active' => $category->is_active,
             ],
         ], 201);
@@ -67,6 +75,7 @@ class CategoryController extends Controller
     {
         $validated = $request->validate([
             'name' => ['sometimes', 'string', 'max:100', Rule::unique('categories', 'name')->ignore($category->id)],
+            'description' => ['sometimes', 'nullable', 'string', 'max:500'],
             'is_active' => ['sometimes', 'boolean'],
         ]);
 
@@ -82,6 +91,7 @@ class CategoryController extends Controller
             'category' => [
                 'id' => $category->id,
                 'name' => $category->name,
+                'description' => $category->description,
                 'is_active' => $category->is_active,
             ],
         ]);

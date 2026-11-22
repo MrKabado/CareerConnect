@@ -44,7 +44,7 @@ export function ResetPasswordForm({
           autoComplete="new-password"
           className={FORGOT_PASSWORD_INPUT_CLASS_NAME}
           id="reset-password"
-          minLength={8}
+          minLength={12}
           name="password"
           required
         />
@@ -61,7 +61,7 @@ export function ResetPasswordForm({
           autoComplete="new-password"
           className={FORGOT_PASSWORD_INPUT_CLASS_NAME}
           id="reset-password-confirmation"
-          minLength={8}
+          minLength={12}
           name="password_confirmation"
           required
         />

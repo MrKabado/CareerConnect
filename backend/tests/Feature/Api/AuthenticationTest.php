@@ -154,6 +154,40 @@ it('rejects registration for an already verified applicant without sending a cod
     Mail::assertNothingSent();
 });
 
+it('resumes verification for an existing unverified employer and rejects a verified employer', function (): void {
+    Mail::fake();
+    $employer = User::factory()->unverified()->create([
+        'name' => 'Pending Employer',
+        'email' => 'pending-employer@example.com',
+        'role' => 'employer',
+    ]);
+
+    $this->postJson('/api/register', [
+        'name' => 'Replacement Employer',
+        'email' => $employer->email,
+        'password' => 'DifferentPassword123!',
+        'password_confirmation' => 'DifferentPassword123!',
+        'role' => 'employer',
+    ])->assertOk()
+        ->assertJsonPath('resume_verification', true);
+
+    Mail::assertSent(OtpCodeMail::class);
+
+    $employer->forceFill(['email_verified_at' => now()])->save();
+    Mail::fake();
+
+    $this->postJson('/api/register', [
+        'name' => 'Another Employer',
+        'email' => $employer->email,
+        'password' => 'DifferentPassword123!',
+        'password_confirmation' => 'DifferentPassword123!',
+        'role' => 'employer',
+    ])->assertUnprocessable()
+        ->assertJsonValidationErrors('email');
+
+    Mail::assertNothingSent();
+});
+
 it('resends an email-verification code without exposing it in the response', function (): void {
     $user = User::factory()->unverified()->create();
     Mail::fake();

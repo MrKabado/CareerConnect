@@ -3,6 +3,7 @@ import type {
   EmployerRegistrationInput,
   EmployerStatus,
 } from "@/features/employer-registration/types";
+import { authApi } from "@/features/auth/api";
 import { hasRequiredEmployerVerificationDocuments } from "@/features/employer-verification/api";
 
 const storageKey = "careerconnect.employer-registration";
@@ -44,7 +45,7 @@ function publish(employer: EmployerProfile | null) {
     if (employer) localStorage.setItem(storageKey, JSON.stringify(employer));
     else localStorage.removeItem(storageKey);
   } catch {
-    // Keep mock state in memory when browser storage is unavailable.
+    // State remains available in memory for this browser session.
   }
   listeners.forEach((listener) => listener());
 }
@@ -78,12 +79,29 @@ export const employerRegistrationApi = {
   },
 
   async register(input: EmployerRegistrationInput) {
-    await simulateDelay();
-    if (
-      employerSnapshot?.workEmail.toLocaleLowerCase() ===
-      input.workEmail.toLocaleLowerCase()
-    ) {
-      throw new Error("An employer registration already exists for this email.");
+    const registration = await authApi.register({
+      name: `${input.firstName.trim()} ${input.lastName.trim()}`.trim(),
+      email: input.workEmail.trim(),
+      password: input.password,
+      password_confirmation: input.passwordConfirmation,
+      role: "employer",
+    });
+
+    if (registration.resume_verification) {
+      const existingEmployer: EmployerProfile = {
+        id: employerSnapshot?.id ?? `employer-${Date.now()}`,
+        firstName: input.firstName,
+        lastName: input.lastName,
+        workEmail: input.workEmail.trim(),
+        companyName: employerSnapshot?.companyName ?? input.companyName.trim(),
+        website: employerSnapshot?.website ?? input.website.trim(),
+        companySize: employerSnapshot?.companySize ?? input.companySize,
+        industry: employerSnapshot?.industry ?? input.industry,
+        companyRole: employerSnapshot?.companyRole ?? input.companyRole.trim(),
+        status: "email_unverified",
+      };
+      publish(existingEmployer);
+      return existingEmployer;
     }
 
     const employer: EmployerProfile = {
@@ -104,30 +122,10 @@ export const employerRegistrationApi = {
   },
 
   async requestEmailVerificationCode() {
-    await simulateDelay();
     if (!employerSnapshot || employerSnapshot.status !== "email_unverified") {
       throw new Error("There is no employer account awaiting email verification.");
     }
-
-    // TODO: Send a real one-time code to the employer work email.
-    return { message: "Development verification code: 123456" };
-  },
-
-  async verifyEmailCode(code: string) {
-    await simulateDelay();
-    if (!employerSnapshot || employerSnapshot.status !== "email_unverified") {
-      throw new Error("There is no employer account awaiting email verification.");
-    }
-    if (code !== "123456") {
-      throw new Error("The verification code is incorrect or expired.");
-    }
-
-    const employer: EmployerProfile = {
-      ...employerSnapshot,
-      status: "docs_required",
-    };
-    publish(employer);
-    return employer;
+    return authApi.requestEmailVerificationCode(employerSnapshot.workEmail);
   },
 
   async setStatus(status: EmployerStatus, rejectionReason?: string) {
@@ -149,51 +147,6 @@ export const employerRegistrationApi = {
     return employer;
   },
 
-  setStatusForDevelopment(status: EmployerStatus, rejectionReason?: string) {
-    if (!import.meta.env.DEV) {
-      throw new Error("Employer status controls are available only in development.");
-    }
-    if (!employerSnapshot) throw new Error("No employer registration exists.");
-    if (
-      status === "approved" &&
-      employerSnapshot.id !== "maya-philippines-demo" &&
-      !hasRequiredEmployerVerificationDocuments(employerSnapshot.id)
-    ) {
-      throw new Error("Upload all required verification documents before approval.");
-    }
-
-    const employer: EmployerProfile = {
-      ...employerSnapshot,
-      status,
-      ...(status === "rejected" ? { rejectionReason } : { rejectionReason: undefined }),
-    };
-    publish(employer);
-    return employer;
-  },
-
-  createMayaDemoForDevelopment() {
-    if (!import.meta.env.DEV) {
-      throw new Error("The Maya Philippines demo account is available only in development.");
-    }
-    if (employerSnapshot) {
-      throw new Error("An employer registration already exists.");
-    }
-
-    const employer: EmployerProfile = {
-      id: "maya-philippines-demo",
-      firstName: "Maya",
-      lastName: "Philippines",
-      workEmail: "employer@mayaphilippines.com",
-      companyName: "Maya Philippines",
-      website: "https://www.maya.ph",
-      companySize: "1000+",
-      industry: "Financial Services",
-      companyRole: "Talent Acquisition",
-      status: "approved",
-    };
-    publish(employer);
-    return employer;
-  },
 
   clear() {
     publish(null);

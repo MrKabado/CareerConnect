@@ -62,25 +62,53 @@ export default function DocumentPreviewModal({
         {/* Document */}
         <div>
           {item.documents.length > 1 && (
-            <div className="mb-3 flex flex-wrap gap-2">
+            <div
+              aria-label="Choose a verification document"
+              className="mb-3 grid grid-cols-2 gap-2"
+              role="tablist"
+            >
               {item.documents.map((d) => (
                 <button
                   key={d.id}
                   type="button"
+                  role="tab"
+                  aria-selected={d.id === doc.id}
+                  aria-controls="verification-document-preview"
                   onClick={() => setDocumentId(d.id)}
-                  className={`rounded-full border px-3 py-1 text-xs ${
+                  className={`relative flex min-h-12 items-center gap-2 rounded-xl border px-3 py-2 text-left text-xs transition ${
                     d.id === doc.id
-                      ? "border-brand-600 bg-brand-50 text-brand-700"
-                      : "border-line text-muted hover:text-ink"
+                      ? "border-brand-600 bg-brand-50 text-brand-700 shadow-[0_4px_12px_rgba(7,139,141,.10)] ring-2 ring-brand-100"
+                      : "border-line bg-white text-muted hover:border-brand-100 hover:bg-canvas hover:text-ink"
                   }`}
                 >
-                  {d.name}
+                  <FileText
+                    aria-hidden="true"
+                    className="size-4 shrink-0"
+                  />
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate font-semibold">
+                      {d.name}
+                    </span>
+                    <span className="mt-0.5 block text-[10px] font-normal text-muted">
+                      {d.id === doc.id ? "Currently viewing" : "Click to view"}
+                    </span>
+                  </span>
+                  {d.id === doc.id && (
+                    <CheckCircle2
+                      aria-hidden="true"
+                      className="size-4 shrink-0 text-brand-700"
+                    />
+                  )}
                 </button>
               ))}
             </div>
           )}
 
-          <div className="rounded-xl bg-canvas p-4">
+          <div
+            id="verification-document-preview"
+            role="tabpanel"
+            className="rounded-xl bg-canvas p-4"
+          >
             {doc.url ? (
               <iframe
                 title={doc.name}
@@ -106,10 +134,6 @@ export default function DocumentPreviewModal({
                   <PreviewField label="Submitted on" value={item.submittedAt} />
                 </dl>
 
-                <p className="mt-8 border-t border-dashed border-line pt-4 text-xs text-muted">
-                  Preview placeholder. Set <code>url</code> on the document to embed
-                  the real file here.
-                </p>
               </div>
             )}
           </div>

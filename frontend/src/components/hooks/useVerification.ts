@@ -6,6 +6,7 @@ import type { AdminOutletContext, EmployerVerification, VerificationStatus } fro
 function mapStatus(status: string): VerificationStatus {
   if (status === "verified") return "approved";
   if (status === "rejected") return "rejected";
+  if (status === "incomplete") return "incomplete";
   return "pending";
 }
 
@@ -18,12 +19,8 @@ export function useVerifications(): AdminOutletContext {
   const load = useCallback(async () => {
     if (!token) return;
     try {
-      const responses = await Promise.all([
-        adminApi.companyVerifications(token, "pending"),
-        adminApi.companyVerifications(token, "verified"),
-        adminApi.companyVerifications(token, "rejected"),
-      ]);
-      const records = responses.flatMap((response) => response.data).map((record): EmployerVerification => {
+      const response = await adminApi.companyVerifications(token);
+      const records = response.data.map((record): EmployerVerification => {
         const owner = record.company.owner.name;
         const company = record.company.name;
         const submitted = record.submitted_at ? new Date(record.submitted_at) : null;

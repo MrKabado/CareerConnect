@@ -10,7 +10,6 @@ use App\Models\Company;
 use App\Models\CompanyVerification;
 use App\Models\IdentityVerification;
 use App\Models\JobListing;
-use App\Models\OjtListingDetail;
 use App\Models\Resume;
 use App\Models\SavedListing;
 use App\Models\User;
@@ -43,9 +42,9 @@ class LocalDemoSeeder extends Seeder
             );
         }
 
-        $adminPassword = env('ADMIN_SEED_PASSWORD', 'Password123!');
+        $adminPassword = env('ADMIN_SEED_PASSWORD', 'Password123?');
         $admin = User::updateOrCreate(
-            ['email' => env('ADMIN_SEED_EMAIL', 'admin@careerconnect.test')],
+            ['email' => env('ADMIN_SEED_EMAIL', 'admin@gmail.com')],
             [
                 'name' => env('ADMIN_SEED_NAME', 'System Administrator'),
                 'password' => Hash::make($adminPassword),
@@ -214,78 +213,6 @@ class LocalDemoSeeder extends Seeder
 
             $profile->categories()->sync($categoryRecords[0]->id);
             $applicantUsers[] = $user;
-        }
-
-        $jobListings = [
-            [
-                'company_id' => $createdEmployers[0]->id,
-                'category_id' => $categoryRecords[0]->id,
-                'listing_type' => 'job',
-                'title' => 'Frontend Developer',
-                'description' => 'Build user-facing experiences in a product-focused team.',
-                'responsibilities' => 'Develop UI components and collaborate with design and backend teams.',
-                'requirements' => 'Strong knowledge of modern JavaScript and React.',
-                'location' => 'Metro Manila',
-                'work_setup' => 'hybrid',
-                'employment_type' => 'full_time',
-                'salary_min' => 35000,
-                'salary_max' => 70000,
-                'status' => 'open',
-                'published_at' => now(),
-            ],
-            [
-                'company_id' => $createdEmployers[0]->id,
-                'category_id' => $categoryRecords[1]->id,
-                'listing_type' => 'ojt',
-                'title' => 'Business Operations OJT',
-                'description' => 'Support operations and project tracking for the business team.',
-                'responsibilities' => 'Manage business documents and reporting requirements.',
-                'requirements' => 'Current student or recent graduate in business or related course.',
-                'location' => 'Cebu City',
-                'work_setup' => 'onsite',
-                'employment_type' => null,
-                'salary_min' => null,
-                'salary_max' => null,
-                'status' => 'open',
-                'published_at' => now(),
-            ],
-        ];
-
-        foreach ($jobListings as $listing) {
-            $jobListing = JobListing::updateOrCreate(
-                [
-                    'company_id' => $listing['company_id'],
-                    'title' => $listing['title'],
-                ],
-                [
-                    'category_id' => $listing['category_id'],
-                    'listing_type' => $listing['listing_type'],
-                    'description' => $listing['description'],
-                    'responsibilities' => $listing['responsibilities'],
-                    'requirements' => $listing['requirements'],
-                    'location' => $listing['location'],
-                    'work_setup' => $listing['work_setup'],
-                    'employment_type' => $listing['employment_type'],
-                    'salary_min' => $listing['salary_min'],
-                    'salary_max' => $listing['salary_max'],
-                    'status' => $listing['status'],
-                    'published_at' => $listing['published_at'],
-                ],
-            );
-
-            if ($jobListing->listing_type === 'ojt') {
-                $jobListing->ojtDetails()->updateOrCreate(
-                    ['job_listing_id' => $jobListing->id],
-                    [
-                        'duration_hours' => 200,
-                        'allowance_type' => 'paid',
-                        'allowance_amount' => 12000,
-                        'slots' => 3,
-                        'accepted_courses' => ['Business Administration', 'Finance'],
-                        'moa_accepted' => true,
-                    ],
-                );
-            }
         }
 
         $allListings = JobListing::query()->pluck('id');

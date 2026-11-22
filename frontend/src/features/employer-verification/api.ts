@@ -100,7 +100,7 @@ export function validateEmployerVerificationFile(file: File): string | null {
     return "Choose a PDF, JPG, or PNG file.";
   }
   if (file.size > MAX_FILE_SIZE) {
-    return "Each document must be 5 MB or smaller.";
+    return "Each document must be 5 MB or smaller. Compress or resize the file, then try again.";
   }
   if (file.size === 0) {
     return "The selected file is empty. Choose another document.";
