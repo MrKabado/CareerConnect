@@ -1,10 +1,12 @@
 import { type FormEvent, useCallback } from "react";
 import { useNavigate } from "react-router";
+import { useAuth } from "@/features/auth/useAuth";
 import { useOnboarding } from "@/features/onboarding/useOnboarding";
 import OnboardingPageView from "@/features/onboarding/components/OnboardingPageView";
 
 export default function OnboardingPage() {
   const navigate = useNavigate();
+  const { token, user } = useAuth();
   const handleResumeVerification = useCallback(
     (email: string) => {
       navigate(
@@ -14,7 +16,10 @@ export default function OnboardingPage() {
     },
     [navigate],
   );
-  const onboarding = useOnboarding(handleResumeVerification);
+  const onboarding = useOnboarding(
+    handleResumeVerification,
+    user?.role === "applicant" ? token : null,
+  );
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();

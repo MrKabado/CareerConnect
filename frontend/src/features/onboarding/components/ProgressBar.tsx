@@ -19,7 +19,7 @@ export default function ProgressBar({
         <span>
           Step {currentStep} of {totalSteps}
         </span>
-        <span>{Math.round(progress)}% complete</span>
+        <span>{Math.round(progress)}% through setup</span>
       </div>
       <div
         aria-valuemax={totalSteps}

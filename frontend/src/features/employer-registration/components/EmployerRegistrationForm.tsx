@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router";
 import { employerRegistrationApi } from "@/features/employer-registration/api";
 import { validateEmployerRegistration } from "@/features/employer-registration/schemas";
 import type { EmployerRegistrationInput } from "@/features/employer-registration/types";
+import PasswordInput from "@/components/ui/PasswordInput";
 
 const initialForm: EmployerRegistrationInput = {
   firstName: "",
@@ -168,7 +169,16 @@ export default function EmployerRegistrationForm() {
               </div>
               <div className="mt-3">
                 <Field error={errors.password} label="Password *">
-                  <input autoComplete="new-password" className={inputClassName} minLength={8} onChange={(event) => update("password", event.target.value)} placeholder="Create a secure password" type="password" value={form.password} />
+                  <PasswordInput
+                    autoComplete="new-password"
+                    className={inputClassName}
+                    id="employer-password"
+                    minLength={8}
+                    onChange={(event) => update("password", event.target.value)}
+                    placeholder="Create a secure password"
+                    required
+                    value={form.password}
+                  />
                 </Field>
                 <p className="mt-1 text-right text-[8px] text-[#9aa6a7]">At least 8 characters</p>
               </div>

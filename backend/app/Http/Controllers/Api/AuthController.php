@@ -98,21 +98,22 @@ class AuthController extends Controller
 
     private function resumeApplicantVerification(User $user, string $registrationRole): ?JsonResponse
     {
-        if ($registrationRole !== 'applicant') {
-            return null;
-        }
-
         if (
-            $user->role === 'applicant'
+            $registrationRole === 'applicant'
+            && $user->role === 'applicant'
             && $user->account_status === 'active'
             && $user->email_verified_at === null
         ) {
             $this->otpCodes->send($user->email, 'email_verification');
+
+            return response()->json([
+                'message' => 'This email needs verification. Continue with the verification code.',
+                'resume_verification' => true,
+            ]);
         }
 
-        return response()->json([
-            'message' => 'If this email has an account that needs verification, a code has been sent. Otherwise, try signing in.',
-            'resume_verification' => true,
+        throw ValidationException::withMessages([
+            'email' => ['This email is already registered. Log in instead.'],
         ]);
     }
 

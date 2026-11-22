@@ -12,6 +12,7 @@ class ApplicantProfile extends Model
     protected $fillable = [
         'phone',
         'city',
+        'profile_links',
         'profile_photo_path',
         'profile_photo_disk',
         'profile_photo_asset_id',
@@ -37,6 +38,7 @@ class ApplicantProfile extends Model
             'employment_types' => 'array',
             'work_setups' => 'array',
             'preferred_locations' => 'array',
+            'profile_links' => 'array',
             'salary_min' => 'integer',
             'salary_max' => 'integer',
             'onboarding_completed_at' => 'datetime',

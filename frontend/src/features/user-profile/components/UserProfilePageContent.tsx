@@ -24,10 +24,10 @@ import {
 import { useAuth } from "@/features/auth/useAuth";
 import { onboardingStore } from "@/features/onboarding/store";
 import { ojtProfileExample as ojtSeekerExample } from "@/features/onboarding/ojtProfileExample";
-import type { OnboardingStepId } from "@/features/onboarding/config/steps";
 import {
   applicantFilesApi,
   downloadApplicantFile,
+  type ApplicantProfileData,
   type ApplicantResumeFile,
 } from "@/features/user-profile/backendApi";
 
@@ -243,6 +243,8 @@ export default function ProfilePage() {
   const [profilePicture, setProfilePicture] = useState<string | null>(
     user?.role === "applicant" ? null : getStoredProfilePicture(),
   );
+  const [applicantProfile, setApplicantProfile] =
+    useState<ApplicantProfileData | null>(null);
   const [serverResume, setServerResume] = useState<ApplicantResumeFile | null>(null);
   const [resumeLoading, setResumeLoading] = useState(user?.role === "applicant" && Boolean(token));
   const [resumeUploadProgress, setResumeUploadProgress] = useState<number | null>(null);
@@ -282,12 +284,16 @@ export default function ProfilePage() {
       ? jobSeekerExample.email
       : "Not provided");
   const location =
-    answers.preferredLocations.join(", ") ||
-    (isOjtSeeker
-      ? "Quezon City, Metro Manila"
-      : useJobSeekerExample
-        ? jobSeekerExample.location
-        : "Not provided");
+    isBackendApplicant
+      ? applicantProfile?.city ||
+        applicantProfile?.preferred_locations?.join(", ") ||
+        "No location provided"
+      : answers.preferredLocations.join(", ") ||
+        (isOjtSeeker
+          ? "Quezon City, Metro Manila"
+          : useJobSeekerExample
+            ? jobSeekerExample.location
+            : "Not provided");
   const resume = isBackendApplicant ? null : answers.resumeFile;
   const coverLetter = isBackendApplicant ? null : answers.coverLetterFile;
   const showSampleResume =
@@ -300,25 +306,63 @@ export default function ProfilePage() {
       : isOjtSeeker
         ? ojtSeekerExample.skills
         : jobSeekerExample.skills;
-  const profileChecks = [
-    Boolean(providedName),
-    Boolean(email !== "Not provided"),
-    Boolean(
-      isOjtSeeker
-        ? answers.school || answers.course
-        : answers.jobCategories.length || answers.desiredJobTitles.length,
-    ),
-    answers.skills.length > 0,
-    answers.preferredLocations.length > 0,
-    Boolean(answers.workSetup),
-    Boolean(resume || serverResume),
-  ];
-  const strength =
-    useJobSeekerExample || isOjtSeeker
-      ? 88
-      : Math.round(
-          (profileChecks.filter(Boolean).length / profileChecks.length) * 100,
-        );
+  const isProfileOjtSeeker = isOjtSeeker;
+  const otherProfileLink =
+    typeof applicantProfile?.profile_links?.other === "object"
+      ? applicantProfile.profile_links.other
+      : null;
+  const profileChecks = isProfileOjtSeeker
+    ? [
+        Boolean(providedName),
+        Boolean(email !== "Not provided"),
+        isBackendApplicant
+          ? Boolean(applicantProfile?.phone)
+          : Boolean(jobSeekerExample.phone),
+        isBackendApplicant
+          ? Boolean(applicantProfile?.city)
+          : Boolean(location !== "Not provided"),
+        Boolean(applicantProfile?.profile_photo_url),
+        Boolean(applicantProfile?.ojt_details?.school),
+        Boolean(applicantProfile?.ojt_details?.course),
+        Boolean(applicantProfile?.ojt_details?.year_level),
+        Boolean(applicantProfile?.ojt_details?.required_hours),
+        Boolean(applicantProfile?.ojt_details?.requires_moa !== null &&
+          applicantProfile?.ojt_details?.requires_moa !== undefined),
+        Boolean(applicantProfile?.skills.length),
+        Boolean(applicantProfile?.interests.length),
+        Boolean(applicantProfile?.preferred_locations?.length),
+        Boolean(applicantProfile?.work_setups?.length),
+        Boolean(applicantProfile?.ojt_details?.preferred_start_date),
+        Boolean(applicantProfile?.ojt_details?.allowance_preference),
+        Boolean(serverResume),
+      ]
+    : [
+        Boolean(providedName),
+        Boolean(email !== "Not provided"),
+        isBackendApplicant
+          ? Boolean(applicantProfile?.phone)
+          : Boolean(jobSeekerExample.phone),
+        isBackendApplicant
+          ? Boolean(applicantProfile?.city)
+          : Boolean(location !== "Not provided"),
+        Boolean(applicantProfile?.profile_photo_url),
+        Boolean(applicantProfile?.interests.length),
+        Boolean(applicantProfile?.desired_titles?.length),
+        Boolean(applicantProfile?.skills.length),
+        Boolean(applicantProfile?.preferred_locations?.length),
+        Boolean(applicantProfile?.work_setups?.length),
+        Boolean(applicantProfile?.employment_types?.length),
+        Boolean(applicantProfile?.experience_level),
+        Boolean(applicantProfile?.ojt_details?.school &&
+          applicantProfile?.ojt_details?.course &&
+          applicantProfile?.ojt_details?.year_level),
+        Boolean(serverResume),
+      ];
+  const strength = isBackendApplicant
+    ? Math.round(
+        (profileChecks.filter(Boolean).length / profileChecks.length) * 100,
+      )
+    : 88;
 
   useEffect(() => {
     if (!isBackendApplicant || !token) {
@@ -347,7 +391,16 @@ export default function ProfilePage() {
     applicantFilesApi
         .profile(token)
         .then((response) => {
-          if (active) setProfilePicture(response.data.profile_photo_url);
+          if (active) {
+            setApplicantProfile(response.data);
+            setProfilePicture(response.data.profile_photo_url);
+            onboardingStore.setAnswer(
+              "goal",
+              response.data.looking_for_ojt && !response.data.looking_for_jobs
+                ? "ojt-seeker"
+                : "job-seeker",
+            );
+          }
         })
         .catch((requestError: unknown) => {
           if (active) {
@@ -363,11 +416,6 @@ export default function ProfilePage() {
         active = false;
     };
   }, [isBackendApplicant, token]);
-
-  function editProfile(step: OnboardingStepId) {
-    onboardingStore.setStep(step);
-    navigate("/onboarding");
-  }
 
   function openPreferencesEditor() {
     setIsActionMenuOpen(false);
@@ -497,6 +545,12 @@ export default function ProfilePage() {
       setResumeError(null);
       setSampleResumeRemoved(false);
       if (isBackendApplicant && token) {
+        if (!/^resume\.(pdf|docx)$/i.test(file.name)) {
+          setResumeError(
+            "Rename the resume file to resume.pdf or resume.docx before uploading.",
+          );
+          return;
+        }
         setResumeUploadProgress(0);
         try {
           setServerResume(
@@ -624,8 +678,16 @@ export default function ProfilePage() {
       setPhotoUploadProgress(0);
       setProfilePictureError(null);
       try {
-        setProfilePicture(
-          await applicantFilesApi.uploadPhoto(token, file, setPhotoUploadProgress),
+        const uploadedUrl = await applicantFilesApi.uploadPhoto(
+          token,
+          file,
+          setPhotoUploadProgress,
+        );
+        setProfilePicture(uploadedUrl);
+        window.dispatchEvent(
+          new CustomEvent("careerconnect-profile-photo-changed", {
+            detail: uploadedUrl,
+          }),
         );
       } catch (requestError) {
         setProfilePictureError(
@@ -665,6 +727,11 @@ export default function ProfilePage() {
       try {
         await applicantFilesApi.deletePhoto(token);
         setProfilePicture(null);
+        window.dispatchEvent(
+          new CustomEvent("careerconnect-profile-photo-changed", {
+            detail: null,
+          }),
+        );
         setIsProfilePictureMenuOpen(false);
       } catch (requestError) {
         setProfilePictureError(
@@ -747,23 +814,42 @@ export default function ProfilePage() {
       )}
     </>
   );
-  const preferencesStep: OnboardingStepId = isOjtSeeker
-    ? "preferences"
-    : "job-preferences";
   const preferencesForEditor: ProfilePreferencesDraft = {
-    school: answers.school || (isOjtSeeker ? ojtSeekerExample.school : ""),
+    name: applicantProfile?.name || providedName,
+    phone: applicantProfile?.phone || "",
+    city: applicantProfile?.city || "",
+    portfolioLink: applicantProfile?.profile_links?.portfolio || "",
+    githubLink: applicantProfile?.profile_links?.github || "",
+    linkedinLink: applicantProfile?.profile_links?.linkedin || "",
+    otherLinkLabel: otherProfileLink?.label || "",
+    otherLink: otherProfileLink?.url || "",
+    school: isBackendApplicant
+      ? applicantProfile?.ojt_details?.school || ""
+      : answers.school || (isOjtSeeker ? ojtSeekerExample.school : ""),
     course:
-      answers.course ||
-      (isOjtSeeker
-        ? ojtSeekerExample.course
-        : useJobSeekerExample
-          ? jobSeekerExample.education.course
-          : ""),
-    yearLevel: answers.yearLevel || (isOjtSeeker ? ojtSeekerExample.yearLevel : ""),
+      isBackendApplicant
+        ? applicantProfile?.ojt_details?.course || ""
+        : answers.course ||
+          (isOjtSeeker
+            ? ojtSeekerExample.course
+            : useJobSeekerExample
+              ? jobSeekerExample.education.course
+              : ""),
+    yearLevel: isBackendApplicant
+      ? applicantProfile?.ojt_details?.year_level
+        ? String(applicantProfile.ojt_details.year_level)
+        : ""
+      : answers.yearLevel || (isOjtSeeker ? ojtSeekerExample.yearLevel : ""),
     requiredOjtHours:
-      answers.requiredOjtHours ||
-      (isOjtSeeker ? ojtSeekerExample.requiredOjtHours : ""),
-    requiresMoa: answers.requiresMoa,
+      isBackendApplicant
+        ? applicantProfile?.ojt_details?.required_hours
+          ? String(applicantProfile.ojt_details.required_hours)
+          : ""
+        : answers.requiredOjtHours ||
+          (isOjtSeeker ? ojtSeekerExample.requiredOjtHours : ""),
+    requiresMoa: isBackendApplicant
+      ? applicantProfile?.ojt_details?.requires_moa ?? false
+      : answers.requiresMoa,
     trainingFields:
       answers.trainingFields.length > 0
         ? answers.trainingFields
@@ -771,34 +857,48 @@ export default function ProfilePage() {
           ? ojtSeekerExample.trainingFields
           : [],
     jobCategories:
-      answers.jobCategories.length > 0
+      isBackendApplicant
+        ? applicantProfile?.interests.map((interest) => interest.name) || []
+        : answers.jobCategories.length > 0
         ? answers.jobCategories
         : useJobSeekerExample
           ? jobSeekerExample.jobCategories
           : [],
     desiredJobTitles:
-      answers.desiredJobTitles.length > 0
+      isBackendApplicant
+        ? applicantProfile?.desired_titles || []
+        : answers.desiredJobTitles.length > 0
         ? answers.desiredJobTitles
         : useJobSeekerExample
           ? [jobSeekerExample.title]
           : [],
     employmentTypes:
-      answers.employmentTypes.length > 0
+      isBackendApplicant
+        ? applicantProfile?.employment_types || []
+        : answers.employmentTypes.length > 0
         ? answers.employmentTypes
         : useJobSeekerExample
           ? jobSeekerExample.employmentTypes
           : [],
     experienceLevel:
-      answers.experienceLevel ||
-      (useJobSeekerExample ? jobSeekerExample.experienceLevel : ""),
+      isBackendApplicant
+        ? applicantProfile?.experience_level || ""
+        : answers.experienceLevel ||
+          (useJobSeekerExample ? jobSeekerExample.experienceLevel : ""),
     minimumSalary:
-      answers.minimumSalary ||
-      (useJobSeekerExample ? jobSeekerExample.minimumSalary : ""),
+      isBackendApplicant
+        ? applicantProfile?.salary_min ? String(applicantProfile.salary_min) : ""
+        : answers.minimumSalary ||
+          (useJobSeekerExample ? jobSeekerExample.minimumSalary : ""),
     maximumSalary:
-      answers.maximumSalary ||
-      (useJobSeekerExample ? jobSeekerExample.maximumSalary : ""),
+      isBackendApplicant
+        ? applicantProfile?.salary_max ? String(applicantProfile.salary_max) : ""
+        : answers.maximumSalary ||
+          (useJobSeekerExample ? jobSeekerExample.maximumSalary : ""),
     skills:
-      answers.skills.length > 0
+      isBackendApplicant
+        ? applicantProfile?.skills || []
+        : answers.skills.length > 0
         ? answers.skills
         : isOjtSeeker
           ? ojtSeekerExample.skills
@@ -807,17 +907,23 @@ export default function ProfilePage() {
       answers.preferredStartDate ||
       (isOjtSeeker ? ojtSeekerExample.preferredStartDate : ""),
     allowancePreference:
-      answers.allowancePreference ||
-      (isOjtSeeker ? ojtSeekerExample.allowancePreference : ""),
+      isBackendApplicant
+        ? applicantProfile?.ojt_details?.allowance_preference || ""
+        : answers.allowancePreference ||
+          (isOjtSeeker ? ojtSeekerExample.allowancePreference : ""),
     workSetup:
-      answers.workSetup ||
-      (isOjtSeeker
-        ? ojtSeekerExample.workSetup
-        : useJobSeekerExample
-          ? jobSeekerExample.workSetups[0]
-          : ""),
+      isBackendApplicant
+        ? applicantProfile?.work_setups?.[0] || ""
+        : answers.workSetup ||
+          (isOjtSeeker
+            ? ojtSeekerExample.workSetup
+            : useJobSeekerExample
+              ? jobSeekerExample.workSetups[0]
+              : ""),
     preferredLocations:
-      answers.preferredLocations.length > 0
+      isBackendApplicant
+        ? applicantProfile?.preferred_locations || []
+        : answers.preferredLocations.length > 0
         ? answers.preferredLocations
         : isOjtSeeker
           ? ojtSeekerExample.preferredLocations
@@ -917,20 +1023,36 @@ export default function ProfilePage() {
                     </span>
                   </div>
                   <p className="mt-1 text-[9px] text-[#829092]">
-                    {isOjtSeeker
-                      ? [
-                          answers.course || ojtSeekerExample.course,
-                          answers.yearLevel || ojtSeekerExample.yearLevel,
-                        ].join(" · ")
-                      : [
-                          answers.desiredJobTitles[0],
-                          answers.preferredLocations[0],
-                        ]
-                          .filter(Boolean)
-                          .join(" · ") ||
-                            (useJobSeekerExample
-                              ? `${jobSeekerExample.title} · ${jobSeekerExample.location}`
-                              : email)}
+                    {isBackendApplicant
+                      ? isOjtSeeker
+                        ? [
+                            applicantProfile?.ojt_details?.course,
+                            applicantProfile?.ojt_details?.year_level
+                              ? `Year ${applicantProfile.ojt_details.year_level}`
+                              : null,
+                          ]
+                            .filter(Boolean)
+                            .join(" · ") || "OJT details not added"
+                        : [
+                            applicantProfile?.desired_titles?.[0],
+                            applicantProfile?.preferred_locations?.[0],
+                          ]
+                            .filter(Boolean)
+                            .join(" · ") || "Career preferences not added"
+                      : isOjtSeeker
+                        ? [
+                            answers.course || ojtSeekerExample.course,
+                            answers.yearLevel || ojtSeekerExample.yearLevel,
+                          ].join(" · ")
+                        : [
+                            answers.desiredJobTitles[0],
+                            answers.preferredLocations[0],
+                          ]
+                            .filter(Boolean)
+                            .join(" · ") ||
+                              (useJobSeekerExample
+                                ? `${jobSeekerExample.title} · ${jobSeekerExample.location}`
+                                : email)}
                   </p>
                   {profilePictureError && (
                     <p className="mt-1 text-[9px] text-[#b34b4b]" role="alert">
@@ -1095,9 +1217,11 @@ export default function ProfilePage() {
                 <ProfileField
                   label="Mobile"
                   value={
-                    isOjtSeeker || useJobSeekerExample
-                      ? jobSeekerExample.phone
-                      : "Not provided"
+                    isBackendApplicant
+                      ? applicantProfile?.phone || ""
+                      : isOjtSeeker || useJobSeekerExample
+                        ? jobSeekerExample.phone
+                        : "Not provided"
                   }
                 />
               </dl>
@@ -1111,26 +1235,52 @@ export default function ProfilePage() {
                 <dl className="grid grid-cols-2 gap-x-5 gap-y-3">
                   <ProfileField
                     label="School"
-                    value={answers.school || ojtSeekerExample.school}
+                    value={
+                      isBackendApplicant
+                        ? applicantProfile?.ojt_details?.school || ""
+                        : answers.school || ojtSeekerExample.school
+                    }
                   />
                   <ProfileField
                     label="Course"
-                    value={answers.course || ojtSeekerExample.course}
+                    value={
+                      isBackendApplicant
+                        ? applicantProfile?.ojt_details?.course || ""
+                        : answers.course || ojtSeekerExample.course
+                    }
                   />
                   <ProfileField
                     label="Year level"
-                    value={answers.yearLevel || ojtSeekerExample.yearLevel}
+                    value={
+                      isBackendApplicant
+                        ? applicantProfile?.ojt_details?.year_level
+                          ? String(applicantProfile.ojt_details.year_level)
+                          : ""
+                        : answers.yearLevel || ojtSeekerExample.yearLevel
+                    }
                   />
                   <ProfileField
                     label="Required hours"
-                    value={`${answers.requiredOjtHours || ojtSeekerExample.requiredOjtHours} hours`}
+                    value={
+                      isBackendApplicant
+                        ? applicantProfile?.ojt_details?.required_hours
+                          ? `${applicantProfile.ojt_details.required_hours} hours`
+                          : ""
+                        : `${answers.requiredOjtHours || ojtSeekerExample.requiredOjtHours} hours`
+                    }
                   />
                 </dl>
                 <p className="mt-3 rounded-lg bg-[#eff9f7] px-3 py-2.5 text-[9px] text-[#6f8584]">
                   <span className="mr-2 font-bold text-[#078b8d]">✓</span>
-                  {answers.requiresMoa
-                    ? "My school requires a MOA with the company."
-                    : "My school does not require a MOA with the company."}
+                  {isBackendApplicant
+                    ? applicantProfile?.ojt_details?.requires_moa === true
+                      ? "My school requires a MOA with the company."
+                      : applicantProfile?.ojt_details?.requires_moa === false
+                        ? "My school does not require a MOA with the company."
+                        : "MOA requirement not provided."
+                    : answers.requiresMoa
+                      ? "My school requires a MOA with the company."
+                      : "My school does not require a MOA with the company."}
                 </p>
               </ProfilePanel>
             ) : (
@@ -1138,7 +1288,23 @@ export default function ProfilePage() {
                 icon="briefcase"
                 title="Work experience"
               >
-                {useJobSeekerExample ? (
+                {isBackendApplicant ? (
+                  <div className="flex items-start gap-2.5">
+                    <span className="mt-1.5 size-1.5 shrink-0 rounded-full bg-[#078b8d]" />
+                    <div className="min-w-0">
+                      <p className="text-[10px] font-semibold text-[#526365]">
+                        {applicantProfile?.experience_level
+                          ? `Experience level: ${applicantProfile.experience_level}`
+                          : "Work experience not added"}
+                      </p>
+                      <p className="mt-1 text-[9px] leading-4 text-[#849293]">
+                        {applicantProfile?.desired_titles?.length
+                          ? `Interested in ${applicantProfile.desired_titles.join(", ")}`
+                          : "Use Edit preferences to add your desired roles."}
+                      </p>
+                    </div>
+                  </div>
+                ) : useJobSeekerExample ? (
                   <div className="space-y-4 border-l border-[#e7eeee] pl-3">
                     {jobSeekerExample.workExperience.map((experience) => (
                       <div className="relative min-w-0" key={experience.title}>
@@ -1186,31 +1352,43 @@ export default function ProfilePage() {
                 <span className="mt-1.5 size-1.5 shrink-0 rounded-full bg-[#078b8d]" />
                 <div className="min-w-0">
                   <p className="text-[10px] font-semibold text-[#526365]">
-                    {answers.course ||
-                      (isOjtSeeker
-                        ? ojtSeekerExample.course
-                        : useJobSeekerExample
-                        ? jobSeekerExample.education.course
-                        : "Education details not added")}
+                    {isBackendApplicant
+                      ? applicantProfile?.ojt_details?.course || "Education details not added"
+                      : answers.course ||
+                        (isOjtSeeker
+                          ? ojtSeekerExample.course
+                          : useJobSeekerExample
+                            ? jobSeekerExample.education.course
+                            : "Education details not added")}
                   </p>
                   <p className="mt-1 text-[9px] text-[#849293]">
-                    {[
-                      answers.school ||
-                        (isOjtSeeker
-                          ? ojtSeekerExample.school
-                          : useJobSeekerExample
-                            ? jobSeekerExample.education.school
-                            : ""),
-                      isOjtSeeker
-                        ? ojtSeekerExample.educationPeriod
-                        : answers.yearLevel ||
-                          (useJobSeekerExample
-                            ? jobSeekerExample.education.period
-                            : ""),
-                    ]
-                      .filter(Boolean)
-                      .join(" · ") ||
-                      "Add your education details to your profile."}
+                    {isBackendApplicant
+                      ? [
+                          applicantProfile?.ojt_details?.school,
+                          applicantProfile?.ojt_details?.year_level
+                            ? `Year ${applicantProfile.ojt_details.year_level}`
+                            : null,
+                        ]
+                          .filter(Boolean)
+                          .join(" · ") ||
+                        "Education details not added. Use Edit preferences to add them."
+                      : [
+                          answers.school ||
+                            (isOjtSeeker
+                              ? ojtSeekerExample.school
+                              : useJobSeekerExample
+                                ? jobSeekerExample.education.school
+                                : ""),
+                          isOjtSeeker
+                            ? ojtSeekerExample.educationPeriod
+                            : answers.yearLevel ||
+                              (useJobSeekerExample
+                                ? jobSeekerExample.education.period
+                                : ""),
+                        ]
+                          .filter(Boolean)
+                          .join(" · ") ||
+                        "Add your education details to your profile."}
                   </p>
                 </div>
               </div>
@@ -1297,7 +1475,6 @@ export default function ProfilePage() {
 
           <aside className="flex min-w-0 flex-col gap-3">
             <ProfileStrengthCard
-              onComplete={() => editProfile(preferencesStep)}
               percentage={strength}
               description={
                 isOjtSeeker
@@ -1307,6 +1484,39 @@ export default function ProfilePage() {
                     : undefined
               }
             />
+            <ProfilePanel icon="briefcase" title="Professional links">
+              {[
+                ["Portfolio", applicantProfile?.profile_links?.portfolio],
+                ["GitHub", applicantProfile?.profile_links?.github],
+                ["LinkedIn", applicantProfile?.profile_links?.linkedin],
+                [otherProfileLink?.label || "Other", otherProfileLink?.url || null],
+              ].filter(([, url]) => Boolean(url)).length > 0 ? (
+                <div className="space-y-2">
+                  {[
+                    ["Portfolio", applicantProfile?.profile_links?.portfolio],
+                    ["GitHub", applicantProfile?.profile_links?.github],
+                    ["LinkedIn", applicantProfile?.profile_links?.linkedin],
+                    [otherProfileLink?.label || "Other", otherProfileLink?.url || null],
+                  ].map(([label, url]) =>
+                    url ? (
+                      <a
+                        className="block truncate rounded-lg bg-[#eff8f6] px-3 py-2 text-[9px] font-semibold text-[#078b8d] hover:bg-[#e5f4f2] hover:underline"
+                        href={url}
+                        key={label}
+                        rel="noopener noreferrer"
+                        target="_blank"
+                      >
+                        {label}: {url}
+                      </a>
+                    ) : null,
+                  )}
+                </div>
+              ) : (
+                <p className="text-[10px] leading-4 text-[#8a999a]">
+                  No professional links added. This is optional; use Edit preferences to add a portfolio, GitHub, LinkedIn, or another link.
+                </p>
+              )}
+            </ProfilePanel>
             <ProfilePanel
               icon="skills"
               title="Skills"
@@ -1522,16 +1732,24 @@ export default function ProfilePage() {
               <ProfilePanel icon="skills" title="OJT readiness">
                 <ul className="space-y-2.5 text-[9px] text-[#829092]">
                   <li className="flex items-center gap-2">
-                    <span className="font-bold text-[#46b99e]">✓</span>
-                    School details complete
+                    <span className={`font-bold ${applicantProfile?.ojt_details?.school ? "text-[#46b99e]" : "text-[#9aa6a7]"}`}>
+                      {applicantProfile?.ojt_details?.school ? "✓" : "—"}
+                    </span>
+                    {applicantProfile?.ojt_details?.school ? "School details provided" : "School details not provided"}
                   </li>
                   <li className="flex items-center gap-2">
-                    <span className="font-bold text-[#46b99e]">✓</span>
-                    Required hours provided
+                    <span className={`font-bold ${applicantProfile?.ojt_details?.required_hours ? "text-[#46b99e]" : "text-[#9aa6a7]"}`}>
+                      {applicantProfile?.ojt_details?.required_hours ? "✓" : "—"}
+                    </span>
+                    {applicantProfile?.ojt_details?.required_hours ? "Required hours provided" : "Required OJT hours not provided"}
                   </li>
                   <li className="flex items-center gap-2">
-                    <span className="font-bold text-[#46b99e]">✓</span>
-                    MOA requirement shared
+                    <span className={`font-bold ${applicantProfile?.ojt_details?.requires_moa !== null && applicantProfile?.ojt_details?.requires_moa !== undefined ? "text-[#46b99e]" : "text-[#9aa6a7]"}`}>
+                      {applicantProfile?.ojt_details?.requires_moa !== null && applicantProfile?.ojt_details?.requires_moa !== undefined ? "✓" : "—"}
+                    </span>
+                    {applicantProfile?.ojt_details?.requires_moa !== null && applicantProfile?.ojt_details?.requires_moa !== undefined
+                      ? "MOA requirement shared"
+                      : "MOA requirement not provided"}
                   </li>
                 </ul>
               </ProfilePanel>
@@ -1544,7 +1762,7 @@ export default function ProfilePage() {
           initialPreferences={preferencesForEditor}
           isOjtSeeker={isOjtSeeker}
           onClose={() => setIsPreferencesEditorOpen(false)}
-          onSave={(preferences) => {
+          onSave={async (preferences) => {
             onboardingStore.setAnswer("skills", preferences.skills);
             onboardingStore.setAnswer(
               "workSetup",
@@ -1601,6 +1819,86 @@ export default function ProfilePage() {
                 "experienceLevel",
                 preferences.experienceLevel,
               );
+            }
+
+            if (isBackendApplicant && token) {
+              await applicantFilesApi.updateProfile(token, {
+                name: preferences.name,
+                phone: preferences.phone || null,
+                city: preferences.city || null,
+              });
+
+              const workSetupMap: Record<string, string> = {
+                Onsite: "onsite",
+                "On-site": "onsite",
+                Hybrid: "hybrid",
+                Remote: "remote",
+              };
+              const employmentTypeMap: Record<string, string> = {
+                "Full-time": "full_time",
+                "Part-time": "part_time",
+                Contract: "contract",
+              };
+              const experienceLevelMap: Record<string, string> = {
+                "Fresh graduate": "fresh_graduate",
+                "1–3 years": "1_3_years",
+                "1-3 years": "1_3_years",
+                "3–5 years": "3_5_years",
+                "3-5 years": "3_5_years",
+                "5+ years": "5_plus_years",
+              };
+
+              const ojtDetails = isOjtSeeker
+                ? {
+                    school: preferences.school || null,
+                    course: preferences.course || null,
+                    year_level: preferences.yearLevel ? Number(preferences.yearLevel.replace(/\D/g, "")) || null : null,
+                    required_hours: preferences.requiredOjtHours ? Number(preferences.requiredOjtHours) : null,
+                    preferred_start_date: preferences.preferredStartDate || null,
+                    allowance_preference: preferences.allowancePreference === "Paid only"
+                      ? "paid_only"
+                      : preferences.allowancePreference === "Unpaid OK"
+                        ? "unpaid_ok"
+                        : "no_preference",
+                    requires_moa: preferences.requiresMoa,
+                  }
+                : preferences.school || preferences.course || preferences.yearLevel
+                  ? {
+                      school: preferences.school || null,
+                      course: preferences.course || null,
+                      year_level: preferences.yearLevel ? Number(preferences.yearLevel.replace(/\D/g, "")) || null : null,
+                    }
+                  : undefined;
+
+              const updated = await applicantFilesApi.updatePreferences(token, {
+                skills: preferences.skills,
+                work_setups: preferences.workSetup
+                  ? [workSetupMap[preferences.workSetup] || preferences.workSetup.toLowerCase()]
+                  : [],
+                preferred_locations: preferences.preferredLocations,
+                desired_titles: preferences.desiredJobTitles,
+                employment_types: preferences.employmentTypes
+                  .map((type) => employmentTypeMap[type] || type.toLowerCase())
+                  .filter(Boolean),
+                salary_min: preferences.minimumSalary ? Number(preferences.minimumSalary) : null,
+                salary_max: preferences.maximumSalary ? Number(preferences.maximumSalary) : null,
+                experience_level: preferences.experienceLevel
+                  ? experienceLevelMap[preferences.experienceLevel] || null
+                  : null,
+                profile_links: {
+                  portfolio: preferences.portfolioLink.trim() || null,
+                  github: preferences.githubLink.trim() || null,
+                  linkedin: preferences.linkedinLink.trim() || null,
+                  other: preferences.otherLink.trim()
+                    ? {
+                        label: preferences.otherLinkLabel.trim() || "Other",
+                        url: preferences.otherLink.trim(),
+                      }
+                    : null,
+                },
+                ...(ojtDetails ? { ojt_details: ojtDetails } : {}),
+              });
+              setApplicantProfile(updated.data);
             }
 
             setIsPreferencesEditorOpen(false);

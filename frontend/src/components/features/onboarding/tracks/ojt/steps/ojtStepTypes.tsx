@@ -7,6 +7,7 @@ export type OjtStepProps = {
   errors: OnboardingErrors;
   isSubmitting?: boolean;
   isResumeUploaded?: boolean;
+  isResumeAlreadyUploaded?: boolean;
   onChange: <Key extends keyof OnboardingAnswers>(
     field: Key,
     value: OnboardingAnswers[Key],

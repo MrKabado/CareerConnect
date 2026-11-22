@@ -8,6 +8,7 @@ import recommendationsNavIcon from "@/assets/Icon (8).svg";
 import jobSearchNavIcon from "@/assets/Icon (9).svg";
 import profileNavIcon from "@/assets/Icon (10).svg";
 import { useUnreadCount } from "@/features/messaging/hooks";
+import { applicantFilesApi } from "@/features/user-profile/backendApi";
 
 const navItems = [
   { label: "Job Search", to: "/job-search", icon: jobSearchNavIcon },
@@ -59,7 +60,7 @@ function MessagesIconLink({ unreadCount }: { unreadCount: number }) {
 export default function Header() {
   const { pathname } = useLocation();
   const navigate = useNavigate();
-  const { logout, status, user } = useAuth();
+  const { logout, status, token, user } = useAuth();
   const isApplicant = user?.role === "applicant";
   const visibleNavItems = isApplicant ? navItems : navItems.slice(0, 2);
   const userInitials = user?.name
@@ -77,6 +78,7 @@ export default function Header() {
   const [openDropdown, setOpenDropdown] = useState<"account" | null>(null);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [logoutError, setLogoutError] = useState<string | null>(null);
+  const [profilePhotoUrl, setProfilePhotoUrl] = useState<string | null>(null);
   const dropdownAreaRef = useRef<HTMLDivElement>(null);
   const isNavItemActive = (to: string) =>
     pathname === to ||
@@ -106,6 +108,40 @@ export default function Header() {
       document.removeEventListener("keydown", handleKeyDown);
     };
   }, [openDropdown]);
+
+  useEffect(() => {
+    if (user?.role !== "applicant" || !token) {
+      return;
+    }
+
+    let active = true;
+    applicantFilesApi
+      .profile(token)
+      .then((response) => {
+        if (active) setProfilePhotoUrl(response.data.profile_photo_url);
+      })
+      .catch(() => {
+        if (active) setProfilePhotoUrl(null);
+      });
+
+    function handleProfilePhotoChanged(event: Event) {
+      const customEvent = event as CustomEvent<string | null>;
+      if (active) setProfilePhotoUrl(customEvent.detail);
+    }
+
+    window.addEventListener(
+      "careerconnect-profile-photo-changed",
+      handleProfilePhotoChanged,
+    );
+
+    return () => {
+      active = false;
+      window.removeEventListener(
+        "careerconnect-profile-photo-changed",
+        handleProfilePhotoChanged,
+      );
+    };
+  }, [token, user?.role]);
 
   async function handleLogout() {
     setLogoutError(null);
@@ -168,8 +204,16 @@ export default function Header() {
               }
               type="button"
             >
-              <span className="grid size-8 place-items-center rounded-full bg-[#d8ede7] text-[10px] font-bold text-[#36706c]">
-                {userInitials}
+              <span className="grid size-8 place-items-center overflow-hidden rounded-full bg-[#d8ede7] text-[10px] font-bold text-[#36706c]">
+                {isApplicant && profilePhotoUrl ? (
+                  <img
+                    alt={`${user.name} profile`}
+                    className="size-full object-cover"
+                    src={profilePhotoUrl}
+                  />
+                ) : (
+                  userInitials
+                )}
               </span>
               <HeaderIcon name="chevron" size={14} />
             </button>

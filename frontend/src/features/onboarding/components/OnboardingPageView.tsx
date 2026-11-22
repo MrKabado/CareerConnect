@@ -69,6 +69,7 @@ export default function OnboardingPageView({
             answers={onboarding.answers}
             errors={onboarding.errors}
             isResumeUploaded={onboarding.isResumeUploaded}
+            isResumeAlreadyUploaded={onboarding.isResumeAlreadyUploaded}
             isSubmitting={onboarding.isSubmitting}
             onChange={onboarding.setAnswer}
             onEdit={onboarding.setStep}

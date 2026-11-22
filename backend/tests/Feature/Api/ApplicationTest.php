@@ -114,9 +114,9 @@ it('uploads PDF and DOCX resumes, replaces the current version and keeps metadat
     $token = phaseFiveToken($this, $applicant);
 
     $this->withToken($token)->postJson('/api/applicant/resume', [
-        'resume' => phaseFivePdf('maria-resume.pdf'),
+        'resume' => phaseFivePdf('resume.pdf'),
     ])->assertCreated()
-        ->assertJsonPath('data.original_filename', 'maria-resume.pdf')
+        ->assertJsonPath('data.original_filename', 'resume.pdf')
         ->assertJsonPath('data.mime_type', 'application/pdf');
 
     $firstResume = $applicant->resumes()->where('is_current', true)->firstOrFail();
@@ -124,16 +124,16 @@ it('uploads PDF and DOCX resumes, replaces the current version and keeps metadat
 
     $this->app['auth']->forgetGuards();
     $this->withToken($token)->postJson('/api/applicant/resume', [
-        'resume' => phaseFiveDocx('updated-resume.docx'),
+        'resume' => phaseFiveDocx('resume.docx'),
     ])->assertOk()
-        ->assertJsonPath('data.original_filename', 'updated-resume.docx')
+        ->assertJsonPath('data.original_filename', 'resume.docx')
         ->assertJsonPath('data.mime_type', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
 
     Storage::disk('local')->assertMissing($firstResume->storage_path);
     $this->app['auth']->forgetGuards();
     $this->withToken($token)->getJson('/api/applicant/resume')
         ->assertOk()
-        ->assertJsonPath('data.original_filename', 'updated-resume.docx')
+        ->assertJsonPath('data.original_filename', 'resume.docx')
         ->assertJsonMissingPath('data.storage_path');
 
     $this->app['auth']->forgetGuards();
@@ -158,19 +158,19 @@ it('stores Cloudinary resumes as authenticated assets and keeps downloads behind
         ->twice()
         ->withArgs(fn (string $publicId, string $extension, string $filename, string $mimeType): bool => str_starts_with($publicId, 'applicant-resumes/'.$applicant->id.'/')
             && $extension === 'pdf'
-            && $filename === 'cloud-resume.pdf'
+            && $filename === 'resume.pdf'
             && $mimeType === 'application/pdf'
         )
         ->andReturnUsing(fn (): StreamedResponse => response()->streamDownload(
             static fn () => print ('%PDF-1.4'),
-            'cloud-resume.pdf',
+            'resume.pdf',
             ['Content-Type' => 'application/pdf'],
         ));
     $gateway->shouldReceive('delete')->once()->andReturnNull();
     $this->app->instance(CloudinaryMediaGateway::class, $gateway);
 
     $this->withToken($token)->postJson('/api/applicant/resume', [
-        'resume' => phaseFivePdf('cloud-resume.pdf'),
+        'resume' => phaseFivePdf('resume.pdf'),
     ])->assertCreated()
         ->assertJsonMissingPath('data.storage_path')
         ->assertJsonMissingPath('data.cloudinary_asset_id');
@@ -211,7 +211,7 @@ it('stores Cloudinary resumes as authenticated assets and keeps downloads behind
 
     $this->app['auth']->forgetGuards();
     $this->withToken($token)->postJson('/api/applicant/resume', [
-        'resume' => phaseFivePdf('replacement.pdf'),
+        'resume' => phaseFivePdf('resume.pdf'),
     ])->assertOk();
     $this->assertDatabaseHas('resumes', [
         'id' => $firstResume->id,
@@ -244,6 +244,17 @@ it('rejects invalid resume content and files above the configured size limit', f
     $this->app['auth']->forgetGuards();
     $this->withToken($token)->postJson('/api/applicant/resume', [
         'resume' => UploadedFile::fake()->create('large.pdf', 3, 'application/pdf'),
+    ])->assertUnprocessable()
+        ->assertJsonValidationErrors('resume');
+});
+
+it('requires uploaded resumes to use the standard resume filename', function (): void {
+    Storage::fake('local');
+    $applicant = phaseFiveApplicant();
+    $token = phaseFiveToken($this, $applicant);
+
+    $this->withToken($token)->postJson('/api/applicant/resume', [
+        'resume' => phaseFivePdf('my-profile.pdf'),
     ])->assertUnprocessable()
         ->assertJsonValidationErrors('resume');
 });
@@ -284,7 +295,7 @@ it('submits eligible applications once with immutable resume and cover-letter sn
 
     $this->app['auth']->forgetGuards();
     $this->withToken($applicantToken)->postJson('/api/applicant/resume', [
-        'resume' => phaseFivePdf('submitted-resume.pdf'),
+        'resume' => phaseFivePdf('resume.pdf'),
     ])->assertCreated();
     $submittedResume = $applicant->resumes()->where('is_current', true)->firstOrFail();
 
@@ -293,7 +304,7 @@ it('submits eligible applications once with immutable resume and cover-letter sn
         'cover_letter' => 'I am interested in this role.',
     ])->assertCreated()
         ->assertJsonPath('data.status', 'pending')
-        ->assertJsonPath('data.resume.original_filename', 'submitted-resume.pdf')
+        ->assertJsonPath('data.resume.original_filename', 'resume.pdf')
         ->assertJsonPath('data.cover_letter', 'I am interested in this role.');
 
     $application = $applicant->applications()->firstOrFail();
@@ -312,13 +323,13 @@ it('submits eligible applications once with immutable resume and cover-letter sn
 
     $this->app['auth']->forgetGuards();
     $this->withToken($applicantToken)->postJson('/api/applicant/resume', [
-        'resume' => phaseFivePdf('new-current-resume.pdf'),
+        'resume' => phaseFivePdf('resume.pdf'),
     ])->assertOk();
 
     $this->assertDatabaseHas('applications', [
         'id' => $application->id,
         'resume_id' => $submittedResume->id,
-        'resume_original_filename' => 'submitted-resume.pdf',
+        'resume_original_filename' => 'resume.pdf',
     ]);
     Storage::disk('local')->assertExists($submittedResume->storage_path);
 
@@ -662,7 +673,7 @@ it('serves the exact application resume only to its applicant and listing owner'
     $applicantToken = phaseFiveToken($this, $applicant);
 
     $this->withToken($applicantToken)->postJson('/api/applicant/resume', [
-        'resume' => phaseFivePdf('first-submission.pdf'),
+        'resume' => phaseFivePdf('resume.pdf'),
     ])->assertCreated();
     $firstResume = $applicant->resumes()->where('is_current', true)->firstOrFail();
     Storage::disk('local')->put($firstResume->storage_path, '%PDF-1.4 original content');
@@ -673,7 +684,7 @@ it('serves the exact application resume only to its applicant and listing owner'
 
     $this->app['auth']->forgetGuards();
     $this->withToken($applicantToken)->postJson('/api/applicant/resume', [
-        'resume' => phaseFivePdf('new-current.pdf'),
+        'resume' => phaseFivePdf('resume.pdf'),
     ])->assertOk();
     Storage::disk('local')->assertExists($firstResume->storage_path);
 
@@ -681,7 +692,7 @@ it('serves the exact application resume only to its applicant and listing owner'
     $this->withToken($ownerToken)->get("/api/employer/applications/{$application->id}/resume")
         ->assertOk()
         ->assertHeader('content-type', 'application/pdf')
-        ->assertHeader('content-disposition', 'attachment; filename=first-submission.pdf');
+        ->assertHeader('content-disposition', 'attachment; filename=resume.pdf');
 
     $otherToken = phaseFiveToken($this, $otherEmployer);
     $this->withToken($otherToken)->getJson("/api/employer/applications/{$application->id}/resume")

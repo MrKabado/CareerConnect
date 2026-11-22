@@ -13,6 +13,40 @@ type ResumeResponse = {
   data: ApplicantResumeFile | null;
 };
 
+export type ApplicantProfileData = {
+  name: string;
+  email: string;
+  phone: string | null;
+  city: string | null;
+  profile_links: {
+    portfolio?: string | null;
+    github?: string | null;
+    linkedin?: string | null;
+    other?: { label: string; url: string } | null;
+  } | null;
+  profile_photo_url: string | null;
+  looking_for_jobs: boolean;
+  looking_for_ojt: boolean;
+  interests: { id: number; name: string }[];
+  skills: string[];
+  work_setups: string[] | null;
+  preferred_locations: string[] | null;
+  desired_titles: string[] | null;
+  employment_types: string[] | null;
+  experience_level: string | null;
+  salary_min: number | null;
+  salary_max: number | null;
+  ojt_details: {
+    school?: string | null;
+    course?: string | null;
+    year_level?: number | null;
+    required_hours?: number | null;
+    preferred_start_date?: string | null;
+    allowance_preference?: string | null;
+    requires_moa?: boolean | null;
+  } | null;
+};
+
 export const applicantFilesApi = {
   async resume(token: string): Promise<ApplicantResumeFile | null> {
     const response = await apiRequest<ResumeResponse>("/applicant/resume", {}, token);
@@ -102,8 +136,54 @@ export const applicantFilesApi = {
 
   profile(token: string) {
     return apiRequest<{
-      data: { profile_photo_url: string | null };
+      data: ApplicantProfileData;
     }>("/applicant/profile", {}, token);
+  },
+
+  updateProfile(
+    token: string,
+    details: { name?: string; phone?: string | null; city?: string | null },
+  ) {
+    return apiRequest<{ data: ApplicantProfileData }>(
+      "/applicant/profile",
+      { method: "PUT", data: details },
+      token,
+    );
+  },
+
+  updatePreferences(
+    token: string,
+    details: {
+      skills?: string[];
+      work_setups?: string[];
+      preferred_locations?: string[];
+      desired_titles?: string[];
+      employment_types?: string[];
+      salary_min?: number | null;
+      salary_max?: number | null;
+      experience_level?: string | null;
+      ojt_details?: {
+        school?: string | null;
+        course?: string | null;
+        year_level?: number | null;
+        required_hours?: number | null;
+        preferred_start_date?: string | null;
+        allowance_preference?: string | null;
+        requires_moa?: boolean | null;
+      };
+      profile_links?: {
+        portfolio?: string | null;
+        github?: string | null;
+        linkedin?: string | null;
+        other?: { label: string; url: string } | null;
+      } | null;
+    },
+  ) {
+    return apiRequest<{ data: ApplicantProfileData }>(
+      "/applicant/preferences",
+      { method: "PATCH", data: details },
+      token,
+    );
   },
 };
 

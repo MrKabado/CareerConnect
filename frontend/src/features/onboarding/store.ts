@@ -232,9 +232,26 @@ function readSavedDraft(): OnboardingState {
 
 function readOnboardingToken(): string | null {
   try {
-    return sessionStorage.getItem(onboardingTokenStorageKey);
+    const storedToken = localStorage.getItem(onboardingTokenStorageKey);
+    if (storedToken) return storedToken;
+
+    const sessionToken = sessionStorage.getItem(onboardingTokenStorageKey);
+    if (!sessionToken) return null;
+
+    try {
+      localStorage.setItem(onboardingTokenStorageKey, sessionToken);
+      sessionStorage.removeItem(onboardingTokenStorageKey);
+    } catch {
+      return sessionToken;
+    }
+
+    return sessionToken;
   } catch {
-    return null;
+    try {
+      return sessionStorage.getItem(onboardingTokenStorageKey);
+    } catch {
+      return null;
+    }
   }
 }
 
@@ -341,27 +358,48 @@ export const onboardingStore = {
   setOnboardingToken(onboardingToken: string) {
     let submitError: string | null = null;
     try {
-      sessionStorage.setItem(onboardingTokenStorageKey, onboardingToken);
+      localStorage.setItem(onboardingTokenStorageKey, onboardingToken);
+    } catch {
+      try {
+        sessionStorage.setItem(onboardingTokenStorageKey, onboardingToken);
+        submitError =
+          "Your resume upload session is available only in this tab. Keep it open until setup is complete.";
+      } catch {
+        submitError =
+          "Your resume upload session could not be saved. Verify your email, then add your resume from your profile.";
+      }
+      publish({ ...state, onboardingToken, submitError });
+      return;
+    }
+
+    try {
+      sessionStorage.removeItem(onboardingTokenStorageKey);
     } catch {
       submitError =
-        "Your resume upload session could not be saved. Keep this tab open until setup is complete.";
+        "An older tab-only resume upload session could not be cleared from this browser.";
     }
     publish({ ...state, onboardingToken, submitError });
   },
 
   clearOnboardingToken() {
+    let failedToClear = false;
+    try {
+      localStorage.removeItem(onboardingTokenStorageKey);
+    } catch {
+      failedToClear = true;
+    }
     try {
       sessionStorage.removeItem(onboardingTokenStorageKey);
     } catch {
-      publish({
-        ...state,
-        onboardingToken: null,
-        submitError:
-          "The temporary resume upload session could not be cleared from this browser.",
-      });
-      return;
+      failedToClear = true;
     }
-    publish({ ...state, onboardingToken: null });
+    publish({
+      ...state,
+      onboardingToken: null,
+      submitError: failedToClear
+        ? "The temporary resume upload session could not be cleared from this browser."
+        : null,
+    });
   },
 
   isResumeUploaded(file: File | null) {
@@ -448,13 +486,21 @@ export const onboardingStore = {
   },
 
   reset() {
+    let failedToClear = false;
+    try {
+      localStorage.removeItem(onboardingTokenStorageKey);
+    } catch {
+      failedToClear = true;
+    }
     try {
       sessionStorage.removeItem(onboardingTokenStorageKey);
     } catch {
+      failedToClear = true;
+    }
+    if (failedToClear) {
       publish({
         ...initialState,
-        submitError:
-          "The temporary resume upload session could not be cleared from this browser.",
+        submitError: "The temporary resume upload session could not be cleared from this browser.",
       });
       return;
     }

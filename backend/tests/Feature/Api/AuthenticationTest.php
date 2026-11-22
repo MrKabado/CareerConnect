@@ -135,7 +135,7 @@ it('resumes verification for an existing unverified applicant without changing a
     Mail::assertSent(OtpCodeMail::class);
 });
 
-it('returns the same neutral recovery response for an already verified applicant without sending a code', function (): void {
+it('rejects registration for an already verified applicant without sending a code', function (): void {
     Mail::fake();
     $user = User::factory()->create([
         'email' => 'verified-applicant@example.com',
@@ -147,9 +147,8 @@ it('returns the same neutral recovery response for an already verified applicant
         'password' => 'DifferentPassword123!',
         'password_confirmation' => 'DifferentPassword123!',
         'role' => 'applicant',
-    ])->assertOk()
-        ->assertJsonPath('resume_verification', true)
-        ->assertJsonMissingPath('user');
+    ])->assertUnprocessable()
+        ->assertJsonValidationErrors('email');
 
     expect($user->refresh()->name)->not->toBe('Another Name');
     Mail::assertNothingSent();

@@ -17,7 +17,10 @@ export const onboardingApi = {
     token: string,
     file: File,
     onProgress: (progress: number) => void,
+    isAuthenticated: boolean,
   ): Promise<ApplicantResumeFile> {
-    return applicantFilesApi.uploadOnboardingResume(token, file, onProgress);
+    return isAuthenticated
+      ? applicantFilesApi.uploadResume(token, file, onProgress)
+      : applicantFilesApi.uploadOnboardingResume(token, file, onProgress);
   },
 };

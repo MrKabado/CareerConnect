@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import type { FormEvent } from 'react'
+import PasswordInput from './components/ui/PasswordInput'
 import { ApiError, apiRequest, setApiToken } from './lib/api'
 
 type User = {
@@ -419,7 +420,7 @@ function App() {
           </div>
           <div>
             <label htmlFor="login-password">Password</label>
-            <input id="login-password" type="password" autoComplete="current-password" required value={loginPassword} onChange={(event) => setLoginPassword(event.target.value)} />
+            <PasswordInput id="login-password" autoComplete="current-password" required value={loginPassword} onChange={(event) => setLoginPassword(event.target.value)} />
           </div>
           <button className="button button-primary" disabled={isSaving}>{isSaving ? 'Signing in…' : 'Sign in'}</button>
         </form>

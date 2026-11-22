@@ -1,6 +1,6 @@
 import type { FormEventHandler } from "react";
 import { Link } from "react-router";
-import AuthProviderButton from "@/components/ui/auth-provider-button";
+import PasswordInput from "@/components/ui/PasswordInput";
 
 const officePhoto =
   "https://images.unsplash.com/photo-1521737711867-e3b97375f902?auto=format&fit=crop&w=1400&q=85";
@@ -153,14 +153,13 @@ function LoginCredentialsForm({
             Forgot password?
           </Link>
         </div>
-        <input
+        <PasswordInput
           autoComplete="current-password"
           className="h-11 w-full rounded-[10px] border border-[#e1e9e9] bg-white px-3.5 text-[13px] text-[#263538] outline-none transition placeholder:text-[#a0acad] hover:border-[#b8cece] focus:border-[#078b8d] focus:ring-3 focus:ring-[#078b8d]/10 max-[760px]:h-8 max-[760px]:rounded-lg max-[760px]:px-2.5 max-[760px]:text-[10px]"
           id="password"
           name="password"
           placeholder="Enter your password"
           required
-          type="password"
         />
       </div>
 
@@ -168,6 +167,7 @@ function LoginCredentialsForm({
         <label className="inline-flex cursor-pointer items-center gap-2 text-[11px] text-[#758184] max-[760px]:gap-1.5 max-[760px]:text-[9px]">
           <input
             className="size-3.5 accent-[#078b8d] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#078b8d] max-[760px]:size-3"
+            defaultChecked
             name="remember"
             type="checkbox"
           />
@@ -205,59 +205,6 @@ function LoginCredentialsForm({
   );
 }
 
-function GoogleIcon() {
-  return (
-    <svg aria-hidden="true" viewBox="0 0 20 20" className="size-4">
-      <circle cx="10" cy="10" r="9" fill="#4285F4" />
-      <path
-        d="M14.7 10.2c0-.35-.03-.69-.09-1H10v1.9h2.64a2.26 2.26 0 0 1-.98 1.48v1.23h1.59c.93-.86 1.45-2.13 1.45-3.61Z"
-        fill="#fff"
-      />
-      <path
-        d="M10 15c1.33 0 2.44-.44 3.25-1.19l-1.59-1.23c-.44.3-1 .49-1.66.49-1.28 0-2.37-.86-2.76-2.02H5.6v1.27A4.9 4.9 0 0 0 10 15Z"
-        fill="#fff"
-      />
-      <path
-        d="M7.24 11.05a2.94 2.94 0 0 1 0-1.9V7.88H5.6a4.9 4.9 0 0 0 0 4.44l1.64-1.27Z"
-        fill="#fff"
-      />
-      <path
-        d="M10 7.13c.72 0 1.36.25 1.87.74l1.4-1.4A4.68 4.68 0 0 0 10 5a4.9 4.9 0 0 0-4.4 2.88l1.64 1.27c.39-1.16 1.48-2.02 2.76-2.02Z"
-        fill="#fff"
-      />
-    </svg>
-  );
-}
-
-function MicrosoftIcon() {
-  return (
-    <svg aria-hidden="true" viewBox="0 0 20 20" className="size-4">
-      <rect x="1" y="1" width="8" height="8" fill="#f25022" />
-      <rect x="11" y="1" width="8" height="8" fill="#7fba00" />
-      <rect x="1" y="11" width="8" height="8" fill="#00a4ef" />
-      <rect x="11" y="11" width="8" height="8" fill="#ffb900" />
-    </svg>
-  );
-}
-
-function SocialLoginOptions() {
-  return (
-    <>
-      <div className="my-5 flex items-center gap-3 text-[10px] text-[#9aa5a6] max-[760px]:my-2 max-[760px]:gap-2 max-[760px]:text-[8px]">
-        <span className="h-px flex-1 bg-[#e7eded]" />
-        Or continue with
-        <span className="h-px flex-1 bg-[#e7eded]" />
-      </div>
-      <div className="grid grid-cols-2 gap-3">
-        <AuthProviderButton icon={<GoogleIcon />}>Google</AuthProviderButton>
-        <AuthProviderButton icon={<MicrosoftIcon />}>
-          Microsoft
-        </AuthProviderButton>
-      </div>
-    </>
-  );
-}
-
 function LoginFormPanel({
   loginError,
   verificationEmail,
@@ -274,7 +221,6 @@ function LoginFormPanel({
           verificationEmail={verificationEmail}
           onSubmit={onSubmit}
         />
-        <SocialLoginOptions />
         <p className="mt-6 text-center text-[10px] leading-[1.6] text-[#9aa5a6] max-[760px]:mt-3 max-[760px]:text-[8px]">
           Protected by industry-standard encryption. We&apos;ll never share your
           information without permission.

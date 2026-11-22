@@ -21,6 +21,7 @@ type OnboardingStepContentProps = {
   accountCreated: boolean;
   isSubmitting: boolean;
   isResumeUploaded: boolean;
+  isResumeAlreadyUploaded: boolean;
   onChange: <Key extends keyof OnboardingAnswers>(
     field: Key,
     value: OnboardingAnswers[Key],
@@ -45,6 +46,7 @@ export default function OnboardingStepContent({
   accountCreated,
   isSubmitting,
   isResumeUploaded,
+  isResumeAlreadyUploaded,
   onChange,
   onToggleList,
   onEdit,
@@ -119,6 +121,7 @@ export default function OnboardingStepContent({
           errors={errors}
           isSubmitting={isSubmitting}
           isResumeUploaded={isResumeUploaded}
+          isResumeAlreadyUploaded={isResumeAlreadyUploaded}
           onChange={onChange}
           onToggleList={onToggleList}
         />
@@ -127,6 +130,7 @@ export default function OnboardingStepContent({
           answers={answers}
           isSubmitting={isSubmitting}
           isResumeUploaded={isResumeUploaded}
+          isResumeAlreadyUploaded={isResumeAlreadyUploaded}
           onChange={onChange}
         />
       );

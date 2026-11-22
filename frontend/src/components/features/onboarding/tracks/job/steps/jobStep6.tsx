@@ -5,6 +5,7 @@ type JobStep6Props = {
   answers: OnboardingAnswers;
   isSubmitting: boolean;
   isResumeUploaded: boolean;
+  isResumeAlreadyUploaded?: boolean;
   onChange: <Key extends keyof OnboardingAnswers>(
     field: Key,
     value: OnboardingAnswers[Key],
@@ -22,6 +23,7 @@ export default function JobStep6({
   answers,
   isSubmitting,
   isResumeUploaded,
+  isResumeAlreadyUploaded = false,
   onChange,
 }: JobStep6Props) {
   const [fileError, setFileError] = useState<string | null>(null);
@@ -29,6 +31,15 @@ export default function JobStep6({
 
   function setResume(file: File | undefined) {
     if (!file) return;
+    if (isResumeAlreadyUploaded) {
+      setFileError("A resume is already saved to your profile.");
+      return;
+    }
+    const exactFilename = /^resume\.(pdf|docx)$/i.test(file.name);
+    if (!exactFilename) {
+      setFileError("Rename the file to resume.pdf or resume.docx before uploading.");
+      return;
+    }
     const validType =
       allowedTypes.has(file.type) ||
       (!file.type && allowedExtensions.test(file.name));
@@ -66,7 +77,7 @@ export default function JobStep6({
       </div>
       <label
         className={`flex min-h-36 flex-col items-center justify-center rounded-xl border border-dashed px-5 py-5 text-center transition ${
-          isSubmitting ? "cursor-not-allowed opacity-60" : "cursor-pointer"
+          isSubmitting || isResumeAlreadyUploaded ? "cursor-not-allowed opacity-60" : "cursor-pointer"
         } ${
           isDragging
             ? "border-[#078b8d] bg-[#edf9f7]"
@@ -96,7 +107,9 @@ export default function JobStep6({
           </svg>
         </span>
         <span className="text-sm font-semibold text-[#354346]">
-          {answers.resumeFile?.name ?? "Choose a file or drag it here"}
+          {isResumeAlreadyUploaded
+            ? "Resume already saved"
+            : answers.resumeFile?.name ?? "Choose a file or drag it here"}
         </span>
         <span className="mt-1 text-xs text-[#8a9899]">
           PDF or DOCX up to 5 MB
@@ -105,7 +118,7 @@ export default function JobStep6({
           accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
           className="sr-only"
           id="job-resume-upload"
-          disabled={isSubmitting}
+          disabled={isSubmitting || isResumeAlreadyUploaded}
           onChange={handleFileChange}
           type="file"
         />

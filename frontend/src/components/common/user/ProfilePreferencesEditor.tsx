@@ -21,18 +21,29 @@ export type ProfilePreferencesDraft = Pick<
   | "allowancePreference"
   | "workSetup"
   | "preferredLocations"
->;
+> & {
+  name: string;
+  phone: string;
+  city: string;
+  portfolioLink: string;
+  githubLink: string;
+  linkedinLink: string;
+  otherLinkLabel: string;
+  otherLink: string;
+};
 
 function TextField({
   label,
   value,
   onChange,
   type = "text",
+  placeholder,
 }: {
   label: string;
   value: string;
   onChange: (value: string) => void;
   type?: "text" | "number" | "date";
+  placeholder?: string;
 }) {
   return (
     <label className="block min-w-0">
@@ -42,6 +53,7 @@ function TextField({
       <input
         className="h-10 w-full rounded-lg border border-[#dfe9e8] bg-white px-3 text-[11px] text-[#354749] outline-none focus:border-[#078b8d] focus:ring-3 focus:ring-[#078b8d]/10"
         onChange={(event) => onChange(event.target.value)}
+        placeholder={placeholder}
         type={type}
         value={value}
       />
@@ -270,6 +282,56 @@ export default function ProfilePreferencesEditor({
 
         <form className="flex min-h-0 flex-1 flex-col" onSubmit={submit}>
           <div className="flex-1 space-y-3 overflow-y-auto px-5 py-4 max-[600px]:px-3.5">
+            <ProfilePanel icon="user" title="Personal information">
+              <div className="grid grid-cols-2 gap-3 max-[460px]:grid-cols-1">
+                <TextField
+                  label="Full name"
+                  onChange={(name) => setDraft((current) => ({ ...current, name }))}
+                  value={draft.name}
+                />
+                <TextField
+                  label="Mobile number"
+                  onChange={(phone) => setDraft((current) => ({ ...current, phone }))}
+                  value={draft.phone}
+                />
+                <TextField
+                  label="City"
+                  onChange={(city) => setDraft((current) => ({ ...current, city }))}
+                  value={draft.city}
+                />
+              </div>
+            </ProfilePanel>
+            <ProfilePanel icon="briefcase" title="Portfolio & professional links (optional)">
+              <div className="grid grid-cols-2 gap-3 max-[460px]:grid-cols-1">
+                <TextField
+                  label="Portfolio or personal website"
+                  onChange={(portfolioLink) => setDraft((current) => ({ ...current, portfolioLink }))}
+                  value={draft.portfolioLink}
+                />
+                <TextField
+                  label="GitHub"
+                  onChange={(githubLink) => setDraft((current) => ({ ...current, githubLink }))}
+                  value={draft.githubLink}
+                />
+                <TextField
+                  label="LinkedIn"
+                  onChange={(linkedinLink) => setDraft((current) => ({ ...current, linkedinLink }))}
+                  value={draft.linkedinLink}
+                />
+                <TextField
+                  label="Other link label"
+                  onChange={(otherLinkLabel) => setDraft((current) => ({ ...current, otherLinkLabel }))}
+                  value={draft.otherLinkLabel}
+                  placeholder="e.g. Behance or Medium"
+                />
+                <TextField
+                  label="Other link URL"
+                  onChange={(otherLink) => setDraft((current) => ({ ...current, otherLink }))}
+                  value={draft.otherLink}
+                  placeholder="https://..."
+                />
+              </div>
+            </ProfilePanel>
             {isOjtSeeker ? (
               <>
                 <ProfilePanel icon="education" title="School & OJT requirements">
@@ -365,6 +427,25 @@ export default function ProfilePreferencesEditor({
               </>
             ) : (
               <>
+                <ProfilePanel icon="education" title="Education">
+                  <div className="grid grid-cols-2 gap-3 max-[460px]:grid-cols-1">
+                    <TextField
+                      label="School"
+                      onChange={(school) => setDraft((current) => ({ ...current, school }))}
+                      value={draft.school}
+                    />
+                    <TextField
+                      label="Course"
+                      onChange={(course) => setDraft((current) => ({ ...current, course }))}
+                      value={draft.course}
+                    />
+                    <TextField
+                      label="Year level or graduation year"
+                      onChange={(yearLevel) => setDraft((current) => ({ ...current, yearLevel }))}
+                      value={draft.yearLevel}
+                    />
+                  </div>
+                </ProfilePanel>
                 <ProfilePanel icon="settings" title="Work interests">
                   <div className="space-y-3">
                     <ListField

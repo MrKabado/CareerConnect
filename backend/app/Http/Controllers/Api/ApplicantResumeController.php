@@ -36,6 +36,12 @@ class ApplicantResumeController extends Controller
 
         /** @var UploadedFile $file */
         $file = $request->file('resume');
+        $requestedFilename = mb_strtolower(basename(str_replace('\\', '/', $file->getClientOriginalName())));
+        if (! in_array($requestedFilename, ['resume.pdf', 'resume.docx'], true)) {
+            throw ValidationException::withMessages([
+                'resume' => ['Rename the resume file to resume.pdf or resume.docx before uploading.'],
+            ]);
+        }
         [$extension, $mimeType] = $this->validatedFileType($file);
         $user = $request->user();
         $stored = $this->resumeStorage->store($file, $user->id, $extension);

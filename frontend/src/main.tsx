@@ -9,6 +9,7 @@ import GuestLayout from "@/layouts/guestLayout";
 import OnboardingLayout from "@/layouts/onboardingLayout";
 import { AuthProvider } from "@/features/auth/AuthProvider";
 import RequireAuth from "@/features/auth/RequireAuth";
+import RequireGuest from "@/features/auth/RequireGuest";
 import RequireRole from "@/features/auth/RequireRole";
 import RequireEmployerStatus from "@/features/employer-registration/RequireEmployerStatus";
 import EmployerRoutePlaceholder from "@/features/employer-registration/components/EmployerRoutePlaceholder";
@@ -63,15 +64,17 @@ createRoot(document.getElementById("root")!).render(
           <Route path="/profile" element={<RequireAuth><RequireRole role="applicant"><ProfilePage /></RequireRole></RequireAuth>} />
           <Route path="/company/:companyName" element={<CompanyProfilePage />} />
           <Route path="/apply/:jobId" element={<RequireAuth><RequireRole role="applicant"><JobApplicationPage /></RequireRole></RequireAuth>} />
-          <Route path="/login" element={<LoginPage />} />
+          <Route path="/login" element={<RequireGuest><LoginPage /></RequireGuest>} />
           <Route path="/forgot-password" element={<ForgotPasswordPage />} />
           <Route path="/verify-email" element={<VerifyEmailPage />} />
           <Route
             path="/employer/register"
             element={
-              <RequireEmployerStatus access="register">
-                <EmployerRegisterPage />
-              </RequireEmployerStatus>
+              <RequireGuest>
+                <RequireEmployerStatus access="register">
+                  <EmployerRegisterPage />
+                </RequireEmployerStatus>
+              </RequireGuest>
             }
           />
           <Route
@@ -194,7 +197,7 @@ createRoot(document.getElementById("root")!).render(
             }
           />
           <Route element={<OnboardingLayout />}>
-            <Route path="/onboarding" element={<OnboardingPage />} />
+            <Route path="/onboarding" element={<RequireGuest><OnboardingPage /></RequireGuest>} />
           </Route>
           <Route
             path="/admin"

@@ -1,4 +1,4 @@
-import { useCallback, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 import {
   getOnboardingSteps,
   getStepIndex,
@@ -7,8 +7,42 @@ import {
 import { onboardingApi } from "@/features/onboarding/api";
 import { validateOnboardingStep } from "@/features/onboarding/schemas";
 import { onboardingStore } from "@/features/onboarding/store";
+import { applicantFilesApi } from "@/features/user-profile/backendApi";
 
-export function useOnboarding(onResumeVerification: (email: string) => void) {
+export function useOnboarding(
+  onResumeVerification: (email: string) => void,
+  authenticatedApplicantToken: string | null = null,
+) {
+  const [isResumeAlreadyUploaded, setIsResumeAlreadyUploaded] =
+    useState(false);
+  const [existingResumeName, setExistingResumeName] = useState<string | null>(
+    null,
+  );
+
+  useEffect(() => {
+    if (!authenticatedApplicantToken) return;
+    let active = true;
+    applicantFilesApi
+      .resume(authenticatedApplicantToken)
+      .then((resume) => {
+        if (!active) return;
+        setIsResumeAlreadyUploaded(resume !== null);
+        setExistingResumeName(resume?.original_filename ?? null);
+        if (resume) {
+          onboardingStore.markResumeUploaded(resume.original_filename);
+        }
+      })
+      .catch(() => {
+        if (active) {
+          setIsResumeAlreadyUploaded(false);
+          setExistingResumeName(null);
+        }
+      });
+    return () => {
+      active = false;
+    };
+  }, [authenticatedApplicantToken]);
+
   const state = useSyncExternalStore(
     onboardingStore.subscribe,
     onboardingStore.getSnapshot,
@@ -58,11 +92,15 @@ export function useOnboarding(onResumeVerification: (email: string) => void) {
     if (
       currentState.currentStep === "resume" &&
       currentState.answers.resumeFile &&
-      !onboardingStore.isResumeUploaded(currentState.answers.resumeFile)
+      !onboardingStore.isResumeUploaded(currentState.answers.resumeFile) &&
+      !isResumeAlreadyUploaded
     ) {
-      if (!currentState.onboardingToken) {
+      const uploadToken =
+        authenticatedApplicantToken ?? currentState.onboardingToken;
+      const isAuthenticatedUpload = authenticatedApplicantToken !== null;
+      if (!uploadToken) {
         onboardingStore.setSubmitError(
-          "Your secure resume upload session is unavailable. Verify your email first, then add your resume from your profile.",
+          "This saved draft has no upload session. Sign in to upload your resume, or skip this optional step and add it from your profile later.",
         );
         return;
       }
@@ -71,9 +109,10 @@ export function useOnboarding(onResumeVerification: (email: string) => void) {
       onboardingStore.setUploadProgress(0);
       try {
         const uploaded = await onboardingApi.uploadResume(
-          currentState.onboardingToken,
+          uploadToken,
           currentState.answers.resumeFile,
           onboardingStore.setUploadProgress,
+          isAuthenticatedUpload,
         );
         onboardingStore.markResumeUploaded(uploaded.original_filename);
       } catch (error) {
@@ -123,7 +162,12 @@ export function useOnboarding(onResumeVerification: (email: string) => void) {
     if (nextStep) {
       onboardingStore.setStep(nextStep.id);
     }
-  }, [finish, onResumeVerification]);
+  }, [
+    authenticatedApplicantToken,
+    finish,
+    isResumeAlreadyUploaded,
+    onResumeVerification,
+  ]);
 
   const back = useCallback(() => {
     if (currentIndex > 0) {
@@ -155,6 +199,8 @@ export function useOnboarding(onResumeVerification: (email: string) => void) {
     totalSteps: onboardingTotalSteps,
     steps,
     isResumeUploaded: onboardingStore.isResumeUploaded(state.answers.resumeFile),
+    isResumeAlreadyUploaded,
+    existingResumeName,
     next,
     back,
     skip,

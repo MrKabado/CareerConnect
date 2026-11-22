@@ -266,6 +266,15 @@ class ApplicantProfileController extends Controller
                 'sometimes',
                 'array:school,course,year_level,required_hours,preferred_start_date,allowance_preference,requires_moa',
             ]],
+            [
+                'profile_links' => ['sometimes', 'nullable', 'array'],
+                'profile_links.portfolio' => ['sometimes', 'nullable', 'url', 'max:2048'],
+                'profile_links.github' => ['sometimes', 'nullable', 'url', 'max:2048'],
+                'profile_links.linkedin' => ['sometimes', 'nullable', 'url', 'max:2048'],
+                'profile_links.other' => ['sometimes', 'nullable', 'array'],
+                'profile_links.other.label' => ['required_with:profile_links.other', 'string', 'max:100'],
+                'profile_links.other.url' => ['required_with:profile_links.other', 'url', 'max:2048'],
+            ],
             $this->nestedOjtDetailRules(),
         ));
         $profile = $this->profileFor($request);
@@ -335,6 +344,7 @@ class ApplicantProfileController extends Controller
             'email' => $profile->user->email,
             'phone' => $profile->phone,
             'city' => $profile->city,
+            'profile_links' => $profile->profile_links ?? [],
             'profile_photo_path' => $profile->profile_photo_path,
             'profile_photo_url' => $profile->profile_photo_path
                 ? $this->mediaStorage->publicImageUrl($profile->profile_photo_disk, $profile->profile_photo_path)

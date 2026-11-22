@@ -1,5 +1,6 @@
 import type { OnboardingAnswers } from "@/features/onboarding/store";
 import type { OnboardingErrors } from "@/features/onboarding/schemas";
+import PasswordInput from "@/components/ui/PasswordInput";
 
 type OjtStep2Props = {
   answers: OnboardingAnswers;
@@ -36,9 +37,9 @@ export default function OjtStep2({
           className={inputClassName}
           disabled={disabled}
           id="onboarding-name"
-          maxLength={255}
           onChange={(event) => onChange("name", event.target.value)}
           placeholder="e.g. Jamie Dela Cruz"
+          maxLength={255}
           value={answers.name}
         />
         {errors.name && (
@@ -68,7 +69,6 @@ export default function OjtStep2({
           id="onboarding-email"
           onChange={(event) => onChange("email", event.target.value)}
           placeholder="you@example.com"
-          type="email"
           value={answers.email}
         />
         {errors.email && (
@@ -93,7 +93,7 @@ export default function OjtStep2({
             </label>
             <span className="text-[9px] text-[#8a9899] max-[600px]:text-[8px]">At least 8 characters</span>
           </div>
-          <input
+          <PasswordInput
             aria-invalid={Boolean(errors.password)}
             aria-describedby={
               errors.password ? "onboarding-password-error" : undefined
@@ -104,7 +104,6 @@ export default function OjtStep2({
             id="onboarding-password"
             onChange={(event) => onChange("password", event.target.value)}
             placeholder="Create a password"
-            type="password"
             value={answers.password}
           />
           {errors.password && (
@@ -125,7 +124,7 @@ export default function OjtStep2({
           >
             Confirm password <span className="text-[#d34c4c]">*</span>
           </label>
-          <input
+          <PasswordInput
             aria-invalid={Boolean(errors.passwordConfirmation)}
             aria-describedby={
               errors.passwordConfirmation
@@ -140,7 +139,6 @@ export default function OjtStep2({
               onChange("passwordConfirmation", event.target.value)
             }
             placeholder="Enter it again"
-            type="password"
             value={answers.passwordConfirmation}
           />
           {errors.passwordConfirmation && (

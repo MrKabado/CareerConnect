@@ -13,6 +13,7 @@ export default function OjtStep6({
   answers,
   isSubmitting = false,
   isResumeUploaded = false,
+  isResumeAlreadyUploaded = false,
   onChange,
 }: OjtStepProps) {
   const [fileError, setFileError] = useState<string | null>(null);
@@ -20,6 +21,16 @@ export default function OjtStep6({
   function selectResume(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
     if (!file) return;
+    if (isResumeAlreadyUploaded) {
+      setFileError("A resume is already saved to your profile.");
+      event.target.value = "";
+      return;
+    }
+    if (!/^resume\.(pdf|docx)$/i.test(file.name)) {
+      setFileError("Rename the file to resume.pdf or resume.docx before uploading.");
+      event.target.value = "";
+      return;
+    }
 
     const validType =
       allowedResumeTypes.has(file.type) ||
@@ -45,7 +56,7 @@ export default function OjtStep6({
     <div>
       <label
         className={`flex min-h-52 flex-col items-center justify-center rounded-2xl border-2 border-dashed border-[#cbdede] bg-[#fbfdfd] px-5 text-center transition hover:border-[#078b8d] hover:bg-[#f5fbfa] ${
-          isSubmitting ? "cursor-not-allowed opacity-60" : "cursor-pointer"
+          isSubmitting || isResumeAlreadyUploaded ? "cursor-not-allowed opacity-60" : "cursor-pointer"
         }`}
         htmlFor="ojt-resume-upload"
       >
@@ -61,7 +72,9 @@ export default function OjtStep6({
           </svg>
         </span>
         <span className="text-sm font-semibold text-[#354346]">
-          {answers.resumeFile?.name ?? "Choose a resume to upload"}
+          {isResumeAlreadyUploaded
+            ? "Resume already saved"
+            : answers.resumeFile?.name ?? "Choose a resume to upload"}
         </span>
         <span className="mt-2 text-xs text-[#718082]">
           PDF or DOCX · 5 MB max
@@ -70,7 +83,7 @@ export default function OjtStep6({
           accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
           className="sr-only"
           id="ojt-resume-upload"
-          disabled={isSubmitting}
+          disabled={isSubmitting || isResumeAlreadyUploaded}
           onChange={selectResume}
           type="file"
         />

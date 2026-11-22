@@ -1,6 +1,7 @@
 import type { FormEvent } from "react";
 import OnboardingButton from "@/components/features/onboarding/shared/onboardingbutton";
 import { FORGOT_PASSWORD_FORM_CLASS_NAME, FORGOT_PASSWORD_INPUT_CLASS_NAME } from "@/features/auth/forgot-password/constants";
+import PasswordInput from "@/components/ui/PasswordInput";
 
 export function ResetPasswordForm({
   isSubmitting,
@@ -39,14 +40,13 @@ export function ResetPasswordForm({
         >
           New password
         </label>
-        <input
+        <PasswordInput
           autoComplete="new-password"
           className={FORGOT_PASSWORD_INPUT_CLASS_NAME}
           id="reset-password"
           minLength={8}
           name="password"
           required
-          type="password"
         />
       </div>
 
@@ -57,14 +57,13 @@ export function ResetPasswordForm({
         >
           Confirm new password
         </label>
-        <input
+        <PasswordInput
           autoComplete="new-password"
           className={FORGOT_PASSWORD_INPUT_CLASS_NAME}
           id="reset-password-confirmation"
           minLength={8}
           name="password_confirmation"
           required
-          type="password"
         />
       </div>
 

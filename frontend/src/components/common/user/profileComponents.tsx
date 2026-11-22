@@ -145,11 +145,9 @@ export function ProfileTags({ tags }: { tags: string[] }) {
 
 export function ProfileStrengthCard({
   percentage,
-  onComplete,
   description,
 }: {
   percentage: number;
-  onComplete: () => void;
   description?: string;
 }) {
   return (
@@ -175,13 +173,6 @@ export function ProfileStrengthCard({
         {description ??
           "Add a resume and complete your preferences to help employers see more of your skills."}
       </p>
-      <button
-        className="mt-2 inline-flex items-center gap-1 rounded text-[9px] font-bold text-[#078b8d] hover:underline focus-visible:outline-[3px] focus-visible:outline-[#67c9c1] focus-visible:outline-offset-2"
-        onClick={onComplete}
-        type="button"
-      >
-        Complete profile <span aria-hidden="true">›</span>
-      </button>
     </ProfilePanel>
   );
 }
