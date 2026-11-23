@@ -6,6 +6,7 @@ use App\Models\Category;
 use App\Models\Company;
 use App\Models\CompanyVerification;
 use App\Models\IdentityVerification;
+use App\Models\Interview;
 use App\Models\JobListing;
 use App\Models\Resume;
 use App\Models\User;
@@ -105,6 +106,10 @@ it('returns role-scoped dashboard totals from persisted records', function (): v
         ->assertJsonPath('data.active_job_listings', 1)
         ->assertJsonPath('data.total_applications', 3)
         ->assertJsonPath('data.pending_applications', 1)
+        ->assertJsonPath('data.shortlisted_applications', 0)
+        ->assertJsonPath('data.application_status_counts.pending', 1)
+        ->assertJsonPath('data.application_status_counts.hired', 1)
+        ->assertJsonPath('data.application_status_counts.rejected', 1)
         ->assertJsonPath('data.closed_listings', 1)
         ->assertJsonStructure(['data' => ['recommendations']]);
 
@@ -117,6 +122,144 @@ it('returns role-scoped dashboard totals from persisted records', function (): v
         ->assertJsonPath('data.accepted_applications', 1)
         ->assertJsonPath('data.rejected_applications', 1)
         ->assertJsonStructure(['data' => ['recommendations']]);
+});
+
+it('returns recent applications and upcoming interviews only for the authenticated employer', function (): void {
+    $employer = User::factory()->create(['role' => 'employer']);
+    $company = Company::create([
+        'user_id' => $employer->id,
+        'name' => 'Dashboard Employer',
+        'is_verified' => true,
+    ]);
+    $otherEmployer = User::factory()->create(['role' => 'employer']);
+    $otherCompany = Company::create([
+        'user_id' => $otherEmployer->id,
+        'name' => 'Other Employer',
+        'is_verified' => true,
+    ]);
+    $category = Category::create(['name' => 'Dashboard Engineering']);
+    $listing = coreBusinessListing($company, $category);
+    $otherListing = coreBusinessListing($otherCompany, $category);
+
+    $olderApplicant = User::factory()->create(['role' => 'applicant']);
+    $olderApplication = coreBusinessApplication(
+        $olderApplicant,
+        $listing,
+        coreBusinessResume($olderApplicant),
+        'pending',
+    );
+    $olderApplication->update(['applied_at' => now()->subDays(3)]);
+
+    $newerApplicant = User::factory()->create(['role' => 'applicant']);
+    $newerApplication = coreBusinessApplication(
+        $newerApplicant,
+        $listing,
+        coreBusinessResume($newerApplicant),
+        'reviewing',
+    );
+    $newerApplication->update(['applied_at' => now()->subDay()]);
+
+    $interviewApplicant = User::factory()->create(['role' => 'applicant']);
+    $interviewApplication = coreBusinessApplication(
+        $interviewApplicant,
+        $listing,
+        coreBusinessResume($interviewApplicant),
+        'interview',
+    );
+    $interviewApplication->update(['applied_at' => now()]);
+
+    $hiredApplicant = User::factory()->create(['role' => 'applicant']);
+    $hiredApplication = coreBusinessApplication(
+        $hiredApplicant,
+        $listing,
+        coreBusinessResume($hiredApplicant),
+        'hired',
+    );
+    $hiredApplication->update(['applied_at' => now()->subDays(2)]);
+
+    $laterInterviewApplicant = User::factory()->create(['role' => 'applicant']);
+    $laterInterviewApplication = coreBusinessApplication(
+        $laterInterviewApplicant,
+        $listing,
+        coreBusinessResume($laterInterviewApplicant),
+        'interview',
+    );
+    $laterInterviewApplication->update(['applied_at' => now()->subHours(12)]);
+
+    $otherApplicant = User::factory()->create(['role' => 'applicant']);
+    $otherApplication = coreBusinessApplication(
+        $otherApplicant,
+        $otherListing,
+        coreBusinessResume($otherApplicant),
+        'pending',
+    );
+
+    $nearestInterview = Interview::query()->forceCreate([
+        'application_id' => $interviewApplication->id,
+        'applicant_id' => $interviewApplicant->id,
+        'employer_id' => $employer->id,
+        'scheduled_at' => now()->addDays(2),
+        'timezone' => 'UTC',
+        'mode' => 'online',
+        'status' => 'scheduled',
+    ]);
+    $laterInterview = Interview::query()->forceCreate([
+        'application_id' => $laterInterviewApplication->id,
+        'applicant_id' => $laterInterviewApplicant->id,
+        'employer_id' => $employer->id,
+        'scheduled_at' => now()->addDays(5),
+        'timezone' => 'UTC',
+        'mode' => 'phone',
+        'status' => 'scheduled',
+    ]);
+    $hiredInterview = Interview::query()->forceCreate([
+        'application_id' => $hiredApplication->id,
+        'applicant_id' => $hiredApplicant->id,
+        'employer_id' => $employer->id,
+        'scheduled_at' => now()->addDay(),
+        'timezone' => 'UTC',
+        'mode' => 'online',
+        'status' => 'scheduled',
+    ]);
+    Interview::query()->forceCreate([
+        'application_id' => $olderApplication->id,
+        'applicant_id' => $olderApplicant->id,
+        'employer_id' => $employer->id,
+        'scheduled_at' => now()->subDay(),
+        'timezone' => 'UTC',
+        'mode' => 'onsite',
+        'status' => 'scheduled',
+    ]);
+    Interview::query()->forceCreate([
+        'application_id' => $otherApplication->id,
+        'applicant_id' => $otherApplicant->id,
+        'employer_id' => $otherEmployer->id,
+        'scheduled_at' => now()->addDay(),
+        'timezone' => 'UTC',
+        'mode' => 'online',
+        'status' => 'scheduled',
+    ]);
+
+    $response = $this->withToken($employer->createToken('test')->plainTextToken)
+        ->getJson('/api/employer/dashboard')
+        ->assertOk();
+
+    $response
+        ->assertJsonPath('data.application_status_counts.pending', 1)
+        ->assertJsonPath('data.application_status_counts.reviewing', 1)
+        ->assertJsonPath('data.application_status_counts.interview', 2)
+        ->assertJsonPath('data.application_status_counts.hired', 1)
+        ->assertJsonPath('data.total_applications', 5)
+        ->assertJsonPath('data.upcoming_interviews', 2)
+        ->assertJsonPath('data.recent_applications.0.id', $interviewApplication->id)
+        ->assertJsonPath('data.recent_applications.1.id', $laterInterviewApplication->id)
+        ->assertJsonPath('data.upcoming_interview_records.0.id', $nearestInterview->id)
+        ->assertJsonPath('data.upcoming_interview_records.1.id', $laterInterview->id);
+
+    $this->assertNotContains(
+        $hiredInterview->id,
+        array_column($response->json('data.upcoming_interview_records'), 'id'),
+    );
 });
 
 it('paginates admin activity newest first with timestamp ties ordered by id', function (): void {

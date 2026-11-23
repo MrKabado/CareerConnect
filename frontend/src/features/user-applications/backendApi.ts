@@ -17,7 +17,7 @@ export type ApplicantApplicationRecord = {
   employment_ended_at: string | null;
   interview: {
     id: number;
-    status: "scheduled" | "completed" | "cancelled";
+    status: "invited" | "scheduled" | "completed" | "cancelled";
     scheduled_at: string | null;
     end_at: string | null;
     timezone: string;
@@ -59,7 +59,35 @@ export type ApplicantListingStatus = {
   reapplication_allowed: boolean;
 };
 
+export type ApplicantInterviewAvailability = {
+  interview_id: number;
+  timezone: string;
+  mode: "onsite" | "online" | "phone";
+  location: string | null;
+  meeting_url: string | null;
+  meeting_instructions: string | null;
+  listing_title: string | null;
+  company_name: string | null;
+  dates: Array<{
+    date: string;
+    slots: Array<{ start_time: string; end_time: string }>;
+  }>;
+};
+
 export const applicantApplicationsApi = {
+  eligibility(token: string) {
+    return apiRequest<{
+      can_apply: boolean;
+      reason: string | null;
+      identity_verification_status: "unverified" | "pending" | "verified" | "rejected";
+      identity_verification_rejection_reason: string | null;
+    }>(
+      "/applicant/application-eligibility",
+      {},
+      token,
+    );
+  },
+
   list(token: string, page = 1) {
     return apiRequest<ApplicantApplicationsPage>(
       "/applicant/applications",
@@ -85,6 +113,30 @@ export const applicantApplicationsApi = {
           ? { cover_letter_document_id: coverLetterDocumentId }
           : {},
       },
+      token,
+    );
+  },
+
+  interviewAvailability(token: string, interviewId: number) {
+    return apiRequest<{ data: ApplicantInterviewAvailability }>(
+      `/applicant/interviews/${interviewId}/availability`,
+      {},
+      token,
+    );
+  },
+
+  bookInterview(token: string, interviewId: number, date: string, startTime: string) {
+    return apiRequest<{ message: string; data: { id: number; status: string } }>(
+      `/applicant/interviews/${interviewId}/schedule`,
+      { method: "POST", data: { date, start_time: startTime } },
+      token,
+    );
+  },
+
+  cancelInterview(token: string, interviewId: number, reason?: string) {
+    return apiRequest<{ message: string }>(
+      `/applicant/interviews/${interviewId}/cancel`,
+      { method: "POST", data: reason ? { reason } : {} },
       token,
     );
   },

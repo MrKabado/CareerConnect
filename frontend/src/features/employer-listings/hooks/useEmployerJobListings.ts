@@ -3,9 +3,10 @@ import { useAuth } from "@/features/auth/useAuth";
 import {
   formatListingPay,
   listingText,
-  type PublicJobListing,
+  type EmployerJobListing,
 } from "@/features/jobs/backendApi";
 import { employerVerificationFilesApi } from "@/features/employer-verification/backendApi";
+import { toNameCase } from "@/features/auth/nameFormatting";
 import {
   employerListingsApi,
   type CreateEmployerListingPayload,
@@ -26,8 +27,8 @@ type NewListingFormState = {
   requiredHours: string;
   summary: string;
   responsibilities: string;
-  requirements: string;
-  requiredSkills: string;
+  requirements: string[];
+  requiredSkills: string[];
   employmentType: string;
   experienceRequirement: "with_experience" | "without_experience";
   minimumExperienceYears: string;
@@ -52,8 +53,8 @@ function emptyForm(location = ""): NewListingFormState {
     requiredHours: "480",
     summary: "",
     responsibilities: "",
-    requirements: "",
-    requiredSkills: "",
+    requirements: [],
+    requiredSkills: [],
     employmentType: "full_time",
     experienceRequirement: "without_experience",
     minimumExperienceYears: "1",
@@ -68,7 +69,52 @@ function emptyForm(location = ""): NewListingFormState {
   };
 }
 
-function toListing(listing: PublicJobListing): EmployerListing {
+function getSalaryRangeError(form: NewListingFormState): string | null {
+  if (form.salaryMin.length > 9 || form.salaryMax.length > 9) {
+    return "Salary values may contain no more than 9 digits.";
+  }
+  if (!form.salaryMin || !form.salaryMax) return null;
+
+  const minimum = Number(form.salaryMin);
+  const maximum = Number(form.salaryMax);
+  if (!Number.isInteger(minimum) || !Number.isInteger(maximum)
+    || minimum < 0 || maximum < 0 || minimum > 999999999 || maximum > 999999999) {
+    return "Salary values must contain no more than 9 digits.";
+  }
+  if (minimum > maximum) {
+    return "Minimum salary cannot be higher than maximum salary.";
+  }
+  return null;
+}
+
+function getListingNumericError(form: NewListingFormState, type: "job" | "ojt"): string | null {
+  const fields = type === "job"
+    ? [
+      { value: form.salaryMin, label: "Minimum salary", min: 0, max: 999999999 },
+      { value: form.salaryMax, label: "Maximum salary", min: 0, max: 999999999 },
+      { value: form.applicantLimit, label: "Applicant limit", min: 1, max: 4294967295 },
+      ...(form.experienceRequirement === "with_experience"
+        ? [{ value: form.minimumExperienceYears, label: "Minimum experience", min: 1, max: 50 }]
+        : []),
+    ]
+    : [
+      { value: form.availableSlots, label: "Available slots", min: 1, max: 65535 },
+      { value: form.requiredHours, label: "Required hours", min: 1, max: 65535 },
+      { value: form.applicantLimit, label: "Applicant limit", min: 1, max: 4294967295 },
+      { value: form.allowanceAmount, label: "Monthly allowance", min: 0, max: 4294967295 },
+    ];
+
+  for (const field of fields) {
+    if (!field.value) continue;
+    const value = Number(field.value);
+    if (!Number.isInteger(value) || value < field.min || value > field.max) {
+      return `${field.label} must be a whole number from ${field.min.toLocaleString()} to ${field.max.toLocaleString()}.`;
+    }
+  }
+  return null;
+}
+
+function toListing(listing: EmployerJobListing): EmployerListing {
   const companySlug = (listing.company?.name ?? "")
     .toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
   const date = listing.updated_at ? new Date(listing.updated_at) : null;
@@ -76,7 +122,7 @@ function toListing(listing: PublicJobListing): EmployerListing {
     id: String(listing.id),
     publicId: String(listing.id),
     companySlug,
-    title: listing.title,
+    title: listing.title ?? "",
     applicants: listing.applicant_count ?? 0,
     applicantLimit: listing.applicant_limit ?? listing.ojt?.slots ?? undefined,
     approvalStatus: listing.approval_status ?? "not_required",
@@ -84,7 +130,7 @@ function toListing(listing: PublicJobListing): EmployerListing {
     type: listing.listing_type === "ojt" ? "OJT" : "Job",
     category: listing.category?.name ?? "Uncategorized",
     categoryId: listing.category?.id,
-    location: listing.location,
+    location: listing.location ?? "",
     department: listing.category?.name ?? "",
     status: listing.status === "open"
       ? "active"
@@ -100,8 +146,9 @@ function toListing(listing: PublicJobListing): EmployerListing {
     updated: date && !Number.isNaN(date.getTime())
       ? `Updated ${new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric" }).format(date)}`
       : "Date not available",
-    description: listing.description,
+    description: listing.description ?? "",
     responsibilities: listingText(listing.responsibilities),
+    requirements: listingText(listing.requirements),
     salary: formatListingPay(listing),
     skills: listing.required_skills?.length
       ? listing.required_skills
@@ -112,20 +159,28 @@ function toListing(listing: PublicJobListing): EmployerListing {
         ? `At least ${listing.minimum_experience_years ?? 1} years`
         : "Without Experience",
     requiredSkills: listing.required_skills ?? [],
-    workSetup: listing.work_setup,
+    workSetup: listing.work_setup ?? undefined,
     salaryMin: listing.salary_min,
     salaryMax: listing.salary_max,
     employmentType: listing.employment_type ?? undefined,
     minimumExperienceYears: listing.minimum_experience_years,
+    ojtDurationHours: listing.ojt?.duration_hours,
+    ojtAllowanceType: listing.ojt?.allowance_type,
+    ojtAllowanceAmount: listing.ojt?.allowance_amount,
+    ojtSlots: listing.ojt?.slots,
+    acceptedCourses: listing.ojt?.accepted_courses ?? [],
+    moaAccepted: listing.ojt?.moa_accepted,
     hiring: {
       type: listing.listing_type === "ojt"
         ? "OJT"
         : listing.employment_type?.replace("_", " ") ?? "Not specified",
       schedule: listing.work_setup === "onsite"
         ? "On-site"
-        : listing.work_setup.charAt(0).toUpperCase() + listing.work_setup.slice(1),
+        : listing.work_setup
+          ? listing.work_setup.charAt(0).toUpperCase() + listing.work_setup.slice(1)
+          : "Not specified",
       schoolPartnerships: listing.ojt?.accepted_courses?.join(", ") || "Not specified",
-      workspace: listing.location,
+      workspace: listing.location ?? "",
     },
   };
 }
@@ -135,50 +190,83 @@ function normalizeWorkSetup(value: string): "onsite" | "hybrid" | "remote" {
   throw new Error("Select a valid work setup.");
 }
 
+function capitalizeFirstLetter(value: string): string {
+  return value.replace(/^(\s*)(\p{L})/u, (_match, whitespace: string, letter: string) =>
+    `${whitespace}${letter.toLocaleUpperCase()}`,
+  );
+}
+
 function createPayload(
   form: NewListingFormState,
   type: "job" | "ojt",
+  saveAsDraft: boolean,
 ): CreateEmployerListingPayload {
-  const common = {
+  const common: CreateEmployerListingPayload = {
     listing_type: type,
-    title: form.title.trim(),
+    ...(saveAsDraft ? { save_as_draft: true } : {}),
+    ...(form.title.trim() ? { title: toNameCase(form.title.trim()) } : {}),
     ...(form.categoryId && form.categoryId !== "other"
       ? { category_id: Number(form.categoryId) }
-      : { custom_category_name: form.customCategoryName.trim() }),
-    description: form.summary.trim(),
-    responsibilities: form.responsibilities.trim(),
-    requirements: form.requirements.trim(),
-    required_skills: form.requiredSkills
-      .split(/[,\n]/)
-      .map((skill) => skill.trim())
-      .filter(Boolean),
-    location: form.location.trim(),
-    work_setup: normalizeWorkSetup(form.workSetup),
-    applicant_limit: form.applicantLimit ? Number(form.applicantLimit) : null,
-    expires_at: form.expiresAt || null,
+      : form.customCategoryName.trim()
+        ? { custom_category_name: toNameCase(form.customCategoryName.trim()) }
+        : {}),
+    ...(form.summary.trim() ? { description: capitalizeFirstLetter(form.summary.trim()) } : {}),
+    ...(form.responsibilities.trim()
+      ? { responsibilities: capitalizeFirstLetter(form.responsibilities.trim()) }
+      : {}),
+    ...(form.requirements.length
+      ? { requirements: form.requirements.map(capitalizeFirstLetter).join("\n") }
+      : {}),
+    ...(form.requiredSkills.length
+      ? { required_skills: form.requiredSkills.map(toNameCase) }
+      : {}),
+    ...(form.location.trim() ? { location: toNameCase(form.location.trim()) } : {}),
+    ...(!saveAsDraft || form.workSetup !== "hybrid"
+      ? { work_setup: normalizeWorkSetup(form.workSetup) }
+      : {}),
+    ...(!saveAsDraft || form.applicantLimit !== "25"
+      ? { applicant_limit: form.applicantLimit ? Number(form.applicantLimit) : null }
+      : {}),
+    ...(form.expiresAt ? { expires_at: form.expiresAt } : {}),
   };
   if (type === "job") {
     return {
       ...common,
-      employment_type: form.employmentType as "full_time" | "part_time" | "contract",
-      experience_required: form.experienceRequirement === "with_experience",
-      minimum_experience_years: form.experienceRequirement === "with_experience"
-        ? Number(form.minimumExperienceYears)
-        : null,
-      salary_min: form.salaryMin ? Number(form.salaryMin) : null,
-      salary_max: form.salaryMax ? Number(form.salaryMax) : null,
+      ...(!saveAsDraft || form.employmentType !== "full_time"
+        ? { employment_type: form.employmentType as "full_time" | "part_time" | "contract" }
+        : {}),
+      ...(!saveAsDraft || form.experienceRequirement === "with_experience"
+        ? {
+          experience_required: form.experienceRequirement === "with_experience",
+          minimum_experience_years: form.experienceRequirement === "with_experience"
+            ? (form.minimumExperienceYears ? Number(form.minimumExperienceYears) : null)
+            : null,
+        }
+        : {}),
+      ...(form.salaryMin !== "" ? { salary_min: Number(form.salaryMin) } : {}),
+      ...(form.salaryMax !== "" ? { salary_max: Number(form.salaryMax) } : {}),
     };
   }
   return {
     ...common,
-    duration_hours: Number(form.requiredHours),
-    allowance_type: form.allowanceType as "paid" | "unpaid",
+    ...(!saveAsDraft || form.requiredHours !== "480"
+      ? { duration_hours: form.requiredHours ? Number(form.requiredHours) : null }
+      : {}),
+    ...(!saveAsDraft || form.allowanceType !== "paid"
+      ? { allowance_type: form.allowanceType as "paid" | "unpaid" }
+      : {}),
     allowance_amount: form.allowanceType === "paid" && form.allowanceAmount
       ? Number(form.allowanceAmount)
       : null,
-    slots: Number(form.availableSlots),
-    accepted_courses: form.acceptedCourses.split(",").map((course) => course.trim()).filter(Boolean),
-    moa_accepted: form.moaAccepted === "true",
+    ...(!saveAsDraft || form.availableSlots !== "1"
+      ? { slots: form.availableSlots ? Number(form.availableSlots) : null }
+      : {}),
+    ...(form.acceptedCourses.trim()
+      ? { accepted_courses: form.acceptedCourses.split(",").map((course) => toNameCase(course.trim())).filter(Boolean) }
+      : {}),
+    ...(!saveAsDraft || form.moaAccepted !== "true"
+      ? { moa_accepted: form.moaAccepted === "true" }
+      : {}),
   };
 }
 
@@ -253,6 +341,7 @@ export function useEmployerJobListings() {
   const modalTitle = editingListingId
     ? (newListingType === "ojt" ? "Edit OJT opportunity" : "Edit job listing")
     : (newListingType === "ojt" ? "Create a new OJT opportunity" : "Create a new job");
+  const salaryRangeError = getSalaryRangeError(newListingForm);
 
   function openCreateModal() {
     setError(null);
@@ -283,14 +372,20 @@ export function useEmployerJobListings() {
       workSetup: listing.workSetup ?? "hybrid",
       summary: listing.description,
       responsibilities: listing.responsibilities.join("\n"),
-      requirements: listing.description,
-      requiredSkills: listing.requiredSkills?.join(", ") ?? "",
+      requirements: listing.requirements ?? [],
+      requiredSkills: listing.requiredSkills ?? [],
       employmentType: listing.employmentType ?? "full_time",
       experienceRequirement: listing.minimumExperienceYears ? "with_experience" : "without_experience",
       minimumExperienceYears: listing.minimumExperienceYears ? String(listing.minimumExperienceYears) : "1",
-      salaryMin: listing.salaryMin ? String(listing.salaryMin) : "",
-      salaryMax: listing.salaryMax ? String(listing.salaryMax) : "",
+      salaryMin: listing.salaryMin !== null ? String(listing.salaryMin) : "",
+      salaryMax: listing.salaryMax !== null ? String(listing.salaryMax) : "",
       applicantLimit: listing.applicantLimit ? String(listing.applicantLimit) : "25",
+      availableSlots: listing.ojtSlots ? String(listing.ojtSlots) : "1",
+      requiredHours: listing.ojtDurationHours ? String(listing.ojtDurationHours) : "480",
+      allowanceType: listing.ojtAllowanceType ?? "paid",
+      allowanceAmount: listing.ojtAllowanceAmount != null ? String(listing.ojtAllowanceAmount) : "",
+      acceptedCourses: listing.acceptedCourses?.join(", ") ?? "",
+      moaAccepted: listing.moaAccepted === false ? "false" : "true",
     });
     setIsCreateModalOpen(true);
   }
@@ -300,25 +395,78 @@ export function useEmployerJobListings() {
     setNewListingStep(2);
   }
 
-  function updateNewListingForm(field: keyof NewListingFormState, value: string) {
+  function updateNewListingForm(
+    field: Exclude<keyof NewListingFormState, "requirements" | "requiredSkills">,
+    value: string,
+  ) {
+    if (field === "title" || field === "location" || field === "customCategoryName") {
+      value = toNameCase(value);
+    } else if (field === "summary" || field === "responsibilities") {
+      value = capitalizeFirstLetter(value);
+    }
     setNewListingForm((current) => ({ ...current, [field]: value }));
+  }
+
+  function updateNewListingList(field: "requirements" | "requiredSkills", values: string[]) {
+    setNewListingForm((current) => ({
+      ...current,
+      [field]: values.map((value) =>
+        field === "requiredSkills" ? toNameCase(value) : capitalizeFirstLetter(value),
+      ),
+    }));
   }
 
   async function saveNewListing(publishAfterSaving: boolean) {
     if (!token || !newListingType) return;
-    if (!newListingForm.title.trim()
+    const hasDraftContent = Boolean(
+      newListingForm.title.trim()
+      || (newListingForm.categoryId && newListingForm.categoryId !== "other")
+      || newListingForm.customCategoryName.trim()
+      || (newListingForm.location.trim() && newListingForm.location !== companyProfile.location)
+      || newListingForm.summary.trim()
+      || newListingForm.responsibilities.trim()
+      || newListingForm.requirements.length
+      || newListingForm.requiredSkills.length
+      || newListingForm.salaryMin
+      || newListingForm.salaryMax
+      || newListingForm.expiresAt
+      || (newListingForm.applicantLimit && newListingForm.applicantLimit !== "25")
+      || (newListingForm.availableSlots && newListingForm.availableSlots !== "1")
+      || (newListingForm.requiredHours && newListingForm.requiredHours !== "480")
+      || newListingForm.allowanceAmount
+      || newListingForm.acceptedCourses.trim()
+      || newListingForm.experienceRequirement === "with_experience"
+      || newListingForm.employmentType !== "full_time"
+      || newListingForm.workSetup !== "hybrid"
+      || newListingForm.allowanceType !== "paid"
+      || newListingForm.moaAccepted !== "true",
+    );
+    if (!publishAfterSaving && !hasDraftContent) {
+      setError("Enter at least one listing detail before saving this draft.");
+      return;
+    }
+    if (publishAfterSaving && (!newListingForm.title.trim()
       || (!newListingForm.categoryId && !newListingForm.customCategoryName.trim())
       || (newListingForm.categoryId === "other" && !newListingForm.customCategoryName.trim())
       || !newListingForm.summary.trim()
-      || !newListingForm.responsibilities.trim() || !newListingForm.requirements.trim()
-      || !newListingForm.location.trim()) {
+      || !newListingForm.responsibilities.trim() || !newListingForm.requirements.length
+      || !newListingForm.location.trim())) {
       setError("Complete the required listing details before saving.");
       return;
     }
     if (publishAfterSaving
       && newListingType === "job"
-      && (!newListingForm.salaryMin || !newListingForm.salaryMax)) {
+      && (newListingForm.salaryMin === "" || newListingForm.salaryMax === "")) {
       setError("Salary minimum and maximum are required before publishing this job listing.");
+      return;
+    }
+    if (newListingType === "job" && salaryRangeError) {
+      setError(salaryRangeError);
+      return;
+    }
+    const numericError = getListingNumericError(newListingForm, newListingType);
+    if (numericError) {
+      setError(numericError);
       return;
     }
     if (newListingType === "job"
@@ -337,9 +485,17 @@ export function useEmployerJobListings() {
         const response = await employerListingsApi.update(
           token,
           editingListingId,
-          createPayload(newListingForm, newListingType),
+          createPayload(newListingForm, newListingType, !publishAfterSaving),
         );
-        const updated = toListing(response.data);
+        let updated = toListing(response.data);
+        if (publishAfterSaving && updated.status === "draft") {
+          const publishResponse = await employerListingsApi.updateStatus(
+            token,
+            Number(updated.id),
+            "open",
+          );
+          updated = toListing(publishResponse.listing);
+        }
         setListings((current) =>
           current.map((listing) => listing.id === updated.id ? updated : listing),
         );
@@ -348,7 +504,10 @@ export function useEmployerJobListings() {
         window.dispatchEvent(new Event("careerconnect:employer-listings-changed"));
         return;
       }
-      const response = await employerListingsApi.create(token, createPayload(newListingForm, newListingType));
+      const response = await employerListingsApi.create(
+        token,
+        createPayload(newListingForm, newListingType, !publishAfterSaving),
+      );
       const created = toListing(response.data);
       setListings((current) => [created, ...current]);
       window.dispatchEvent(new Event("careerconnect:employer-listings-changed"));
@@ -397,8 +556,16 @@ export function useEmployerJobListings() {
     const listing = listings.find((item) => item.id === id);
     if (status === "open"
       && listing?.type === "Job"
-      && (!listing.salaryMin || !listing.salaryMax)) {
+      && (typeof listing.salaryMin !== "number" || typeof listing.salaryMax !== "number")) {
       setError("Salary minimum and maximum are required before publishing this job listing.");
+      return;
+    }
+    if (status === "open"
+      && listing?.type === "Job"
+      && typeof listing.salaryMin === "number"
+      && typeof listing.salaryMax === "number"
+      && listing.salaryMax < listing.salaryMin) {
+      setError("Minimum salary cannot be higher than maximum salary.");
       return;
     }
     if (status === "closed") {
@@ -454,7 +621,9 @@ export function useEmployerJobListings() {
     newListingStep,
     setNewListingStep,
     newListingForm,
+    salaryRangeError,
     updateNewListingForm,
+    updateNewListingList,
     handleSaveDraft,
     handlePublish,
     modalTitle,

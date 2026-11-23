@@ -34,7 +34,7 @@ class JobListingResource extends JsonResource
             'approval_status' => $this->approval_status ?? 'not_required',
             'approval_reason' => $this->approval_reason,
             'approval_reviewed_at' => $this->approval_reviewed_at?->toISOString(),
-            'category' => $this->whenLoaded('category', fn (): array => [
+            'category' => $this->whenLoaded('category', fn (): ?array => $this->category === null ? null : [
                 'id' => $this->category->id,
                 'name' => $this->category->name,
             ]),

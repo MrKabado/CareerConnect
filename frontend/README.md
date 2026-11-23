@@ -2,7 +2,7 @@
 
 ## CareerConnect API
 
-Copy `.env.example` to `.env` and set `VITE_API_BASE_URL` to the browser-accessible Laravel API URL (for example, `http://192.168.254.125:8000/api`). Run the Vite dev server on the host network (`http://192.168.254.125:5173`) so other devices on the same LAN can reach it. The shared client in `src/lib/api.ts` sends JSON requests and exposes API validation errors through `ApiError`.
+Copy `.env.example` to `.env` and set `VITE_API_BASE_URL` to the local Laravel API URL (`http://localhost:8000/api`). Run the Vite dev server at `http://localhost:5173`. The shared client in `src/lib/api.ts` sends JSON requests and exposes API validation errors through `ApiError`.
 
 Call `setApiToken(token)` after login or email verification and `setApiToken(null)` after logout. Tokens are kept only in module memory; they are not written to `localStorage` or `sessionStorage`, so a page reload requires signing in again. For long-lived browser sessions, use an HTTP-only, secure cookie design rather than persisting bearer tokens in JavaScript storage.
 

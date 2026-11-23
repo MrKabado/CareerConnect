@@ -9,6 +9,9 @@ export type AuthUser = {
   role: "admin" | "applicant" | "employer";
   account_status: string;
   email_verified_at: string | null;
+  has_been_hired: boolean;
+  identity_verification_status: "unverified" | "pending" | "verified" | "rejected" | null;
+  identity_verification_rejection_reason: string | null;
 };
 
 export type LoginCredentials = {

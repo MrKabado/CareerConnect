@@ -1,5 +1,8 @@
 import { Link } from "react-router";
+import { useAuth } from "@/features/auth/useAuth";
 import type { CompanyProfile } from "@/features/companies/companyProfiles";
+import { getHiringSetupRequirements } from "@/features/company-verification/stages";
+import { getIdentityVerificationMessage } from "@/features/user-applications/identityVerification";
 
 function CompanyMetric({
   label,
@@ -222,6 +225,7 @@ export function CompanyHiringSetupDetails({
   onChange,
   onSave,
   onCancel,
+  saveError,
 }: {
   profile: CompanyProfile;
   onEdit?: () => void;
@@ -237,9 +241,18 @@ export function CompanyHiringSetupDetails({
   onChange?: (field: keyof NonNullable<typeof draft>, value: string) => void;
   onSave?: () => void;
   onCancel?: () => void;
+  saveError?: string | null;
 }) {
-  const setup = profile.hiringDefaults;
-  if (!setup) return null;
+  const setup = profile.hiringDefaults ?? {
+    title: "",
+    department: "",
+    location: "",
+    workspace: "",
+    schoolPartnerships: "",
+    acceptedCourses: "",
+  };
+  const requirements = getHiringSetupRequirements(profile);
+  const completedRequirements = requirements.filter((requirement) => requirement.complete).length;
 
   const details = [
     { label: "Default role", value: setup.title },
@@ -249,8 +262,6 @@ export function CompanyHiringSetupDetails({
     { label: "School partnerships", value: setup.schoolPartnerships },
     { label: "Accepted courses", value: setup.acceptedCourses },
   ].filter((detail) => detail.value.trim());
-
-  if (!details.length && !editing) return null;
 
   const formFields = [
     { key: "title", label: "Default role" },
@@ -265,6 +276,9 @@ export function CompanyHiringSetupDetails({
     <section className="rounded-[16px] border border-[#e8eeee] bg-white p-4 shadow-[0_5px_16px_rgba(39,85,82,0.04)]">
       <div className="flex items-center justify-between gap-2">
         <h2 className="text-[12px] font-bold text-[#2d4244]">Hiring setup</h2>
+        <span className="text-[9px] font-semibold text-[#718082]">
+          {completedRequirements}/{requirements.length} complete
+        </span>
         {!editing && onEdit ? (
           <button
             className="text-[10px] font-semibold text-[#087879] underline underline-offset-2"
@@ -312,6 +326,7 @@ export function CompanyHiringSetupDetails({
             );
           })}
 
+          {saveError ? <p className="text-[10px] text-[#a2534c]" role="alert">{saveError}</p> : null}
           <div className="mt-3 flex justify-end gap-2 border-t border-[#edf1f1] pt-3">
             <button
               className="rounded-xl border border-[#dfe8e7] bg-white px-3 py-2 text-[10px] font-semibold text-[#526365] hover:bg-white"
@@ -330,14 +345,30 @@ export function CompanyHiringSetupDetails({
           </div>
         </div>
       ) : (
-        <dl className="mt-3 space-y-2.5 text-[9px]">
-          {details.map(({ label, value }) => (
-            <div className="flex items-start justify-between gap-3" key={label}>
-              <dt className="shrink-0 text-[#829091]">{label}</dt>
-              <dd className="text-right font-medium text-[#526365]">{value}</dd>
-            </div>
-          ))}
-        </dl>
+        <>
+          {details.length ? (
+            <dl className="mt-3 space-y-2.5 text-[9px]">
+              {details.map(({ label, value }) => (
+                <div className="flex items-start justify-between gap-3" key={label}>
+                  <dt className="shrink-0 text-[#829091]">{label}</dt>
+                  <dd className="text-right font-medium text-[#526365]">{value}</dd>
+                </div>
+              ))}
+            </dl>
+          ) : (
+            <p className="mt-3 text-[10px] leading-4 text-[#718082]">
+              Add your hiring defaults and company details to complete this stage.
+            </p>
+          )}
+          <ul aria-label="Hiring setup requirements" className="mt-3 space-y-1.5 text-[9px]">
+            {requirements.map(({ label, complete }) => (
+              <li className={complete ? "text-[#228578]" : "text-[#718082]"} key={label}>
+                <span aria-hidden="true" className="mr-1">{complete ? "✓" : "○"}</span>
+                {label}
+              </li>
+            ))}
+          </ul>
+        </>
       )}
     </section>
   );
@@ -354,6 +385,8 @@ export function CompanyOpenRoles({
   error?: string | null;
   onRetry?: () => void;
 }) {
+  const { user } = useAuth();
+
   return (
     <section aria-labelledby="company-open-roles" className="min-w-0">
       <div className="mb-3">
@@ -412,12 +445,41 @@ export function CompanyOpenRoles({
                   {role.category}
                 </p>
               </div>
-              <Link
+              {user?.has_been_hired ? (
+                <div className="text-right">
+                  <button
+                    className="cursor-not-allowed rounded-[7px] bg-[#9aa6a7] px-2.5 py-1.5 text-[8px] font-semibold text-white"
+                    disabled
+                    type="button"
+                  >
+                    Applications unavailable
+                  </button>
+                  <p className="mt-1 max-w-36 text-[8px] text-[#758687]">
+                    You have been marked as hired and cannot submit new applications.
+                  </p>
+                </div>
+              ) : user?.role === "applicant" && user.identity_verification_status !== "verified" ? (
+                <div className="text-right">
+                  <button
+                    className="cursor-not-allowed rounded-[7px] bg-[#9aa6a7] px-2.5 py-1.5 text-[8px] font-semibold text-white"
+                    disabled
+                    type="button"
+                  >
+                    Verification required
+                  </button>
+                  <p className="mt-1 max-w-36 text-[8px] text-[#758687]">
+                    {getIdentityVerificationMessage(
+                      user.identity_verification_status ?? "unverified",
+                      user.identity_verification_rejection_reason,
+                    )}
+                  </p>
+                </div>
+              ) : <Link
                 className="inline-flex shrink-0 items-center gap-1 rounded-[7px] bg-[#078b98] px-2.5 py-1.5 text-[8px] font-semibold text-white shadow-[0_3px_8px_rgba(7,139,152,0.16)] hover:bg-[#067983] focus-visible:outline-[3px] focus-visible:outline-[#67c9c1] focus-visible:outline-offset-2"
                 to={`/apply/${role.id}`}
               >
                 Apply now <span aria-hidden="true">→</span>
-              </Link>
+              </Link>}
             </div>
 
             <div className="mt-2 flex flex-wrap gap-x-2 gap-y-1 text-[8px] text-[#839192]">

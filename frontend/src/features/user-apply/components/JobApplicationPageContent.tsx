@@ -31,6 +31,9 @@ export default function JobApplicationPageContent() {
     isSubmitting,
     uploadProgress,
     isAlreadySubmitted,
+    canApply,
+    applicationEligibilityError,
+    applicationEligibilityLoading,
     handleFileSelect,
     handleCoverLetterSelect,
     reviewApplication,
@@ -93,7 +96,19 @@ export default function JobApplicationPageContent() {
           aria-live="polite"
           className="mx-auto mt-6 w-full max-w-162.5 rounded-2xl border border-[#edf1f1] bg-white p-6 shadow-[0_8px_24px_rgba(34,66,65,0.07)] max-[680px]:p-4"
         >
-          <ErrorBoundary>
+          {applicationEligibilityLoading ? (
+            <p className="rounded-xl bg-[#f5f9f8] p-4 text-center text-sm text-[#526365]" role="status">
+              Checking your application eligibility…
+            </p>
+          ) : canApply === false ? (
+            <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-center text-sm text-amber-900" role="alert">
+              {applicationEligibilityError ?? "You have been marked as hired and cannot submit new applications."}
+            </div>
+          ) : canApply === null ? (
+            <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-center text-sm text-red-800" role="alert">
+              {applicationEligibilityError ?? "Unable to verify your application eligibility. Please try again."}
+            </div>
+          ) : <ErrorBoundary>
             {step === 1 && (
               <JobApplicationFormStep
                 coverLetterFileName={savedCoverLetterName}
@@ -112,9 +127,9 @@ export default function JobApplicationPageContent() {
                 submitError={submitError}
               />
             )}
-          </ErrorBoundary>
+          </ErrorBoundary>}
 
-          <ErrorBoundary>
+          {canApply && <ErrorBoundary>
             {step === 2 && (
               <JobApplicationReviewStep
                 coverLetterFileName={
@@ -129,9 +144,9 @@ export default function JobApplicationPageContent() {
                 submitError={submitError}
               />
             )}
-          </ErrorBoundary>
+          </ErrorBoundary>}
 
-          <ErrorBoundary>
+          {canApply && <ErrorBoundary>
             {step === 3 && (
               <JobApplicationSuccessStep
                 isAlreadySubmitted={isAlreadySubmitted}
@@ -140,7 +155,7 @@ export default function JobApplicationPageContent() {
                 submitError={submitError}
               />
             )}
-          </ErrorBoundary>
+          </ErrorBoundary>}
         </section>
       </main>
     </ApplicationLayout>

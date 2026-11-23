@@ -66,33 +66,6 @@ export function hasJobMatchingProfile(profile: ApplicantProfileData): boolean {
     || Boolean(profile.ojt_details?.course);
 }
 
-export function getJobEligibilityFailure(
-  job: Pick<JobListing, "requiredSkills" | "experienceRequired" | "minimumExperienceYears">,
-  profile: ApplicantProfileData,
-): string | null {
-  const failures: string[] = [];
-  const applicantSkills = new Set(profile.skills.map(normalizedTerm));
-  const missingSkills = job.requiredSkills.filter(
-    (skill) => !applicantSkills.has(normalizedTerm(skill)),
-  );
-
-  if (missingSkills.length > 0) {
-    failures.push(`Missing required skills: ${missingSkills.join(", ")}.`);
-  }
-
-  if (job.experienceRequired) {
-    const minimumYears = job.minimumExperienceYears ?? 1;
-    const reportedYears = getApplicantExperienceLowerBound(profile.experience_level);
-    if (reportedYears === null) {
-      failures.push(`Add your work experience to your profile. This job requires at least ${minimumYears} years of experience.`);
-    } else if (reportedYears < minimumYears) {
-      failures.push(`This job requires at least ${minimumYears} years of experience, but your profile indicates at least ${reportedYears}.`);
-    }
-  }
-
-  return failures.length > 0 ? `You do not meet this job listing's qualifications. ${failures.join(" ")}` : null;
-}
-
 function getEducationScore(job: JobListing, profile: ApplicantProfileData): number {
   const requirements = normalizedWords(job.requirementsText);
   const hasExplicitEducationRequirement = /\b(bachelor|degree|diploma|master|university|college)\b/i

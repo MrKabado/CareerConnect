@@ -22,8 +22,8 @@ import type { AdminOutletContext } from "../../types";
 type StatusFilter = "all" | "pending" | "verified" | "rejected";
 
 function getStatusFilter(value: string | null): StatusFilter {
-  if (value === "all" || value === "verified" || value === "rejected") return value;
-  return "pending";
+  if (value === "pending" || value === "verified" || value === "rejected") return value;
+  return "all";
 }
 
 function getRequestCountLabel(status: StatusFilter, total: number): string {
@@ -34,8 +34,8 @@ function getRequestCountLabel(status: StatusFilter, total: number): string {
 }
 
 const STATUS_OPTIONS = [
-  { value: "pending", label: "Pending review" },
   { value: "all", label: "All statuses" },
+  { value: "pending", label: "Pending review" },
   { value: "verified", label: "Verified" },
   { value: "rejected", label: "Rejected" },
 ];
@@ -233,7 +233,7 @@ export default function ApplicantIdentityVerificationPage() {
     <section>
       <PageHeader
         title="Applicant identity verification"
-        subtitle="Review private identity documents and approve or reject applicants before they can submit applications."
+        subtitle="Review private selfie-with-ID submissions and manually approve or reject identity verification."
         actions={
           <div className="flex items-center gap-2">
             <Button
@@ -390,7 +390,7 @@ export default function ApplicantIdentityVerificationPage() {
               ) : documentUrl && documentMimeType.startsWith("image/") ? (
                 <div className="grid min-h-[320px] place-items-center p-3">
                   <img
-                    alt={`${selectedRecord.applicant.name} identity document`}
+                    alt={`${selectedRecord.applicant.name} selfie with ID`}
                     className="max-h-[min(65dvh,620px)] max-w-full object-contain"
                     src={documentUrl}
                   />
@@ -438,6 +438,9 @@ export default function ApplicantIdentityVerificationPage() {
                   </div>
                 </dl>
               </div>
+              <p className="mt-3 rounded-lg bg-amber-50 p-3 text-xs leading-5 text-amber-900">
+                Before approval, confirm the photo clearly shows this applicant&apos;s face beside their own valid ID.
+              </p>
 
               {selectedRecord.status === "pending" ? (
                 isRejecting ? (
@@ -454,9 +457,12 @@ export default function ApplicantIdentityVerificationPage() {
                       value={rejectionReason}
                     />
                     <Button
+                      aria-busy={isSaving}
                       className="w-full"
                       disabled={!rejectionReason.trim() || isSaving}
-                      icon={<X size={14} />}
+                      icon={isSaving
+                        ? <span aria-hidden="true" className="size-3 animate-spin rounded-full border-2 border-current border-r-transparent" />
+                        : <X size={14} />}
                       onClick={() => void submitReview("rejected")}
                       variant="danger"
                     >
@@ -473,13 +479,21 @@ export default function ApplicantIdentityVerificationPage() {
                   </div>
                 ) : (
                   <div className="mt-4 space-y-2">
+                    {(!documentUrl || !documentMimeType.startsWith("image/")) && (
+                      <p className="rounded-lg bg-amber-50 p-3 text-xs leading-5 text-amber-900" role="status">
+                        Approval requires a readable selfie image showing the applicant with their ID.
+                      </p>
+                    )}
                     <Button
+                      aria-busy={isSaving}
                       className="w-full"
-                      disabled={isLoadingReview || isSaving}
-                      icon={<Check size={14} />}
+                      disabled={isLoadingReview || isSaving || !documentUrl || !documentMimeType.startsWith("image/")}
+                      icon={isSaving
+                        ? <span aria-hidden="true" className="size-3 animate-spin rounded-full border-2 border-current border-r-transparent" />
+                        : <Check size={14} />}
                       onClick={() => void submitReview("verified")}
                     >
-                      {isSaving ? "Saving…" : "Approve as verified"}
+                      {isSaving ? "Saving…" : "Approve selfie with ID"}
                     </Button>
                     <Button
                       className="w-full"
@@ -498,7 +512,7 @@ export default function ApplicantIdentityVerificationPage() {
                     : "bg-red-50 text-red-800"
                 }`}>
                   {selectedRecord.status === "verified"
-                    ? "This applicant has been verified and may submit applications."
+                    ? "This applicant's identity review was approved."
                     : `This request was rejected.${selectedRecord.rejection_reason ? ` Reason: ${selectedRecord.rejection_reason}` : ""}`}
                 </p>
               )}

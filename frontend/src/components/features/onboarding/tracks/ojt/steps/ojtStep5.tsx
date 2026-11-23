@@ -1,5 +1,6 @@
 import { useState, type KeyboardEvent } from "react";
 import type { OjtStepProps } from "./ojtStepTypes";
+import { toNameCase } from "@/features/auth/nameFormatting";
 import {
   AddItemButton,
   OjtChoice,
@@ -25,7 +26,7 @@ export default function OjtStep5({
   }
 
   function commitLocation() {
-    const next = location.trim();
+    const next = toNameCase(location.trim());
     if (
       next &&
       !answers.preferredLocations.some(
@@ -104,7 +105,7 @@ export default function OjtStep5({
           <input
             className={`${ojtInputClassName} min-w-0 flex-1`}
             aria-label="Preferred locations"
-            onChange={(event) => setLocation(event.target.value)}
+            onChange={(event) => setLocation(toNameCase(event.target.value))}
             onKeyDown={addLocation}
             placeholder="Type a city or area"
             value={location}

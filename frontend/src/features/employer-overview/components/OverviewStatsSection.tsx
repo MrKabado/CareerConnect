@@ -1,4 +1,5 @@
 import type { EmployerDashboardStats } from "@/features/employer-overview/backendApi";
+import { Link } from "react-router";
 
 type OverviewStatsSectionProps = {
   stats: EmployerDashboardStats;
@@ -12,21 +13,49 @@ type NumericEmployerStat =
   | "active_job_listings"
   | "total_applications"
   | "pending_applications"
+  | "shortlisted_applications"
   | "closed_listings"
-  | "total_applicants"
   | "hired_applicants"
   | "upcoming_interviews";
 
-const cards: Array<{ key: NumericEmployerStat; label: string; accent: string }> = [
+const cards: Array<{ key: NumericEmployerStat; label: string; accent: string; to?: string }> = [
   { key: "total_job_listings", label: "Total listings", accent: "text-[#354346]" },
   { key: "active_job_listings", label: "Active listings", accent: "text-[#168b87]" },
-  { key: "total_applications", label: "Total applications", accent: "text-[#354346]" },
-  { key: "pending_applications", label: "Pending applications", accent: "text-[#31a581]" },
+  { key: "total_applications", label: "Total applications", accent: "text-[#354346]", to: "/employer/applicants" },
+  { key: "pending_applications", label: "Pending review", accent: "text-[#31a581]", to: "/employer/applicants?status=pending" },
+  { key: "shortlisted_applications", label: "Shortlisted", accent: "text-[#1d9d75]", to: "/employer/applicants?status=shortlisted" },
+  { key: "upcoming_interviews", label: "Scheduled interviews", accent: "text-[#765cb8]", to: "/employer/applicants?status=interview" },
+  { key: "hired_applicants", label: "Hired applicants", accent: "text-[#31a581]", to: "/employer/applicants?status=hired" },
   { key: "closed_listings", label: "Closed listings", accent: "text-[#687b7e]" },
-  { key: "total_applicants", label: "Total applicants", accent: "text-[#354346]" },
-  { key: "hired_applicants", label: "Hired applicants", accent: "text-[#31a581]" },
-  { key: "upcoming_interviews", label: "Scheduled interviews", accent: "text-[#765cb8]" },
 ];
+
+function StatCard({
+  label,
+  value,
+  accent,
+  to,
+}: {
+  label: string;
+  value: string;
+  accent: string;
+  to?: string;
+}) {
+  const content = (
+    <>
+      <p className={`text-[22px] leading-none font-bold ${accent}`}>{value}</p>
+      <p className="mt-2 text-[10px] font-medium text-[#829091]">{label}</p>
+    </>
+  );
+  const className = "block rounded-[16px] border border-[#edf1f1] bg-white p-4 shadow-[0_8px_24px_rgba(34,66,65,0.05)]";
+
+  return to ? (
+    <Link className={`${className} transition hover:border-[#b8dedd] focus-visible:outline-[3px] focus-visible:outline-[#67c9c1]`} to={to}>
+      {content}
+    </Link>
+  ) : (
+    <article className={className}>{content}</article>
+  );
+}
 
 export default function OverviewStatsSection({
   stats,
@@ -43,13 +72,14 @@ export default function OverviewStatsSection({
         </div>
       )}
       <div className="grid grid-cols-4 gap-3 max-[620px]:grid-cols-2">
-        {cards.map(({ key, label, accent }) => (
-          <article className="rounded-[16px] border border-[#edf1f1] bg-white p-4 shadow-[0_8px_24px_rgba(34,66,65,0.05)]" key={key}>
-            <p className={`text-[22px] leading-none font-bold ${accent}`}>
-              {isLoading ? "—" : (stats[key] ?? 0).toLocaleString()}
-            </p>
-            <p className="mt-2 text-[10px] font-medium text-[#829091]">{label}</p>
-          </article>
+        {cards.map(({ key, label, accent, to }) => (
+          <StatCard
+            accent={accent}
+            key={key}
+            label={label}
+            to={to}
+            value={isLoading ? "—" : (stats[key] ?? 0).toLocaleString()}
+          />
         ))}
       </div>
     </section>

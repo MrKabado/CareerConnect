@@ -10,7 +10,7 @@ class Interview extends Model
 {
     public const MODES = ['onsite', 'online', 'phone'];
 
-    public const STATUSES = ['scheduled', 'completed', 'cancelled'];
+    public const STATUSES = ['invited', 'scheduled', 'completed', 'cancelled'];
 
     protected $fillable = [
         'scheduled_at',
@@ -55,5 +55,10 @@ class Interview extends Model
     public function histories(): HasMany
     {
         return $this->hasMany(InterviewHistory::class)->orderBy('created_at')->orderBy('id');
+    }
+
+    public function availability(): HasMany
+    {
+        return $this->hasMany(InterviewAvailability::class)->orderBy('available_date');
     }
 }

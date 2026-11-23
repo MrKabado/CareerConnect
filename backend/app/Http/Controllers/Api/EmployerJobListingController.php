@@ -133,12 +133,23 @@ class EmployerJobListingController extends Controller
 
         DB::transaction(function () use ($listing, $validated): void {
             $listing->fill($this->listingAttributes($validated))->save();
+            if (($validated['save_as_draft'] ?? false) === true) {
+                $listing->status = 'draft';
+                $listing->published_at = null;
+                $listing->save();
+            }
             if ($listing->status === 'open'
                 && $listing->listing_type === 'job'
-                && ($listing->salary_min === null || $listing->salary_max === null)) {
+                && ($listing->salary_min === null
+                    || $listing->salary_max === null
+                    || $listing->salary_max < $listing->salary_min)) {
                 throw ValidationException::withMessages([
-                    'salary_min' => ['Salary information is required before publishing this job listing.'],
-                    'salary_max' => ['Salary information is required before publishing this job listing.'],
+                    'salary_min' => [$listing->salary_min === null || $listing->salary_max === null
+                        ? 'Salary information is required before publishing this job listing.'
+                        : 'The minimum salary must be lower than the maximum salary.'],
+                    'salary_max' => [$listing->salary_min === null || $listing->salary_max === null
+                        ? 'Salary information is required before publishing this job listing.'
+                        : 'The maximum salary must be higher than the minimum salary.'],
                 ]);
             }
 
@@ -191,6 +202,10 @@ class EmployerJobListingController extends Controller
             ], 422);
         }
 
+        if ($status === 'open' && ! $this->hasRequiredPublishDetails($listing)) {
+            throw ValidationException::withMessages($this->missingPublishDetails($listing));
+        }
+
         if ($status === 'open' && ! $this->companyCanPublish($listing->company()->with('verification')->firstOrFail())) {
             return response()->json([
                 'message' => 'Your company must be approved before publishing a listing.',
@@ -199,10 +214,16 @@ class EmployerJobListingController extends Controller
         }
         if ($status === 'open'
             && $listing->listing_type === 'job'
-            && ($listing->salary_min === null || $listing->salary_max === null)) {
+            && ($listing->salary_min === null
+                || $listing->salary_max === null
+                || $listing->salary_max < $listing->salary_min)) {
             throw ValidationException::withMessages([
-                'salary_min' => ['Salary information is required before publishing this job listing.'],
-                'salary_max' => ['Salary information is required before publishing this job listing.'],
+                'salary_min' => [$listing->salary_min === null || $listing->salary_max === null
+                    ? 'Salary information is required before publishing this job listing.'
+                    : 'The minimum salary cannot be higher than the maximum salary.'],
+                'salary_max' => [$listing->salary_min === null || $listing->salary_max === null
+                    ? 'Salary information is required before publishing this job listing.'
+                    : 'The minimum salary cannot be higher than the maximum salary.'],
             ]);
         }
         if ($status === 'open' && ! $listing->category?->is_active) {
@@ -314,10 +335,14 @@ class EmployerJobListingController extends Controller
 
         if ($validated['listing_type'] === 'job') {
             $attributes['required_skills'] = array_values($validated['required_skills'] ?? []);
-            $attributes['experience_required'] = (bool) ($validated['experience_required'] ?? false);
-            $attributes['minimum_experience_years'] = $attributes['experience_required']
-                ? (int) $validated['minimum_experience_years']
-                : null;
+            if (array_key_exists('experience_required', $validated)) {
+                $attributes['experience_required'] = (bool) $validated['experience_required'];
+                $attributes['minimum_experience_years'] = $attributes['experience_required']
+                    ? (isset($validated['minimum_experience_years']) ? (int) $validated['minimum_experience_years'] : null)
+                    : null;
+            } elseif (array_key_exists('minimum_experience_years', $validated)) {
+                $attributes['minimum_experience_years'] = $validated['minimum_experience_years'];
+            }
         }
 
         return $attributes;
@@ -376,5 +401,50 @@ class EmployerJobListingController extends Controller
     private function companyCanPublish(Company $company): bool
     {
         return $company->is_verified && $company->verification?->status === 'verified';
+    }
+
+    private function hasRequiredPublishDetails(JobListing $listing): bool
+    {
+        $fields = $this->missingPublishDetails($listing);
+
+        return $fields === [];
+    }
+
+    /**
+     * @return array<string, array<int, string>>
+     */
+    private function missingPublishDetails(JobListing $listing): array
+    {
+        $required = [
+            'title' => $listing->title,
+            'category_id' => $listing->category_id,
+            'description' => $listing->description,
+            'responsibilities' => $listing->responsibilities,
+            'requirements' => $listing->requirements,
+            'location' => $listing->location,
+            'work_setup' => $listing->work_setup,
+        ];
+        if ($listing->listing_type === 'job') {
+            $required['employment_type'] = $listing->employment_type;
+            $required['salary_min'] = $listing->salary_min;
+            $required['salary_max'] = $listing->salary_max;
+        } else {
+            $details = $listing->ojtDetails;
+            $required['duration_hours'] = $details?->duration_hours;
+            $required['allowance_type'] = $details?->allowance_type;
+            $required['slots'] = $details?->slots;
+            if ($details?->allowance_type === 'paid') {
+                $required['allowance_amount'] = $details->allowance_amount;
+            }
+        }
+
+        $missing = [];
+        foreach ($required as $field => $value) {
+            if ($value === null || (is_string($value) && trim($value) === '')) {
+                $missing[$field] = ["The {$field} field is required before publishing."];
+            }
+        }
+
+        return $missing;
     }
 }

@@ -61,7 +61,11 @@ function TextField({
       </span>
       <input
         className="h-10 w-full rounded-lg border border-[#cbd8d7] bg-white px-3 text-[11px] text-[#263a3c] outline-none focus:border-[#078b8d] focus:ring-3 focus:ring-[#078b8d]/10"
-        onChange={(event) => onChange(event.target.value)}
+        onChange={(event) =>
+          onChange(
+            label === "City" ? toNameCase(event.target.value) : event.target.value,
+          )
+        }
         max={max}
         min={min}
         placeholder={placeholder}
@@ -123,7 +127,11 @@ function ListField({
   function addValues(rawValues: string[]) {
     const existing = new Set(values.map((value) => value.toLocaleLowerCase()));
     const additions = rawValues
-      .map((value) => value.trim())
+      .map((value) =>
+        label === "Desired job titles" || label === "Preferred locations"
+          ? toNameCase(value.trim())
+          : value.trim(),
+      )
       .filter(Boolean)
       .filter((value) => !existing.has(value.toLocaleLowerCase()))
       .slice(
@@ -138,7 +146,11 @@ function ListField({
   function handleChange(value: string) {
     const segments = value.split(",");
     if (segments.length === 1) {
-      setInput(value);
+      setInput(
+        label === "Desired job titles" || label === "Preferred locations"
+          ? toNameCase(value)
+          : value,
+      );
       return;
     }
 
@@ -757,6 +769,7 @@ export default function ProfilePreferencesEditor({
                     <TextField
                       label="Minimum salary"
                       onChange={(minimumSalary) => setDraft((current) => ({ ...current, minimumSalary }))}
+                      max={4294967295}
                       min={0}
                       type="number"
                       value={draft.minimumSalary}
@@ -764,6 +777,7 @@ export default function ProfilePreferencesEditor({
                     <TextField
                       label="Maximum salary"
                       onChange={(maximumSalary) => setDraft((current) => ({ ...current, maximumSalary }))}
+                      max={4294967295}
                       min={0}
                       type="number"
                       value={draft.maximumSalary}

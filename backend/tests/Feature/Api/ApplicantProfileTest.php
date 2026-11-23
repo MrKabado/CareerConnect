@@ -186,20 +186,27 @@ it('persists seeker types, interests, skills, work and job preferences with part
 
     $this->withToken($token)->putJson('/api/applicant/onboarding/work-preferences', [
         'work_setups' => ['hybrid', 'remote'],
-        'preferred_locations' => ['Cebu City'],
+        'preferred_locations' => ['cebu city'],
     ])->assertOk()
-        ->assertJsonPath('data.work_setups.0', 'hybrid');
+        ->assertJsonPath('data.work_setups.0', 'hybrid')
+        ->assertJsonPath('data.preferred_locations.0', 'Cebu City');
 
     $this->withToken($token)->putJson('/api/applicant/onboarding/job-preferences', [
-        'desired_titles' => ['Backend Developer'],
+        'desired_titles' => ['backend developer'],
         'experience_level' => 'fresh_graduate',
         'employment_types' => ['full_time'],
         'salary_min' => 20000,
         'salary_max' => 40000,
-    ])->assertOk();
+    ])->assertOk()
+        ->assertJsonPath('data.desired_titles.0', 'Backend Developer');
 
     $this->withToken($token)->putJson('/api/applicant/onboarding/job-preferences', [
         'salary_max' => 10000,
+    ])->assertUnprocessable()
+        ->assertJsonValidationErrors('salary_max');
+
+    $this->withToken($token)->putJson('/api/applicant/onboarding/job-preferences', [
+        'salary_max' => 4294967296,
     ])->assertUnprocessable()
         ->assertJsonValidationErrors('salary_max');
 

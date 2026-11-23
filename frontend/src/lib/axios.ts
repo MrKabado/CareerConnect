@@ -1,6 +1,6 @@
 ﻿import axios, { type AxiosError, type AxiosRequestConfig } from "axios";
 
-const apiBaseUrl = (import.meta.env.VITE_API_BASE_URL || "http://192.168.254.125:8000/api")
+const apiBaseUrl = (import.meta.env.VITE_API_BASE_URL || "http://localhost:8000/api")
   .replace(/\/+$/, "");
 
 export class ApiError extends Error {

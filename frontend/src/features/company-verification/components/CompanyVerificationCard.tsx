@@ -49,6 +49,8 @@ function getStatusChipClass(status: CompanyVerificationStageStatus) {
 
 export default function CompanyVerificationCard() {
   const verification = useCompanyVerification();
+  const isSyncing = verification.syncStatus === "loading";
+  const displayPercent = isSyncing ? 0 : verification.percent;
   const currentIndex = verification.currentStage
     ? verification.stages.findIndex((stage) => stage.id === verification.currentStage?.id)
     : verification.stages.length;
@@ -61,32 +63,43 @@ export default function CompanyVerificationCard() {
     >
       <div className="mb-3 flex items-center justify-between gap-3">
         <h2 className="text-[14px] font-bold text-[#1d3034]">Company verification</h2>
-        <span className="text-[12px] font-bold text-[#1d3034]">{verification.percent}%</span>
+        <span className="text-[12px] font-bold text-[#1d3034]">
+          {isSyncing ? "Syncing…" : `${verification.percent}%`}
+        </span>
       </div>
 
       <div className="mb-2 flex justify-between text-[9px] text-[#718082]">
         <span>
-          {verification.percent === 100
+          {isSyncing
+            ? "Checking saved progress…"
+            : verification.percent === 100
             ? "All stages complete"
             : `Stage ${Math.min(currentIndex + 1, verification.stages.length)} of ${verification.stages.length}`}
         </span>
       </div>
       <div
-        aria-label={`Company verification ${verification.percent}%`}
+        aria-label={`Company verification ${isSyncing ? "syncing" : `${verification.percent}%`}`}
         aria-valuemax={100}
         aria-valuemin={0}
-        aria-valuenow={verification.percent}
+        aria-valuenow={displayPercent}
+        aria-valuetext={isSyncing ? "Checking saved progress" : `${verification.percent}% complete`}
         className="h-2.5 overflow-hidden rounded-full bg-[#edf2f1]"
         role="progressbar"
       >
         <div
           className="h-full rounded-full bg-[#0d8fa2] transition-[width]"
-          style={{ width: `${verification.percent}%` }}
+          style={{ width: `${displayPercent}%` }}
         />
       </div>
+      {verification.syncStatus === "error" ? (
+        <p className="mt-2 text-[10px] leading-4 text-[#b34840]" role="alert">
+          Saved progress could not be refreshed{verification.syncError ? `: ${verification.syncError}` : "."}
+        </p>
+      ) : null}
 
-      <ol aria-label="Company verification stages" className="mt-4 space-y-3">
-        {verification.stages.map((stage) => {
+      {!isSyncing ? (
+        <ol aria-label="Company verification stages" className="mt-4 space-y-3">
+          {verification.stages.map((stage) => {
           const isCurrent = stage.id === verification.currentStage?.id;
           const instructionId = `verification-instruction-${stage.id}`;
           return (
@@ -145,8 +158,9 @@ export default function CompanyVerificationCard() {
               </span>
             </li>
           );
-        })}
-      </ol>
+          })}
+        </ol>
+      ) : null}
     </section>
   );
 }

@@ -7,6 +7,7 @@ use App\Models\Company;
 use App\Models\CompanyVerification;
 use App\Models\Interview;
 use App\Models\User;
+use Carbon\CarbonImmutable;
 use Illuminate\Database\QueryException;
 use Illuminate\Foundation\Testing\LazilyRefreshDatabase;
 use Illuminate\Support\Facades\Auth;
@@ -79,8 +80,13 @@ function phaseSixApplication(User $employer, User $applicant, string $status = '
 function phaseSixSchedule(array $overrides = []): array
 {
     return array_merge([
-        'scheduled_at' => now('Asia/Manila')->addDays(2)->setTime(10, 0)->format('Y-m-d H:i:s'),
-        'end_at' => now('Asia/Manila')->addDays(2)->setTime(11, 0)->format('Y-m-d H:i:s'),
+        'availability_dates' => [now('Asia/Manila')->addDays(2)->toDateString()],
+        'start_time' => '09:00',
+        'end_time' => '17:00',
+        'break_start_time' => '12:00',
+        'break_end_time' => '13:00',
+        'duration_minutes' => 60,
+        'buffer_minutes' => 0,
         'timezone' => 'Asia/Manila',
         'mode' => 'onsite',
         'location' => 'Cebu City office',
@@ -133,7 +139,7 @@ it('allows an employer to send a branded note to the applicant email', function 
     expect($applicant->notifications()->count())->toBe(1);
 });
 
-it('allows an employer to schedule an interview and atomically moves shortlisted applications to interview', function (): void {
+it('allows an employer to invite an applicant to schedule and atomically moves shortlisted applications to interview', function (): void {
     $applicant = User::factory()->create(['role' => 'applicant']);
     $employer = User::factory()->create(['role' => 'employer']);
     $application = phaseSixApplication($employer, $applicant);
@@ -142,19 +148,28 @@ it('allows an employer to schedule an interview and atomically moves shortlisted
     $this->withToken($token)->postJson("/api/employer/applications/{$application->id}/interviews", phaseSixSchedule())
         ->assertCreated()
         ->assertJsonPath('data.application_id', $application->id)
-        ->assertJsonPath('data.status', 'scheduled')
+        ->assertJsonPath('data.status', 'invited')
         ->assertJsonPath('data.mode', 'onsite')
         ->assertJsonPath('data.location', 'Cebu City office')
-        ->assertJsonPath('data.internal_notes', 'Review coding exercise.');
+        ->assertJsonPath('data.internal_notes', 'Review coding exercise.')
+        ->assertJsonCount(1, 'data.availability');
 
     $interview = Interview::where('application_id', $application->id)->firstOrFail();
     expect($application->refresh()->status)->toBe('interview')
         ->and($interview->applicant_id)->toBe($applicant->id)
         ->and($interview->employer_id)->toBe($employer->id)
-        ->and($interview->status)->toBe('scheduled');
+        ->and($interview->status)->toBe('invited');
     expect($applicant->notifications()->count())->toBe(1);
     expect((int) ($applicant->notifications()->first()?->data['metadata']['interview_id'] ?? 0))
         ->toBe($interview->id);
+
+    $this->app['auth']->forgetGuards();
+    $this->withToken(phaseSixToken($applicant))
+        ->getJson('/api/applicant/applications')
+        ->assertOk()
+        ->assertJsonPath('data.0.interview.id', $interview->id)
+        ->assertJsonPath('data.0.interview.status', 'invited')
+        ->assertJsonPath('data.0.interview.availability.0.date', $interview->availability()->first()->available_date->toDateString());
 
     $this->assertDatabaseHas('application_status_histories', [
         'application_id' => $application->id,
@@ -164,7 +179,7 @@ it('allows an employer to schedule an interview and atomically moves shortlisted
     ]);
     $this->assertDatabaseHas('interview_histories', [
         'interview_id' => $interview->id,
-        'event_type' => 'scheduled',
+        'event_type' => 'invited',
         'actor_id' => $employer->id,
     ]);
 
@@ -233,19 +248,21 @@ it('rolls back interview and application changes when writing status history fai
     ]);
 });
 
-it('validates future date, timezone, mode, onsite location, and online meeting details', function (): void {
+it('validates availability dates, time windows, timezone, mode, and meeting details', function (): void {
     $applicant = User::factory()->create(['role' => 'applicant']);
     $employer = User::factory()->create(['role' => 'employer']);
     $application = phaseSixApplication($employer, $applicant);
     $token = phaseSixToken($employer);
 
     $invalidSchedules = [
-        ['scheduled_at' => now()->subMinute()->toIso8601String()],
+        ['availability_dates' => [now('Asia/Manila')->subDay()->toDateString()]],
+        ['start_time' => '17:00', 'end_time' => '09:00'],
+        ['break_start_time' => '12:00', 'break_end_time' => null],
+        ['break_start_time' => '08:00', 'break_end_time' => '08:30'],
         ['mode' => 'video_call'],
         ['mode' => 'onsite', 'location' => null],
         ['mode' => 'online', 'location' => null, 'meeting_url' => null, 'meeting_instructions' => null],
         ['timezone' => 'Mars/Olympus_Mons'],
-        ['end_at' => now('Asia/Manila')->addDays(2)->setTime(9, 0)->format('Y-m-d H:i:s')],
     ];
 
     foreach ($invalidSchedules as $overrides) {
@@ -260,7 +277,154 @@ it('validates future date, timezone, mode, onsite location, and online meeting d
         ->and($application->refresh()->status)->toBe('shortlisted');
 });
 
-it('reschedules interviews with history and does not duplicate application status history', function (): void {
+it('generates slots around breaks and confirms an applicant-selected time', function (): void {
+    $applicant = User::factory()->create(['role' => 'applicant']);
+    $employer = User::factory()->create(['role' => 'employer']);
+    $application = phaseSixApplication($employer, $applicant);
+    $date = now('Asia/Manila')->addDays(2)->toDateString();
+    $this->withToken(phaseSixToken($employer))
+        ->postJson("/api/employer/applications/{$application->id}/interviews", phaseSixSchedule([
+            'availability_dates' => [$date],
+        ]))
+        ->assertCreated()
+        ->assertJsonPath('data.status', 'invited');
+    $interview = Interview::where('application_id', $application->id)->firstOrFail();
+
+    $this->app['auth']->forgetGuards();
+    $applicantToken = phaseSixToken($applicant);
+    $this->withToken($applicantToken)
+        ->getJson("/api/applicant/interviews/{$interview->id}/availability")
+        ->assertOk()
+        ->assertJsonPath('data.dates.0.date', $date)
+        ->assertJsonPath('data.dates.0.slots.0.start_time', '09:00')
+        ->assertJsonPath('data.dates.0.slots.3.start_time', '13:00')
+        ->assertJsonMissing(['start_time' => '12:00']);
+
+    $this->app['auth']->forgetGuards();
+    $this->withToken($applicantToken)
+        ->postJson("/api/applicant/interviews/{$interview->id}/schedule", [
+            'date' => $date,
+            'start_time' => '10:00',
+        ])
+        ->assertOk()
+        ->assertJsonPath('data.status', 'scheduled');
+
+    $interview->refresh();
+    expect($interview->scheduled_at->utc()->toISOString())
+        ->toBe(CarbonImmutable::parse($date.' 10:00', 'Asia/Manila')->utc()->toISOString())
+        ->and($applicant->notifications()->count())->toBe(1)
+        ->and($employer->notifications()->count())->toBe(1);
+    $this->assertDatabaseHas('interview_histories', [
+        'interview_id' => $interview->id,
+        'event_type' => 'booked',
+    ]);
+
+    $this->app['auth']->forgetGuards();
+    $this->withToken($applicantToken)
+        ->postJson("/api/applicant/interviews/{$interview->id}/schedule", [
+            'date' => $date,
+            'start_time' => '10:00',
+        ])
+        ->assertOk();
+    expect($interview->histories()->count())->toBe(2);
+});
+
+it('rejects lunch, unlisted, and double-booked interview slots', function (): void {
+    $employer = User::factory()->create(['role' => 'employer']);
+    $firstApplicant = User::factory()->create(['role' => 'applicant']);
+    $secondApplicant = User::factory()->create(['role' => 'applicant']);
+    $firstApplication = phaseSixApplication($employer, $firstApplicant);
+    $secondApplication = phaseSixApplication($employer, $secondApplicant);
+    $date = now('Asia/Manila')->addDays(3)->toDateString();
+    $employerToken = phaseSixToken($employer);
+
+    foreach ([$firstApplication, $secondApplication] as $application) {
+        $this->app['auth']->forgetGuards();
+        $this->withToken($employerToken)
+            ->postJson("/api/employer/applications/{$application->id}/interviews", phaseSixSchedule([
+                'availability_dates' => [$date],
+            ]))
+            ->assertCreated();
+    }
+
+    $interviews = Interview::orderBy('id')->get();
+    $this->app['auth']->forgetGuards();
+    $this->withToken(phaseSixToken($firstApplicant))
+        ->postJson("/api/applicant/interviews/{$interviews[0]->id}/schedule", [
+            'date' => $date,
+            'start_time' => '12:00',
+        ])
+        ->assertStatus(409);
+
+    $this->app['auth']->forgetGuards();
+    $this->withToken(phaseSixToken($firstApplicant))
+        ->postJson("/api/applicant/interviews/{$interviews[0]->id}/schedule", [
+            'date' => now('Asia/Manila')->addDays(4)->toDateString(),
+            'start_time' => '09:00',
+        ])
+        ->assertStatus(409);
+
+    $this->app['auth']->forgetGuards();
+    $this->withToken(phaseSixToken($firstApplicant))
+        ->postJson("/api/applicant/interviews/{$interviews[0]->id}/schedule", [
+            'date' => $date,
+            'start_time' => '09:00',
+        ])
+        ->assertOk();
+
+    $this->app['auth']->forgetGuards();
+    $this->withToken(phaseSixToken($secondApplicant))
+        ->postJson("/api/applicant/interviews/{$interviews[1]->id}/schedule", [
+            'date' => $date,
+            'start_time' => '09:00',
+        ])
+        ->assertStatus(409);
+});
+
+it('preserves a confirmed interview when the employer edits availability and lets applicants cancel', function (): void {
+    $applicant = User::factory()->create(['role' => 'applicant']);
+    $employer = User::factory()->create(['role' => 'employer']);
+    $application = phaseSixApplication($employer, $applicant);
+    $token = phaseSixToken($employer);
+    $date = now('Asia/Manila')->addDays(2)->toDateString();
+    $this->withToken($token)
+        ->postJson("/api/employer/applications/{$application->id}/interviews", phaseSixSchedule([
+            'availability_dates' => [$date],
+        ]))
+        ->assertCreated();
+    $interview = Interview::where('application_id', $application->id)->firstOrFail();
+
+    $this->app['auth']->forgetGuards();
+    $applicantToken = phaseSixToken($applicant);
+    $this->withToken($applicantToken)
+        ->postJson("/api/applicant/interviews/{$interview->id}/schedule", [
+            'date' => $date,
+            'start_time' => '10:00',
+        ])
+        ->assertOk();
+    $bookedAt = $interview->refresh()->scheduled_at->toISOString();
+
+    $this->app['auth']->forgetGuards();
+    $this->withToken($token)
+        ->putJson("/api/employer/interviews/{$interview->id}/availability", phaseSixSchedule([
+            'availability_dates' => [now('Asia/Manila')->addDays(5)->toDateString()],
+        ]))
+        ->assertOk()
+        ->assertJsonPath('booked_date_preserved', true)
+        ->assertJsonPath('data.status', 'scheduled');
+    expect($interview->refresh()->scheduled_at->toISOString())->toBe($bookedAt)
+        ->and($interview->availability()->count())->toBe(2);
+
+    $this->app['auth']->forgetGuards();
+    $this->withToken($applicantToken)
+        ->postJson("/api/applicant/interviews/{$interview->id}/cancel", ['reason' => 'Cannot attend'])
+        ->assertOk()
+        ->assertJsonPath('data.status', 'cancelled');
+    expect($employer->notifications()->count())->toBe(1)
+        ->and($interview->refresh()->cancellation_reason)->toBe('Cannot attend');
+});
+
+it('rejects employer direct scheduling changes in favor of applicant-selected times', function (): void {
     $applicant = User::factory()->create(['role' => 'applicant']);
     $employer = User::factory()->create(['role' => 'employer']);
     $application = phaseSixApplication($employer, $applicant);
@@ -269,36 +433,14 @@ it('reschedules interviews with history and does not duplicate application statu
     $this->withToken($token)->postJson("/api/employer/applications/{$application->id}/interviews", phaseSixSchedule())
         ->assertCreated();
     $interview = Interview::where('application_id', $application->id)->firstOrFail();
-    $statusHistoryCount = $application->statusHistories()->count();
 
     $this->app['auth']->forgetGuards();
     $this->withToken($token)->putJson("/api/employer/interviews/{$interview->id}", phaseSixSchedule([
-        'scheduled_at' => now('Asia/Manila')->addDays(4)->setTime(13, 0)->format('Y-m-d H:i:s'),
-        'end_at' => now('Asia/Manila')->addDays(4)->setTime(14, 0)->format('Y-m-d H:i:s'),
-        'mode' => 'online',
-        'location' => null,
-        'meeting_url' => 'https://meet.example.com/interview',
-        'meeting_instructions' => null,
-        'applicant_notes' => 'Join five minutes early.',
-    ]))->assertOk()
-        ->assertJsonPath('data.mode', 'online')
-        ->assertJsonPath('data.meeting_url', 'https://meet.example.com/interview')
-        ->assertJsonCount(2, 'data.history');
+        'availability_dates' => [now('Asia/Manila')->addDays(4)->toDateString()],
+    ]))->assertStatus(405);
 
-    $interview->refresh();
-    expect(abs($interview->scheduled_at->diffInSeconds(
-        now('Asia/Manila')->addDays(4)->setTime(13, 0)->utc(),
-    )))->toBeLessThanOrEqual(1)
-        ->and($interview->mode)->toBe('online')
-        ->and($application->statusHistories()->count())->toBe($statusHistoryCount);
-
-    $this->assertDatabaseHas('interview_histories', [
-        'interview_id' => $interview->id,
-        'event_type' => 'rescheduled',
-    ]);
-    expect($applicant->notifications()->count())->toBe(1);
-    expect($applicant->notifications()->first()?->data['event'] ?? null)
-        ->toBe('interview_rescheduled');
+    expect($interview->refresh()->status)->toBe('invited')
+        ->and($application->refresh()->status)->toBe('interview');
 });
 
 it('cancels without changing the application pipeline and prevents repeated cancellation or rescheduling', function (): void {
@@ -327,7 +469,7 @@ it('cancels without changing the application pipeline and prevents repeated canc
         ->assertUnprocessable();
     $this->app['auth']->forgetGuards();
     $this->withToken($token)->putJson("/api/employer/interviews/{$interview->id}", phaseSixSchedule())
-        ->assertUnprocessable();
+        ->assertStatus(405);
 
     $this->assertDatabaseCount('interview_histories', 2);
     $this->assertDatabaseHas('interview_histories', [
@@ -350,7 +492,7 @@ it('prevents employers from modifying another employer interview', function (): 
     $token = phaseSixToken($otherEmployer);
     $this->withToken($token)->getJson("/api/employer/interviews/{$interview->id}")->assertNotFound();
     $this->app['auth']->forgetGuards();
-    $this->withToken($token)->putJson("/api/employer/interviews/{$interview->id}", phaseSixSchedule())
+    $this->withToken($token)->putJson("/api/employer/interviews/{$interview->id}/availability", phaseSixSchedule())
         ->assertNotFound();
     $this->app['auth']->forgetGuards();
     $this->withToken($token)->postJson("/api/employer/interviews/{$interview->id}/cancel")
@@ -362,16 +504,6 @@ it('allows employers to mark past interviews completed without changing the appl
     $employer = User::factory()->create(['role' => 'employer']);
     $application = phaseSixApplication($employer, $applicant);
     $token = phaseSixToken($employer);
-    $schedule = phaseSixSchedule([
-        'scheduled_at' => now()->subHour()->toIso8601String(),
-        'end_at' => now()->addMinutes(30)->toIso8601String(),
-    ]);
-
-    $this->withToken($token)->postJson(
-        "/api/employer/applications/{$application->id}/interviews",
-        $schedule,
-    )->assertUnprocessable();
-
     $interview = phaseSixInterview($application, 'scheduled', now()->subHour());
     $this->app['auth']->forgetGuards();
     $this->withToken($token)->patchJson("/api/employer/interviews/{$interview->id}/status", [

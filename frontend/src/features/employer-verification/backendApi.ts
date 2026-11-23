@@ -19,6 +19,42 @@ type DocumentResponse = {
   document?: StoredVerificationDocument;
 };
 
+export type StoredCompanyMediaAsset = {
+  id: number;
+  url: string;
+  alt_text: string;
+  original_filename: string;
+  mime_type: string;
+  size_bytes: number;
+};
+
+export type EmployerCompany = {
+  id: number;
+  name: string;
+  category_id: number | null;
+  company_size: string | null;
+  address: string | null;
+  country: string | null;
+  city: string | null;
+  industry: string | null;
+  website: string | null;
+  description: string | null;
+  contact_name: string | null;
+  contact_email: string | null;
+  contact_phone: string | null;
+  logo_url: string | null;
+  media: StoredCompanyMediaAsset[];
+};
+
+export const employerVerificationUpdatedEvent =
+  "careerconnect:employer-verification-updated";
+
+function notifyVerificationUpdated(): void {
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new Event(employerVerificationUpdatedEvent));
+  }
+}
+
 function mapDocument(
   document: StoredVerificationDocument,
   employerId: string,
@@ -36,29 +72,17 @@ function mapDocument(
 
 export const employerVerificationFilesApi = {
   company(token: string) {
-    return apiRequest<{
-      company: {
-        id: number;
-        name: string;
-        category_id: number | null;
-        company_size: string | null;
-        address: string | null;
-        country: string | null;
-        city: string | null;
-        website: string | null;
-        description: string | null;
-        contact_phone: string | null;
-        logo_url: string | null;
-      } | null;
-    }>("/employer/company", {}, token);
+    return apiRequest<{ company: EmployerCompany | null }>("/employer/company", {}, token);
   },
 
-  updateCompany(token: string, data: Record<string, unknown>) {
-    return apiRequest<{ message: string; company: { website: string | null } }>(
+  async updateCompany(token: string, data: Record<string, unknown>) {
+    const response = await apiRequest<{ message: string; company: EmployerCompany }>(
       "/employer/company",
       { method: "PUT", data },
       token,
     );
+    notifyVerificationUpdated();
+    return response;
   },
 
   async uploadLogo(
@@ -79,11 +103,42 @@ export const employerVerificationFilesApi = {
       },
       token,
     );
+    notifyVerificationUpdated();
     return response.logo_url;
   },
 
   async deleteLogo(token: string): Promise<void> {
     await apiRequest("/employer/company/logo", { method: "DELETE" }, token);
+    notifyVerificationUpdated();
+  },
+
+  async uploadCompanyMedia(
+    token: string,
+    file: File,
+    altText: string,
+    onProgress: (progress: number) => void,
+  ): Promise<StoredCompanyMediaAsset> {
+    const formData = new FormData();
+    formData.set("photo", file);
+    formData.set("alt_text", altText);
+    const response = await apiRequest<{ media: StoredCompanyMediaAsset }>(
+      "/employer/company/media",
+      {
+        method: "POST",
+        data: formData,
+        onUploadProgress: (event) => {
+          if (event.total) onProgress(Math.round((event.loaded / event.total) * 100));
+        },
+      },
+      token,
+    );
+    notifyVerificationUpdated();
+    return response.media;
+  },
+
+  async deleteCompanyMedia(token: string, mediaId: string): Promise<void> {
+    await apiRequest(`/employer/company/media/${mediaId}`, { method: "DELETE" }, token);
+    notifyVerificationUpdated();
   },
 
   status(token: string) {
@@ -137,13 +192,16 @@ export const employerVerificationFilesApi = {
       throw new Error("The server did not return the uploaded document.");
     }
 
-    return mapDocument(response.document, employerId);
+    const document = mapDocument(response.document, employerId);
+    notifyVerificationUpdated();
+    return document;
   },
 
   async remove(token: string, documentId: string): Promise<void> {
     await apiRequest(`/employer/verification/documents/${documentId}`, {
       method: "DELETE",
     }, token);
+    notifyVerificationUpdated();
   },
 
   async download(token: string, documentId: string): Promise<Blob> {
@@ -152,6 +210,7 @@ export const employerVerificationFilesApi = {
 
   async submit(token: string): Promise<void> {
     await apiRequest("/employer/verification/submit", { method: "POST" }, token);
+    notifyVerificationUpdated();
   },
 };
 

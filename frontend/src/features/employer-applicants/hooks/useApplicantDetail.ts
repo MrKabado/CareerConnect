@@ -6,6 +6,7 @@ import type { Conversation } from "@/features/messaging/types";
 import {
   downloadEmployerApplicantCoverLetter,
   downloadEmployerApplicantResume,
+  getEmployerApplicantResumeUrls,
 } from "@/features/employer-applicants/api";
 import { useApplicantStatus } from "@/features/employer-applicants/useApplicantStatus";
 import type { ApplicantDocument } from "@/features/employer-applicants/types";
@@ -46,6 +47,24 @@ export function useApplicantDetail() {
       setDocumentError(null);
       setDocumentLoading(true);
       try {
+        if (selectedDocument.title === "Resume") {
+          const urls = await getEmployerApplicantResumeUrls(token, applicant.id);
+          if (!active) return;
+          if (urls) {
+            const isPdf = selectedDocument.mimeType === "application/pdf"
+              || /\.pdf$/i.test(selectedDocument.fileName);
+            setSelectedDocument((current) =>
+              current?.id === selectedDocument.id
+                ? {
+                    ...current,
+                    dataUrl: isPdf ? urls.previewUrl : urls.downloadUrl,
+                  }
+                : current,
+            );
+            return;
+          }
+        }
+
         const file = selectedDocument.title.toLowerCase().includes("cover letter")
           ? await downloadEmployerApplicantCoverLetter(token, applicant.id)
           : await downloadEmployerApplicantResume(token, applicant.id);
@@ -119,9 +138,22 @@ export function useApplicantDetail() {
     setDocumentError(null);
     setDocumentLoading(true);
     try {
-      const file = selectedDocument.title.toLowerCase().includes("cover letter")
-        ? await downloadEmployerApplicantCoverLetter(token, applicant.id)
-        : await downloadEmployerApplicantResume(token, applicant.id);
+      let file: Blob;
+      if (selectedDocument.title === "Resume") {
+        const urls = await getEmployerApplicantResumeUrls(token, applicant.id);
+        if (urls) {
+          const link = window.document.createElement("a");
+          link.href = urls.downloadUrl;
+          link.download = selectedDocument.fileName;
+          window.document.body.append(link);
+          link.click();
+          link.remove();
+          return;
+        }
+        file = await downloadEmployerApplicantResume(token, applicant.id);
+      } else {
+        file = await downloadEmployerApplicantCoverLetter(token, applicant.id);
+      }
       const objectUrl = URL.createObjectURL(file);
       const link = window.document.createElement("a");
       link.href = objectUrl;

@@ -4,6 +4,8 @@ import { getCompanyProfileUrl } from "@/features/companies/companyProfiles";
 import type { ScoredOjtOpportunity } from "@/features/jobs/ojtMatching";
 import { savedOpportunityStore } from "@/features/jobs/savedOpportunities";
 import { useSyncExternalStore } from "react";
+import { useAuth } from "@/features/auth/useAuth";
+import { getIdentityVerificationMessage } from "@/features/user-applications/identityVerification";
 
 function LockIcon() {
   return (
@@ -144,6 +146,17 @@ export function OjtOpportunityCard({
   showMatchScore?: boolean;
 }) {
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const verificationStatus = user?.role === "applicant"
+    ? user.identity_verification_status ?? "unverified"
+    : null;
+  const verificationMessage = verificationStatus
+    ? getIdentityVerificationMessage(
+        verificationStatus,
+        user?.role === "applicant" ? user.identity_verification_rejection_reason : null,
+      )
+    : null;
+  const verificationRequired = user?.role === "applicant" && verificationStatus !== "verified";
   const isSaved = useSyncExternalStore(
     savedOpportunityStore.subscribe,
     () => savedOpportunityStore.isSaved("ojt", opportunity.id),
@@ -275,16 +288,34 @@ export function OjtOpportunityCard({
             </span>
             <div className="flex items-center gap-3">
               {/^\d+$/.test(opportunity.id) && (
-                <button
-                  className="rounded-lg bg-[#078b8d] px-3 py-1.5 text-[10px] font-semibold text-white hover:bg-[#067476]"
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    navigate(`/apply/${opportunity.id}`);
-                  }}
-                  type="button"
-                >
-                  Apply
-                </button>
+                <>
+                  <button
+                    aria-describedby={user?.has_been_hired
+                      ? `hired-application-notice-${opportunity.id}`
+                      : verificationRequired
+                        ? `identity-application-notice-${opportunity.id}`
+                        : undefined}
+                    className="rounded-lg bg-[#078b8d] px-3 py-1.5 text-[10px] font-semibold text-white hover:bg-[#067476] disabled:cursor-not-allowed disabled:bg-[#9aa6a7]"
+                    disabled={user?.has_been_hired || verificationRequired}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      navigate(`/apply/${opportunity.id}`);
+                    }}
+                    type="button"
+                  >
+                    {user?.has_been_hired || verificationRequired ? "Applications unavailable" : "Apply"}
+                  </button>
+                  {user?.has_been_hired && (
+                    <span className="text-[9px] text-[#758687]" id={`hired-application-notice-${opportunity.id}`}>
+                      You have been marked as hired and cannot submit new applications.
+                    </span>
+                  )}
+                  {verificationRequired && !user?.has_been_hired && (
+                    <span className="max-w-56 text-[9px] text-[#758687]" id={`identity-application-notice-${opportunity.id}`}>
+                      {verificationMessage}
+                    </span>
+                  )}
+                </>
               )}
               <span className="whitespace-nowrap text-[9px] text-[#9aa6a7]">
                 {opportunity.posted}

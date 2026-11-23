@@ -10,6 +10,7 @@ import profileNavIcon from "@/assets/Icon (10).svg";
 import { useUnreadCount } from "@/features/messaging/hooks";
 import { applicantFilesApi } from "@/features/user-profile/backendApi";
 import RoleNotificationBell from "@/features/notifications/RoleNotificationBell";
+import { useScrollDirectionHeader } from "@/hooks/useScrollDirectionHeader";
 
 const navItems = [
   { label: "Search Job", to: "/job-search", icon: jobSearchNavIcon },
@@ -83,6 +84,9 @@ export default function Header() {
   const [logoutError, setLogoutError] = useState<string | null>(null);
   const [profilePhotoUrl, setProfilePhotoUrl] = useState<string | null>(null);
   const dropdownAreaRef = useRef<HTMLDivElement>(null);
+  const { headerRef, isVisible: headerVisible } = useScrollDirectionHeader(
+    mobileMenuOpen || openDropdown !== null,
+  );
   const isNavItemActive = (to: string) =>
     pathname === to ||
     (to === "/job-search" &&
@@ -159,7 +163,12 @@ export default function Header() {
   }
 
   return (
-    <header className="relative grid h-18 grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center border-b border-[#edf1f1] bg-white px-[max(40px,calc((100vw-1136px)/2))] max-[920px]:h-16.5 max-[920px]:px-6 max-[680px]:h-15 max-[680px]:grid-cols-[1fr_auto] max-[680px]:px-4.25">
+    <header
+      className={`sticky top-0 z-50 grid h-18 grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center border-b border-[#edf1f1] bg-white px-[max(40px,calc((100vw-1136px)/2))] transition-transform duration-300 motion-reduce:transition-none max-[920px]:h-16.5 max-[920px]:px-6 max-[680px]:h-15 max-[680px]:grid-cols-[1fr_auto] max-[680px]:px-4.25 ${
+        headerVisible ? "translate-y-0" : "-translate-y-full"
+      }`}
+      ref={headerRef}
+    >
       <Link className="inline-flex items-center justify-self-start gap-2.5 whitespace-nowrap text-[18px] font-bold tracking-[-0.55px] text-[#263a3c] max-[680px]:gap-2 max-[680px]:text-base focus-visible:outline-[3px] focus-visible:outline-[#67c9c1] focus-visible:outline-offset-[3px]" to="/" aria-label="CareerConnect home">
         <span className="grid size-7.75 place-items-center rounded-[10px] bg-[#078b8d] text-[19px] font-bold tracking-[-1px] text-white max-[680px]:size-7 max-[680px]:rounded-lg max-[680px]:text-[17px]">C</span>
         <span>Career<span className="text-[#078b8d]">Connect</span></span>

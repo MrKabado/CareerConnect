@@ -55,6 +55,7 @@ Route::middleware(['auth:sanctum', 'account.active', 'abilities:*', 'throttle:60
 
     Route::middleware('role:applicant')->prefix('applicant')->group(function (): void {
         Route::get('/dashboard', [DashboardController::class, 'applicant']);
+        Route::get('/application-eligibility', [ApplicationController::class, 'eligibility']);
         Route::get('/job-listing-statuses', [ApplicationController::class, 'applicantListingStatuses']);
         Route::get('/resume', [ApplicantResumeController::class, 'show']);
         Route::post('/resume', [ApplicantResumeController::class, 'store']);
@@ -73,6 +74,12 @@ Route::middleware(['auth:sanctum', 'account.active', 'abilities:*', 'throttle:60
         Route::get('/interviews', [InterviewController::class, 'applicantIndex']);
         Route::get('/interviews/upcoming', [InterviewController::class, 'applicantUpcoming']);
         Route::get('/interviews/past', [InterviewController::class, 'applicantPast']);
+        Route::get('/interviews/{interview}/availability', [InterviewController::class, 'applicantAvailability'])
+            ->whereNumber('interview');
+        Route::post('/interviews/{interview}/schedule', [InterviewController::class, 'bookApplicantInterview'])
+            ->whereNumber('interview');
+        Route::post('/interviews/{interview}/cancel', [InterviewController::class, 'applicantCancel'])
+            ->whereNumber('interview');
         Route::get('/interviews/{interview}', [InterviewController::class, 'applicantShow'])
             ->whereNumber('interview');
         Route::get('/applications/{application}/status-history', [ApplicationController::class, 'applicantStatusHistory'])
@@ -101,6 +108,9 @@ Route::middleware(['auth:sanctum', 'account.active', 'abilities:*', 'throttle:60
         Route::put('/company', [EmployerVerificationController::class, 'company']);
         Route::post('/company/logo', [EmployerVerificationController::class, 'uploadLogo']);
         Route::delete('/company/logo', [EmployerVerificationController::class, 'deleteLogo']);
+        Route::post('/company/media', [EmployerVerificationController::class, 'uploadCompanyMedia']);
+        Route::delete('/company/media/{companyMediaAsset}', [EmployerVerificationController::class, 'deleteCompanyMedia'])
+            ->whereNumber('companyMediaAsset');
         Route::get('/verification/documents', [EmployerVerificationController::class, 'documents']);
         Route::post('/verification/documents', [EmployerVerificationController::class, 'uploadDocument']);
         Route::get('/verification/documents/{verificationDocument}/download', [EmployerVerificationController::class, 'downloadDocument'])
@@ -125,12 +135,16 @@ Route::middleware(['auth:sanctum', 'account.active', 'abilities:*', 'throttle:60
             ->whereNumber('application');
         Route::get('/interviews/{interview}', [InterviewController::class, 'employerShow'])
             ->whereNumber('interview');
+        Route::put('/interviews/{interview}/availability', [InterviewController::class, 'updateAvailability'])
+            ->whereNumber('interview');
         Route::put('/interviews/{interview}', [InterviewController::class, 'reschedule'])
             ->whereNumber('interview');
         Route::patch('/interviews/{interview}/status', [InterviewController::class, 'updateStatus'])
             ->whereNumber('interview');
         Route::post('/interviews/{interview}/cancel', [InterviewController::class, 'cancel'])
             ->whereNumber('interview');
+        Route::get('/applications/{application}/resume-urls', [ApplicationController::class, 'employerResumeUrls'])
+            ->whereNumber('application');
         Route::get('/applications/{application}/resume', [ApplicationController::class, 'employerResume'])
             ->whereNumber('application');
         Route::get('/applications/{application}/cover-letter', [ApplicationController::class, 'employerCoverLetter'])

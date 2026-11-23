@@ -1,5 +1,6 @@
-import { useId, useRef } from "react";
+import { useId, useRef, useState } from "react";
 import { useDialogBehavior } from "@/hooks/useDialogBehavior";
+import { toNameCase } from "@/features/auth/nameFormatting";
 
 type CreateListingModalProps = {
   companyName: string;
@@ -17,8 +18,8 @@ type CreateListingModalProps = {
     requiredHours: string;
     summary: string;
     responsibilities: string;
-    requirements: string;
-    requiredSkills: string;
+    requirements: string[];
+    requiredSkills: string[];
     employmentType: string;
     experienceRequirement: "with_experience" | "without_experience";
     minimumExperienceYears: string;
@@ -31,16 +32,96 @@ type CreateListingModalProps = {
     applicantLimit: string;
     expiresAt: string;
   };
+  salaryRangeError: string | null;
   categories: Array<{ id: number; name: string }>;
   isSaving: boolean;
   error: string | null;
   onClose: () => void;
   onTypePick: (type: "job" | "ojt") => void;
   onBack: () => void;
-  onFieldChange: (field: keyof CreateListingModalProps["newListingForm"], value: string) => void;
+  onFieldChange: (
+    field: Exclude<keyof CreateListingModalProps["newListingForm"], "requirements" | "requiredSkills">,
+    value: string,
+  ) => void;
+  onListChange: (field: "requirements" | "requiredSkills", values: string[]) => void;
   onSaveDraft: () => void;
   onPublish: () => void;
 };
+
+function EditableListField({
+  label,
+  values,
+  onChange,
+  placeholder,
+  titleCase = false,
+}: {
+  label: string;
+  values: string[];
+  onChange: (values: string[]) => void;
+  placeholder: string;
+  titleCase?: boolean;
+}) {
+  const [input, setInput] = useState("");
+
+  function addItem() {
+    const value = input.trim();
+    if (!value || values.some((item) => item.toLocaleLowerCase() === value.toLocaleLowerCase())) {
+      setInput("");
+      return;
+    }
+    onChange([...values, titleCase ? toNameCase(value) : value.replace(/^(\s*)(\p{L})/u, (_match, whitespace: string, letter: string) =>
+      `${whitespace}${letter.toLocaleUpperCase()}`,
+    )]);
+    setInput("");
+  }
+
+  return (
+    <div className="mt-4 text-[11px] font-medium text-[#445a5d]">
+      <span className="mb-1.5 block">{label}</span>
+      <div className="flex items-center gap-2">
+        <input
+          aria-label={label}
+          maxLength={1000}
+          onChange={(event) => setInput(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") {
+              event.preventDefault();
+              addItem();
+            }
+          }}
+          placeholder={placeholder}
+          value={input}
+          className="min-w-0 flex-1 rounded-xl border border-[#dfe8e7] bg-white px-3 py-2.5 text-[12px] text-[#1d3133] placeholder:text-[#8a9b9d]"
+        />
+        <button
+          className="rounded-xl bg-[#0e8e9b] px-4 py-2.5 text-[11px] font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
+          disabled={!input.trim()}
+          onClick={addItem}
+          type="button"
+        >
+          Add
+        </button>
+      </div>
+      {values.length > 0 && (
+        <ul className="mt-2 space-y-1.5">
+          {values.map((value, index) => (
+            <li className="flex items-start justify-between gap-2 rounded-lg bg-white px-3 py-2 text-[11px]" key={`${value}-${index}`}>
+              <span>{value}</span>
+              <button
+                aria-label={`Remove ${value}`}
+                className="shrink-0 text-[#9a4a45] hover:underline"
+                onClick={() => onChange(values.filter((_item, itemIndex) => itemIndex !== index))}
+                type="button"
+              >
+                Remove
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
 
 export default function CreateListingModal({
   companyName,
@@ -49,6 +130,7 @@ export default function CreateListingModal({
   newListingStep,
   modalTitle,
   newListingForm,
+  salaryRangeError,
   categories,
   isSaving,
   error,
@@ -56,6 +138,7 @@ export default function CreateListingModal({
   onTypePick,
   onBack,
   onFieldChange,
+  onListChange,
   onSaveDraft,
   onPublish,
 }: CreateListingModalProps) {
@@ -143,7 +226,7 @@ export default function CreateListingModal({
             <>
               <div className="mb-4">
                 <h2 id={titleId} className="text-[15px] font-bold tracking-[-0.04em] text-[#1d3133]">{modalTitle}</h2>
-                <p className="mt-1 text-[11px] text-[#677c7d]">Review the details, then save privately as a draft or publish it for applicants to find. Publishing requires an approved company.</p>
+                <p className="mt-1 text-[11px] text-[#677c7d]">Save a draft after entering at least one detail. Complete all required fields before publishing. Publishing requires an approved company.</p>
               </div>
               <div className="grid gap-4 md:grid-cols-2">
                 <label className="block text-[11px] font-medium text-[#445a5d]">
@@ -180,7 +263,7 @@ export default function CreateListingModal({
                 </label>
                 <label className="block text-[11px] font-medium text-[#445a5d]">
                   <span className="mb-1.5 block">Applicant limit *</span>
-                  <input type="number" min="1" max="65535" value={newListingForm.applicantLimit} onChange={(event) => onFieldChange("applicantLimit", event.target.value)} className="w-full rounded-xl border border-[#dfe8e7] bg-white px-3 py-2.5 text-[12px] text-[#1d3133] outline-none transition focus:border-[#b8dde0]" />
+                  <input type="number" min="1" max="4294967295" step="1" value={newListingForm.applicantLimit} onChange={(event) => onFieldChange("applicantLimit", event.target.value)} className="w-full rounded-xl border border-[#dfe8e7] bg-white px-3 py-2.5 text-[12px] text-[#1d3133] outline-none transition focus:border-[#b8dde0]" />
                 </label>
                 <label className="block text-[11px] font-medium text-[#445a5d]">
                   <span className="mb-1.5 block">Expiration date (optional)</span>
@@ -188,12 +271,12 @@ export default function CreateListingModal({
                 </label>
                 {newListingType === "ojt" && <label className="block text-[11px] font-medium text-[#445a5d]">
                   <span className="mb-1.5 block">Available slots *</span>
-                  <input value={newListingForm.availableSlots} onChange={(event) => onFieldChange("availableSlots", event.target.value)} className="w-full rounded-xl border border-[#dfe8e7] bg-white px-3 py-2.5 text-[12px] text-[#1d3133] outline-none transition focus:border-[#b8dde0]" />
+                  <input type="number" min="1" max="65535" step="1" value={newListingForm.availableSlots} onChange={(event) => onFieldChange("availableSlots", event.target.value)} className="w-full rounded-xl border border-[#dfe8e7] bg-white px-3 py-2.5 text-[12px] text-[#1d3133] outline-none transition focus:border-[#b8dde0]" />
                 </label>
                 }
                 {newListingType === "ojt" && <label className="block text-[11px] font-medium text-[#445a5d]">
                   <span className="mb-1.5 block">Required hours *</span>
-                  <input value={newListingForm.requiredHours} onChange={(event) => onFieldChange("requiredHours", event.target.value)} className="w-full rounded-xl border border-[#dfe8e7] bg-white px-3 py-2.5 text-[12px] text-[#1d3133] outline-none transition focus:border-[#b8dde0]" />
+                  <input type="number" min="1" max="65535" step="1" value={newListingForm.requiredHours} onChange={(event) => onFieldChange("requiredHours", event.target.value)} className="w-full rounded-xl border border-[#dfe8e7] bg-white px-3 py-2.5 text-[12px] text-[#1d3133] outline-none transition focus:border-[#b8dde0]" />
                 </label>
                 }
                 {newListingType === "job" && <>
@@ -231,12 +314,17 @@ export default function CreateListingModal({
                   )}
                   <label className="block text-[11px] font-medium text-[#445a5d]">
                     <span className="mb-1.5 block">Minimum salary</span>
-                    <input type="number" min="0" value={newListingForm.salaryMin} onChange={(event) => onFieldChange("salaryMin", event.target.value)} className="w-full rounded-xl border border-[#dfe8e7] bg-white px-3 py-2.5 text-[12px]" />
+                    <input aria-describedby={salaryRangeError ? "listing-salary-error" : undefined} aria-invalid={Boolean(salaryRangeError)} type="text" inputMode="numeric" pattern="[0-9]{0,9}" maxLength={9} value={newListingForm.salaryMin} onChange={(event) => onFieldChange("salaryMin", event.target.value.replace(/\D/g, ""))} className="w-full rounded-xl border border-[#dfe8e7] bg-white px-3 py-2.5 text-[12px]" />
                   </label>
                   <label className="block text-[11px] font-medium text-[#445a5d]">
                     <span className="mb-1.5 block">Maximum salary</span>
-                    <input type="number" min="0" value={newListingForm.salaryMax} onChange={(event) => onFieldChange("salaryMax", event.target.value)} className="w-full rounded-xl border border-[#dfe8e7] bg-white px-3 py-2.5 text-[12px]" />
+                    <input aria-describedby={salaryRangeError ? "listing-salary-error" : undefined} aria-invalid={Boolean(salaryRangeError)} type="text" inputMode="numeric" pattern="[0-9]{0,9}" maxLength={9} value={newListingForm.salaryMax} onChange={(event) => onFieldChange("salaryMax", event.target.value.replace(/\D/g, ""))} className="w-full rounded-xl border border-[#dfe8e7] bg-white px-3 py-2.5 text-[12px]" />
                   </label>
+                  {salaryRangeError && (
+                    <p className="col-span-full text-[10px] text-red-700" id="listing-salary-error" role="alert">
+                      {salaryRangeError}
+                    </p>
+                  )}
                 </>}
                 {newListingType === "ojt" && <>
                   <label className="block text-[11px] font-medium text-[#445a5d]">
@@ -245,7 +333,7 @@ export default function CreateListingModal({
                   </label>
                   {newListingForm.allowanceType === "paid" && <label className="block text-[11px] font-medium text-[#445a5d]">
                     <span className="mb-1.5 block">Monthly allowance</span>
-                    <input type="number" min="0" value={newListingForm.allowanceAmount} onChange={(event) => onFieldChange("allowanceAmount", event.target.value)} className="w-full rounded-xl border border-[#dfe8e7] bg-white px-3 py-2.5 text-[12px]" />
+                    <input type="number" min="0" max="4294967295" step="1" value={newListingForm.allowanceAmount} onChange={(event) => onFieldChange("allowanceAmount", event.target.value)} className="w-full rounded-xl border border-[#dfe8e7] bg-white px-3 py-2.5 text-[12px]" />
                   </label>}
                   <label className="block text-[11px] font-medium text-[#445a5d]">
                     <span className="mb-1.5 block">Accepted courses (comma-separated)</span>
@@ -269,20 +357,20 @@ export default function CreateListingModal({
                 <span className="mb-1.5 block">Responsibilities *</span>
                 <textarea value={newListingForm.responsibilities} onChange={(event) => onFieldChange("responsibilities", event.target.value)} rows={3} className="w-full resize-y rounded-xl border border-[#dfe8e7] bg-white px-3 py-2.5 text-[12px]" />
               </label>
-              <label className="mt-4 block text-[11px] font-medium text-[#445a5d]">
-                <span className="mb-1.5 block">Requirements *</span>
-                <textarea value={newListingForm.requirements} onChange={(event) => onFieldChange("requirements", event.target.value)} rows={3} className="w-full resize-y rounded-xl border border-[#dfe8e7] bg-white px-3 py-2.5 text-[12px]" />
-              </label>
+              <EditableListField
+                label="Requirements *"
+                onChange={(values) => onListChange("requirements", values)}
+                placeholder="Add a requirement"
+                values={newListingForm.requirements}
+              />
               {newListingType === "job" && (
-                <label className="mt-4 block text-[11px] font-medium text-[#445a5d]">
-                  <span className="mb-1.5 block">Required skills (comma-separated)</span>
-                  <input
-                    value={newListingForm.requiredSkills}
-                    onChange={(event) => onFieldChange("requiredSkills", event.target.value)}
-                    placeholder="e.g. PHP, SQL, REST APIs"
-                    className="w-full rounded-xl border border-[#dfe8e7] bg-white px-3 py-2.5 text-[12px] text-[#1d3133] placeholder:text-[#8a9b9d]"
-                  />
-                </label>
+                <EditableListField
+                  label="Required skills"
+                  onChange={(values) => onListChange("requiredSkills", values)}
+                  placeholder="Add a required skill"
+                  titleCase
+                  values={newListingForm.requiredSkills}
+                />
               )}
 
               {error && <p className="mt-3 text-xs text-red-700" role="alert">{error}</p>}
@@ -294,10 +382,12 @@ export default function CreateListingModal({
                   <button type="button" onClick={onClose} className="rounded-xl border border-[#dfe8e7] bg-white px-3 py-2 text-[11px] font-semibold text-[#4a6467] transition hover:border-[#d0e2e0]">
                     Cancel
                   </button>
-                  <button type="button" disabled={isSaving} onClick={onSaveDraft} className="rounded-xl border border-[#dfe8e7] bg-white px-3 py-2.5 text-[11px] font-semibold text-[#4a6467] transition hover:border-[#d0e2e0] disabled:opacity-50">
+                  <button aria-busy={isSaving} type="button" disabled={isSaving} onClick={onSaveDraft} className="rounded-xl border border-[#dfe8e7] bg-white px-3 py-2.5 text-[11px] font-semibold text-[#4a6467] transition hover:border-[#d0e2e0] disabled:opacity-50">
+                    {isSaving && <span aria-hidden="true" className="mr-2 inline-block size-3 animate-spin rounded-full border-2 border-current border-r-transparent" />}
                     {isSaving ? "Saving…" : "Save as draft"}
                   </button>
-                  <button type="button" disabled={isSaving} onClick={onPublish} className="rounded-xl bg-[#0e8e9b] px-4 py-2.5 text-[11px] font-semibold text-white shadow-[0_10px_18px_rgba(14,142,155,0.2)] transition hover:bg-[#0a7d8a] disabled:opacity-50">
+                  <button aria-busy={isSaving} type="button" disabled={isSaving} onClick={onPublish} className="rounded-xl bg-[#0e8e9b] px-4 py-2.5 text-[11px] font-semibold text-white shadow-[0_10px_18px_rgba(14,142,155,0.2)] transition hover:bg-[#0a7d8a] disabled:opacity-50">
+                    {isSaving && <span aria-hidden="true" className="mr-2 inline-block size-3 animate-spin rounded-full border-2 border-current border-r-transparent" />}
                     {isSaving ? "Saving…" : "Publish listing"}
                   </button>
                 </div>

@@ -1,5 +1,5 @@
 const apiBaseUrl = (
-  import.meta.env.VITE_API_BASE_URL ?? "http://192.168.254.125:8000/api"
+  import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000/api"
 ).replace(/\/+$/, "");
 
 let accessToken: string | null = null

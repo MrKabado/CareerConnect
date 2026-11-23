@@ -1,12 +1,9 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState } from "react";
 import { companyVerificationApi } from "@/features/company-verification/api";
 import { useCompanyVerification } from "@/features/company-verification/useCompanyVerification";
 import { useAuth } from "@/features/auth/useAuth";
 import { employerVerificationFilesApi } from "@/features/employer-verification/backendApi";
-import type {
-  CompanyMediaAsset,
-  CompanyMediaCollection,
-} from "@/features/company-profile/types";
+import type { CompanyMediaCollection } from "@/features/company-profile/types";
 
 const emptyMedia: CompanyMediaCollection = {
   logo: null,
@@ -16,34 +13,25 @@ const emptyMedia: CompanyMediaCollection = {
   coverImageId: null,
 };
 
-function makeAsset(): CompanyMediaAsset {
-  return {
-    id: globalThis.crypto?.randomUUID?.() ?? `company-media-${Date.now()}`,
-    url: "",
-    altText: "",
-  };
-}
-
-function isImageUrl(value: string): boolean {
-  if (value.startsWith("data:image/")) return true;
-  try {
-    const url = new URL(value);
-    return url.protocol === "https:" || url.protocol === "http:";
-  } catch {
-    return false;
-  }
-}
-
 export default function CompanyMediaManager() {
   const { user, token } = useAuth();
   const verification = useCompanyVerification();
   const savedMedia = verification.record.media ?? emptyMedia;
+  const savedMediaRef = useRef(savedMedia);
+  const employerId = user?.role === "employer" ? String(user.id) : undefined;
   const [draft, setDraft] = useState<CompanyMediaCollection>(savedMedia);
   const [isEditing, setIsEditing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [logoUrl, setLogoUrl] = useState<string | null>(savedMedia.logo?.url ?? null);
   const [logoUploadProgress, setLogoUploadProgress] = useState<number | null>(null);
   const [isRemovingLogo, setIsRemovingLogo] = useState(false);
+  const [photoAltText, setPhotoAltText] = useState("");
+  const [photoUploadProgress, setPhotoUploadProgress] = useState<number | null>(null);
+  const [removingPhotoId, setRemovingPhotoId] = useState<string | null>(null);
+
+  useEffect(() => {
+    savedMediaRef.current = savedMedia;
+  }, [savedMedia]);
 
   useEffect(() => {
     if (!token || user?.role !== "employer") return;
@@ -53,22 +41,38 @@ export default function CompanyMediaManager() {
       .then(({ company }) => {
         if (!active) return;
         const backendLogoUrl = company?.logo_url ?? null;
+        const backendGallery = (company?.media ?? []).map((photo) => ({
+          id: String(photo.id),
+          url: photo.url,
+          altText: photo.alt_text,
+        }));
+        const currentMedia = savedMediaRef.current;
+        const galleryMatches = currentMedia.gallery.length === backendGallery.length &&
+          currentMedia.gallery.every((photo, index) =>
+            photo.id === backendGallery[index].id &&
+            photo.url === backendGallery[index].url &&
+            photo.altText === backendGallery[index].altText,
+          );
         setLogoUrl(backendLogoUrl);
         window.dispatchEvent(new CustomEvent("careerconnect-employer-logo-changed", {
           detail: backendLogoUrl,
         }));
-        if ((savedMedia.logo?.url ?? null) !== backendLogoUrl) {
-          try {
-            companyVerificationApi.setCompanyMedia({
-              ...savedMedia,
-              logo: backendLogoUrl
-                ? { id: "server-company-logo", url: backendLogoUrl, altText: "Company logo" }
-                : null,
-            });
-          } catch {
-            setError("Logo loaded, but the local profile preview could not be refreshed.");
-          }
+        if ((currentMedia.logo?.url ?? null) !== backendLogoUrl || !galleryMatches) {
+          companyVerificationApi.setCompanyMedia({
+            ...currentMedia,
+            logo: backendLogoUrl
+              ? { id: "server-company-logo", url: backendLogoUrl, altText: "Company logo" }
+              : null,
+            gallery: backendGallery,
+          }, String(user.id));
         }
+        setDraft((current) => ({
+          ...current,
+          logo: backendLogoUrl
+            ? { id: "server-company-logo", url: backendLogoUrl, altText: "Company logo" }
+            : null,
+          gallery: backendGallery,
+        }));
       })
       .catch((requestError: unknown) => {
         if (active) {
@@ -82,52 +86,88 @@ export default function CompanyMediaManager() {
     return () => {
       active = false;
     };
-  }, [savedMedia, token, user?.role]);
+  }, [token, user?.id, user?.role]);
 
   const resetDraft = () => {
     setDraft(savedMedia);
     setError(null);
   };
 
-  function updatePhoto(id: string, field: "url" | "altText", value: string) {
-    setDraft((current) => ({
-      ...current,
-      gallery: current.gallery.map((photo) =>
-        photo.id === id
-          ? {
-              ...photo,
-              [field]: value,
-            }
-          : photo,
-      ),
-    }));
-  }
-
-  function handleSave(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const assets = draft.gallery;
-    if (assets.some((asset) => !isImageUrl(asset.url.trim()) || !asset.altText.trim())) {
-      setError("Add a valid image URL and descriptive alt text for each demo photo.");
+  async function handlePhotoUpload(file?: File) {
+    if (!file) return;
+    if (!token || !employerId) {
+      setError("Sign in with an employer account before uploading company photos.");
+      return;
+    }
+    if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
+      setError("Choose a JPG, PNG, or WebP photo.");
+      return;
+    }
+    if (file.size === 0 || file.size > 5 * 1024 * 1024) {
+      setError("Each company photo must be larger than 0 bytes and no more than 5 MB.");
+      return;
+    }
+    if (savedMedia.gallery.length >= 12) {
+      setError("You can upload up to 12 company photos.");
+      return;
+    }
+    if (!photoAltText.trim()) {
+      setError("Add a short description for this photo.");
       return;
     }
 
+    setError(null);
+    setPhotoUploadProgress(0);
     try {
-      companyVerificationApi.setCompanyMedia({
-        ...draft,
-        logo: logoUrl
-          ? {
-              id: draft.logo?.id ?? "server-company-logo",
-              url: logoUrl,
-              altText: draft.logo?.altText || "Company logo",
-            }
-          : null,
-      });
-      setError(null);
-      setIsEditing(false);
-    } catch (saveError) {
-      setError(
-        saveError instanceof Error ? saveError.message : "Unable to save company media.",
+      const uploaded = await employerVerificationFilesApi.uploadCompanyMedia(
+        token,
+        file,
+        photoAltText.trim(),
+        setPhotoUploadProgress,
       );
+      const nextGallery = [
+        ...savedMediaRef.current.gallery,
+        { id: String(uploaded.id), url: uploaded.url, altText: uploaded.alt_text },
+      ];
+      const nextMedia = { ...savedMediaRef.current, gallery: nextGallery };
+      companyVerificationApi.setCompanyMedia(nextMedia, employerId);
+      setDraft(nextMedia);
+      setPhotoAltText("");
+    } catch (requestError) {
+      setError(
+        requestError instanceof Error
+          ? requestError.message
+          : "The company photo could not be uploaded.",
+      );
+    } finally {
+      setPhotoUploadProgress(null);
+    }
+  }
+
+  async function handleRemovePhoto(photoId: string) {
+    if (!token || !employerId) {
+      setError("Sign in with an employer account before removing company photos.");
+      return;
+    }
+
+    setError(null);
+    setRemovingPhotoId(photoId);
+    try {
+      await employerVerificationFilesApi.deleteCompanyMedia(token, photoId);
+      const nextMedia = {
+        ...savedMediaRef.current,
+        gallery: savedMediaRef.current.gallery.filter((photo) => photo.id !== photoId),
+      };
+      companyVerificationApi.setCompanyMedia(nextMedia, employerId);
+      setDraft(nextMedia);
+    } catch (requestError) {
+      setError(
+        requestError instanceof Error
+          ? requestError.message
+          : "The company photo could not be removed.",
+      );
+    } finally {
+      setRemovingPhotoId(null);
     }
   }
 
@@ -169,18 +209,14 @@ export default function CompanyMediaManager() {
           altText: "Company logo",
         },
       }));
-      try {
-        companyVerificationApi.setCompanyMedia({
-          ...savedMedia,
-          logo: {
-            id: "server-company-logo",
-            url: uploadedUrl,
-            altText: "Company logo",
-          },
-        });
-      } catch {
-        setError("Logo uploaded, but the local profile preview could not be refreshed.");
-      }
+      companyVerificationApi.setCompanyMedia({
+        ...savedMediaRef.current,
+        logo: {
+          id: "server-company-logo",
+          url: uploadedUrl,
+          altText: "Company logo",
+        },
+      }, employerId);
     } catch (requestError) {
       setError(
         requestError instanceof Error
@@ -203,14 +239,10 @@ export default function CompanyMediaManager() {
         detail: null,
       }));
       setDraft((current) => ({ ...current, logo: null }));
-      try {
-        companyVerificationApi.setCompanyMedia({
-          ...savedMedia,
-          logo: null,
-        });
-      } catch {
-        setError("Logo removed, but the local profile preview could not be refreshed.");
-      }
+      companyVerificationApi.setCompanyMedia({
+        ...savedMediaRef.current,
+        logo: null,
+      }, employerId);
     } catch (requestError) {
       setError(
         requestError instanceof Error
@@ -238,7 +270,7 @@ export default function CompanyMediaManager() {
             Company media
           </h2>
           <p className="mt-1 text-[9px] text-[#829091]">
-            Company logos are uploaded to the backend. Photo gallery entries are demo-only and not stored on the server.
+            Upload a company logo and up to 12 company photos. Photos are saved to your company profile.
           </p>
         </div>
         {!isEditing ? (
@@ -266,6 +298,7 @@ export default function CompanyMediaManager() {
                 <img
                   alt="Company logo"
                   className="size-12 rounded-lg border border-[#e7eeee] object-cover"
+                  decoding="async"
                   src={logoUrl}
                 />
                 <button
@@ -310,6 +343,8 @@ export default function CompanyMediaManager() {
                     <img
                       alt={photo.altText}
                       className="aspect-[4/3] w-full rounded-lg border border-[#e7eeee] object-cover"
+                      decoding="async"
+                      loading="lazy"
                       src={photo.url}
                     />
                   </li>
@@ -321,56 +356,72 @@ export default function CompanyMediaManager() {
           </div>
         </div>
       ) : (
-        <form className="mt-4 space-y-4" onSubmit={handleSave}>
+        <div className="mt-4 space-y-4">
           <fieldset className="space-y-3 border-t border-[#edf1f1] pt-3">
             <legend className="text-[10px] font-semibold text-[#526365]">Company photos</legend>
+            <label className="block text-[9px] text-[#718082]">
+              Photo description
+              <input
+                className="mt-1 w-full rounded-lg border border-[#dfe8e7] px-2.5 py-2 text-[10px] text-[#344749] outline-none focus:border-[#078b8d]"
+                maxLength={255}
+                onChange={(event) => setPhotoAltText(event.currentTarget.value)}
+                placeholder="Describe the photo for accessibility"
+                value={photoAltText}
+              />
+            </label>
+            <label className="block text-[9px] font-semibold text-[#087879]">
+              Upload photo · JPG, PNG, or WebP · up to 5 MB
+              <input
+                accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp"
+                className="mt-1 block w-full text-[9px] text-[#526365]"
+                disabled={
+                  photoUploadProgress !== null ||
+                  removingPhotoId !== null ||
+                  draft.gallery.length >= 12
+                }
+                onChange={(event) => {
+                  void handlePhotoUpload(event.currentTarget.files?.[0]);
+                  event.currentTarget.value = "";
+                }}
+                type="file"
+              />
+            </label>
+            {photoUploadProgress !== null ? (
+              <p className="text-[9px] text-[#087879]" role="status">
+                Uploading photo… {photoUploadProgress}%
+              </p>
+            ) : null}
+            {draft.gallery.length >= 12 ? (
+              <p className="text-[9px] text-[#718082]">Photo limit reached (12).</p>
+            ) : null}
             {draft.gallery.map((photo, index) => (
-              <div className="space-y-2 rounded-lg border border-[#edf1f0] p-2.5" key={photo.id}>
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-[9px] font-semibold text-[#526365]">Photo {index + 1}</span>
+              <div className="flex items-center gap-3 rounded-lg border border-[#edf1f0] p-2.5" key={photo.id}>
+                <img
+                  alt={photo.altText}
+                  className="size-14 shrink-0 rounded-md border border-[#e7eeee] object-cover"
+                  decoding="async"
+                  loading="lazy"
+                  src={photo.url}
+                />
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-[9px] font-medium text-[#526365]">{photo.altText}</p>
+                  <p className="text-[8px] text-[#849394]">Photo {index + 1}</p>
+                </div>
                   <button
                     aria-label={`Remove photo ${index + 1}`}
                     className="text-[9px] font-semibold text-[#a2534c] underline underline-offset-2"
-                    onClick={() => setDraft((current) => ({
-                      ...current,
-                      gallery: current.gallery.filter((item) => item.id !== photo.id),
-                    }))}
+                    disabled={photoUploadProgress !== null || removingPhotoId !== null}
+                    onClick={() => void handleRemovePhoto(photo.id)}
                     type="button"
                   >
-                    Remove
+                    {removingPhotoId === photo.id ? "Removing…" : "Remove"}
                   </button>
-                </div>
-                <label className="block text-[9px] text-[#718082]">
-                  Image URL
-                  <input
-                    className="mt-1 w-full rounded-lg border border-[#dfe8e7] px-2.5 py-2 text-[10px] text-[#344749] outline-none focus:border-[#078b8d]"
-                    onChange={(event) => updatePhoto(photo.id, "url", event.currentTarget.value)}
-                    placeholder="https://example.com/photo.png"
-                    value={photo.url}
-                  />
-                </label>
-                <label className="block text-[9px] text-[#718082]">
-                  Description
-                  <input
-                    className="mt-1 w-full rounded-lg border border-[#dfe8e7] px-2.5 py-2 text-[10px] text-[#344749] outline-none focus:border-[#078b8d]"
-                    onChange={(event) => updatePhoto(photo.id, "altText", event.currentTarget.value)}
-                    placeholder="Describe the photo"
-                    value={photo.altText}
-                  />
-                </label>
               </div>
             ))}
-            <button
-              className="rounded-lg border border-dashed border-[#cbdcda] px-3 py-2 text-[9px] font-semibold text-[#087879]"
-              onClick={() => setDraft((current) => ({ ...current, gallery: [...current.gallery, makeAsset()] }))}
-              type="button"
-            >
-              Add photo
-            </button>
           </fieldset>
 
           <p className="text-[9px] leading-4 text-[#849394]">
-            Gallery changes in this demo are saved only in this browser.
+            Photo uploads and removals are saved immediately.
           </p>
           <div className="flex justify-end gap-2 border-t border-[#edf1f1] pt-3">
             <button
@@ -378,20 +429,15 @@ export default function CompanyMediaManager() {
               onClick={() => {
                 setDraft(savedMedia);
                 setError(null);
+                setPhotoAltText("");
                 setIsEditing(false);
               }}
               type="button"
             >
-              Cancel
-            </button>
-            <button
-              className="rounded-lg bg-[#0d8fa2] px-3 py-2 text-[9px] font-semibold text-white"
-              type="submit"
-            >
-              Save media
+              Done
             </button>
           </div>
-        </form>
+        </div>
       )}
     </section>
   );

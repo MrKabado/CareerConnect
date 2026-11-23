@@ -8,8 +8,8 @@ Laravel 12 JSON API using MySQL and Sanctum bearer tokens. Public registration s
 2. Generate the application key with `docker compose run --rm backend php artisan key:generate`.
 3. Start MySQL and Laravel from this directory with `docker compose up --build -d`. The backend runs pending migrations on startup.
 4. Configure `ADMIN_SEED_NAME`, `ADMIN_SEED_EMAIL`, and `ADMIN_SEED_PASSWORD` in `.env`, then create the bootstrap admin with `docker compose exec -T backend php artisan db:seed --class=AdminUserSeeder --force`.
-5. In `frontend`, copy `.env.example` to `.env`, confirm `VITE_API_BASE_URL=http://192.168.254.125:8000/api`, install dependencies with `npm install`, and start Vite with `npm run dev`. Vite is configured to listen on all network interfaces at port 5173.
-6. Open `http://192.168.254.125:5173` from this computer or another device on the same LAN. Configure `FRONTEND_URL` in `backend/.env` to the browser-accessible frontend origin when it differs from the default. If other devices cannot connect, allow inbound TCP ports 5173 and 8000 through the host firewall.
+5. In `frontend`, copy `.env.example` to `.env`, confirm `VITE_API_BASE_URL=http://localhost:8000/api`, install dependencies with `npm install`, and start Vite with `npm run dev`.
+6. Open `http://localhost:5173` on this computer. Configure `FRONTEND_URL` in `backend/.env` to the frontend origin when it differs from the default.
 
 To clear the entire database and recreate only the configured admin bootstrap, run `docker compose exec -T backend php artisan migrate:fresh --seed --force` from this directory. This permanently deletes all database records and reruns every migration; do not run it against data you need.
 
@@ -38,6 +38,7 @@ The default database seeder creates only the configured administrator; it does n
 - `POST /api/otp/request`, `POST /api/otp/verify`
 - `POST /api/forgot-password`, `POST /api/reset-password`, `PUT /api/change-password`
 - `GET|POST /api/applicant/identity-verification`
+- `GET /api/applicant/application-eligibility`
 - Admin-only `GET /api/admin/identity-verifications`, `GET /api/admin/identity-verifications/{id}/document`, and `POST /api/admin/identity-verifications/{id}/review`
 - Admin-only `GET /api/admin/users`, `PATCH /api/admin/users/{id}/status`, and `POST /api/admin/users/{id}/password-reset`
 
@@ -65,23 +66,23 @@ The default database seeder creates only the configured administrator; it does n
 - Employer verification files are listed, uploaded, replaced, downloaded, and removed through `/api/employer/verification/documents`. Business registration and permit uploads accept PDF, JPG, or PNG files up to 5 MB; these files remain private and downloads are scoped to their owning employer.
 - Verification submission requires a complete company profile and both required documents. Duplicate submissions are blocked while approval is pending or after approval; rejected requests can be corrected and resubmitted. Employers must sign in again after approval.
 - Applicant profile photos use `POST|DELETE /api/applicant/profile/photo`, accept JPG, PNG, or WebP images up to 2 MB, and are served from the local public disk. Cover-letter uploads and company photo galleries are not supported by the backend and remain browser-local in the frontend.
-- Apply with `POST /api/jobs/{jobListing}/applications`. Applications require an active applicant with verified email and identity, an open eligible listing, matching seeker preferences, required OJT details for OJT listings, and a current resume. Optional cover letters are text, up to 10,000 characters.
+- Apply with `POST /api/jobs/{jobListing}/applications`. Applications require an active applicant with verified email and Admin-approved identity verification, an open eligible listing, matching seeker preferences, required OJT details for OJT listings, and a current resume. Missing verification records are unverified; pending and rejected applicants cannot apply, and rejection reasons are returned by the eligibility endpoint. Skill matches inform recommendations and ranking, not application eligibility. Applicants who have ever been marked hired cannot submit new applications.
 - Applicant history is available from `GET /api/applicant/applications` and `GET /api/applicant/applications/{application}`. Status history and the resume snapshot for an owned application are available through `GET /api/applicant/applications/{application}/status-history` and `GET /api/applicant/applications/{application}/resume`.
 - Employers review only applications to their own listings through `GET /api/employer/applications`, `GET /api/employer/applications/{application}`, and `PATCH /api/employer/applications/{application}/status`. The associated submitted resume is streamed securely from `GET /api/employer/applications/{application}/resume`.
 - Application statuses are `pending`, `reviewing`, `shortlisted`, `interview`, `hired`, and `rejected`. Transitions are recorded with separate applicant-visible and internal reasons; `hired` and `rejected` are terminal. Unique application constraints prevent duplicate submissions, and historical resume versions remain attached to their submitted applications.
 
 ## Phase 6 interview scheduling
 
-- Employers schedule interviews for shortlisted applications through `POST /api/employer/applications/{application}/interviews`; the application moves to `interview` in the same transaction. The single interview record per application uses UTC timestamps and stores the supplied IANA timezone for display.
-- Interview modes are `onsite`, `online`, and `phone`. Onsite interviews require a location; online interviews require a meeting URL or joining instructions. The schedule includes optional end time, applicant-facing notes, and private employer notes.
-- Employers can list and view interviews, reschedule scheduled interviews with `PUT /api/employer/interviews/{interview}`, cancel them with `POST /api/employer/interviews/{interview}/cancel`, and mark past interviews completed with `PATCH /api/employer/interviews/{interview}/status`. Rescheduling and cancellation events preserve schedule history. Cancelled interviews cannot be reopened or rescheduled; a cancellation leaves the application in `interview`.
-- Applicants retrieve their own interviews through `GET /api/applicant/interviews`, with `filter=upcoming|past|cancelled`, or the `/upcoming` and `/past` shortcuts. Applicant responses include only applicant-facing notes and hide internal employer notes.
+- Employers publish multiple available dates and shared working hours through `POST /api/employer/applications/{application}/interviews`; the application moves to `interview` and an `invited` interview record is created in the same transaction. Dates, working hours, optional breaks, slot duration, buffer, and the IANA timezone are stored in `interview_availabilities`.
+- Applicants load available slots from `GET /api/applicant/interviews/{interview}/availability`, then book or reschedule through `POST /api/applicant/interviews/{interview}/schedule`. The server recalculates slots and locks the employer record before confirming a booking, preventing stale or double-booked slots.
+- Employers can edit an invitation's availability through `PUT /api/employer/interviews/{interview}/availability`, cancel an interview with `POST /api/employer/interviews/{interview}/cancel`, and mark past interviews completed with `PATCH /api/employer/interviews/{interview}/status`. Editing availability preserves an existing confirmed time even if its date is removed from the new schedule. Direct employer scheduling is disabled.
+- Applicants can cancel a confirmed interview with `POST /api/applicant/interviews/{interview}/cancel`. Both parties receive persisted notifications for invitations, bookings, rescheduling, availability changes, and cancellations. Applicant interview responses hide internal employer notes.
 
 ## Phase 7 notifications
 
 - Notifications use Laravel's database notification table and are scoped to the authenticated recipient: `GET /api/notifications?per_page=15`, `GET /api/notifications/unread-count`, `PATCH /api/notifications/{notification}/read`, and `PATCH /api/notifications/read-all`.
 - Notification list responses contain `data` items with `id`, `event`, `title`, `message`, `metadata`, `read_at`, and `created_at`, plus pagination links and metadata. Unread count returns `{"count": 2}`; marking all read returns the number updated.
-- Employers are notified after an application is submitted to their listing. Applicants receive notifications for meaningful application status changes and interview scheduling, rescheduling, and cancellation. Notifications are written only after the respective database operation succeeds; unchanged transitions and repeated cancellation/reschedule requests do not create duplicates.
+- Employers are notified after an application is submitted to their listing and when an applicant books, reschedules, or cancels an interview. Applicants receive notifications for meaningful application status changes and interview invitations, availability changes, bookings, rescheduling, and cancellation. Notifications are written only after the respective database operation succeeds; unchanged operations update/dedupe the existing interview notification.
 - Application status notifications include applicant-visible reasons only. Interview notification metadata includes schedule details and joining instructions for the Applicant; internal employer notes are never included.
 
 Example request: `GET /api/notifications?per_page=15`
@@ -114,7 +115,7 @@ Example request: `GET /api/notifications?per_page=15`
 }
 ```
 
-Identity documents are stored on Laravel's private local disk, never returned in general API responses, and streamed only through an authorized endpoint. Reviewed documents are deleted after `IDENTITY_DOCUMENT_RETENTION_DAYS` (730 by default); rejected documents are replaced on resubmission. The scheduler must run for automatic retention cleanup:
+Applicant identity submissions require a readable JPG, JPEG, PNG, or WebP selfie image (5 MB maximum) showing the applicant's face with their own valid ID in the same photo. Files are stored privately, never returned in general API responses, and streamed to admins only through the authorized review endpoint. Approval remains a manual admin decision and is rejected if the required image is missing. Reviewed documents are deleted after `IDENTITY_DOCUMENT_RETENTION_DAYS` (730 by default); rejected documents can be replaced on resubmission. The scheduler must run for automatic retention cleanup:
 
 ```sh
 php artisan schedule:work
@@ -122,9 +123,7 @@ php artisan schedule:work
 
 The `app:prune-identity-documents` command can also be run directly.
 
-The `applicant.eligible` middleware is the authorization foundation for Phase 2 application submission. Attach it to application-creation routes; it returns `403` unless the account is an active applicant with verified email and approved identity verification. Job browsing routes should remain public.
-
-For future application submission, attach `listing.accepting-applications` alongside `applicant.eligible`; it rejects closed, deactivated, unpublished, or otherwise ineligible listings at submission time. The application workflow itself is not part of Phase 3.
+The `applicant.eligible` middleware checks active applicant status, verified email, and whether the applicant has ever been hired. The application route also checks listing status and application-specific requirements in the submission transaction. Job browsing routes remain public.
 
 ## Core business API additions
 

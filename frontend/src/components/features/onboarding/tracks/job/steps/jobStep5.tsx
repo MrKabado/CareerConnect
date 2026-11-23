@@ -1,5 +1,6 @@
 import { useState, type KeyboardEvent } from "react";
 import type { OjtStepProps } from "@/components/features/onboarding/tracks/ojt/steps/ojtStepTypes";
+import { toNameCase } from "@/features/auth/nameFormatting";
 import {
   AddItemButton,
   OjtChoice,
@@ -25,7 +26,7 @@ export default function JobStep5({
   }
 
   function commitLocation() {
-    const value = location.trim();
+    const value = toNameCase(location.trim());
     if (
       value &&
       !answers.preferredLocations.some(
@@ -95,7 +96,7 @@ export default function JobStep5({
             aria-label="Preferred locations"
             className={`${ojtInputClassName} min-w-0 flex-1`}
             id="job-locations"
-            onChange={(event) => setLocation(event.target.value)}
+            onChange={(event) => setLocation(toNameCase(event.target.value))}
             onKeyDown={addLocation}
             placeholder="Type a city or area"
             value={location}
@@ -137,6 +138,8 @@ export default function JobStep5({
             className={ojtInputClassName}
             id="minimum-salary"
             min="0"
+            max="4294967295"
+            step="1"
             onChange={(event) => onChange("minimumSalary", event.target.value)}
             placeholder="₱ Min monthly"
             type="number"
@@ -156,6 +159,8 @@ export default function JobStep5({
             className={ojtInputClassName}
             id="maximum-salary"
             min="0"
+            max="4294967295"
+            step="1"
             onChange={(event) => onChange("maximumSalary", event.target.value)}
             placeholder="₱ Max monthly"
             type="number"

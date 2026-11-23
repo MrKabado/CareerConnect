@@ -5,7 +5,6 @@ import { useAuth } from "@/features/auth/useAuth";
 import {
   applicantFilesApi,
   type ApplicantDocumentType,
-  type ApplicantProfileData,
   type ApplicantResumeFile,
   type ApplicantStoredDocument,
 } from "@/features/user-profile/backendApi";
@@ -14,7 +13,6 @@ import {
   publicJobsApi,
   type PublicJobListing,
 } from "@/features/jobs/backendApi";
-import { getJobEligibilityFailure } from "@/features/jobs/jobMatching";
 import { applicantApplicationsApi } from "@/features/user-applications/backendApi";
 import type { ApplicationOpportunity } from "@/features/user-apply/types";
 import { validateFile } from "@/features/user-apply/utils";
@@ -51,11 +49,6 @@ export function useJobApplication() {
   const [listing, setListing] = useState<PublicJobListing | null>(null);
   const [listingLoading, setListingLoading] = useState(true);
   const [listingError, setListingError] = useState<string | null>(null);
-  const [profileResult, setProfileResult] = useState<{
-    key: string;
-    profile: ApplicantProfileData | null;
-    error: string | null;
-  } | null>(null);
   const [savedResume, setSavedResume] = useState<ApplicantResumeFile | null>(null);
   const [savedCoverLetter, setSavedCoverLetter] = useState<ApplicantStoredDocument | null>(null);
   const [isCoverLetterIncluded, setIsCoverLetterIncluded] = useState(true);
@@ -71,11 +64,50 @@ export function useJobApplication() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
   const [isAlreadySubmitted, setIsAlreadySubmitted] = useState(false);
-  const profileKey = `${token ?? ""}:${listing?.id ?? ""}`;
-  const currentProfileResult = profileResult?.key === profileKey ? profileResult : null;
-  const applicantProfile = currentProfileResult?.profile ?? null;
-  const profileError = currentProfileResult?.error ?? null;
-  const profileLoading = Boolean(token && listing?.listing_type === "job" && !currentProfileResult);
+  const [eligibilityResult, setEligibilityResult] = useState<{
+    token: string;
+    canApply: boolean | null;
+    reason: string | null;
+    error: string | null;
+  } | null>(null);
+  const currentEligibilityResult = eligibilityResult?.token === token ? eligibilityResult : null;
+  const canApply = currentEligibilityResult?.canApply ?? null;
+  const applicationEligibilityError = currentEligibilityResult?.error
+    ?? currentEligibilityResult?.reason
+    ?? null;
+  const applicationEligibilityLoading = Boolean(token && !currentEligibilityResult);
+
+  useEffect(() => {
+    let active = true;
+    if (!token) return;
+    void applicantApplicationsApi.eligibility(token)
+      .then((response) => {
+        if (active) {
+          setEligibilityResult({
+            token,
+            canApply: response.can_apply,
+            reason: response.reason,
+            error: null,
+          });
+        }
+      })
+      .catch((requestError: unknown) => {
+        if (active) {
+          setEligibilityResult({
+            token,
+            canApply: null,
+            reason: null,
+            error: requestError instanceof Error
+              ? requestError.message
+              : "Unable to verify your application eligibility.",
+          });
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [token]);
 
   useEffect(() => {
     let active = true;
@@ -100,31 +132,6 @@ export function useJobApplication() {
       active = false;
     };
   }, [listingId]);
-
-  useEffect(() => {
-    let active = true;
-    if (!token || !listing || listing.listing_type !== "job") return;
-
-    void applicantFilesApi.profile(token)
-      .then((response) => {
-        if (!active) return;
-        setProfileResult({ key: `${token}:${listing.id}`, profile: response.data, error: null });
-      })
-      .catch((requestError: unknown) => {
-        if (!active) return;
-        setProfileResult({
-          key: `${token}:${listing.id}`,
-          profile: null,
-          error: requestError instanceof Error
-            ? requestError.message
-            : "Unable to load your applicant profile to check job qualifications.",
-        });
-      });
-
-    return () => {
-      active = false;
-    };
-  }, [listing, token]);
 
   useEffect(() => {
     let active = true;
@@ -229,28 +236,17 @@ export function useJobApplication() {
   }, [token]);
 
   function reviewApplication() {
+    if (canApply === false) {
+      setSubmitError(applicationEligibilityError ?? "You have been marked as hired and cannot submit new applications.");
+      return;
+    }
+    if (canApply === null) {
+      setSubmitError(applicationEligibilityError ?? "Unable to verify your application eligibility. Please try again.");
+      return;
+    }
     if (!resume && !savedResume) {
       setResumeError("Upload a resume before continuing.");
       return;
-    }
-    if (listing?.listing_type === "job") {
-      if (profileLoading) {
-        setSubmitError("Checking your job qualifications. Please wait, then try again.");
-        return;
-      }
-      if (!applicantProfile) {
-        setSubmitError(profileError ?? "Unable to check your job qualifications. Please try again.");
-        return;
-      }
-      const qualificationFailure = getJobEligibilityFailure({
-        requiredSkills: listing.required_skills ?? [],
-        experienceRequired: listing.experience_required ?? false,
-        minimumExperienceYears: listing.minimum_experience_years ?? null,
-      }, applicantProfile);
-      if (qualificationFailure) {
-        setSubmitError(qualificationFailure);
-        return;
-      }
     }
     if (resumeLoading || coverLetterDocumentsLoading) return;
     setResumeError("");
@@ -259,29 +255,17 @@ export function useJobApplication() {
   }
 
   async function submitApplication() {
+    if (canApply === false) {
+      setSubmitError(applicationEligibilityError ?? "You have been marked as hired and cannot submit new applications.");
+      return;
+    }
+    if (canApply === null) {
+      setSubmitError(applicationEligibilityError ?? "Unable to verify your application eligibility. Please try again.");
+      return;
+    }
     if (listingId === null || !token || (!resume && !savedResume)) {
       setSubmitError("A live listing, signed-in applicant account, and resume are required.");
       return;
-    }
-
-    if (listing?.listing_type === "job") {
-      if (profileLoading) {
-        setSubmitError("Checking your job qualifications. Please wait, then try again.");
-        return;
-      }
-      if (!applicantProfile) {
-        setSubmitError(profileError ?? "Unable to check your job qualifications. Please try again.");
-        return;
-      }
-      const qualificationFailure = getJobEligibilityFailure({
-        requiredSkills: listing.required_skills ?? [],
-        experienceRequired: listing.experience_required ?? false,
-        minimumExperienceYears: listing.minimum_experience_years ?? null,
-      }, applicantProfile);
-      if (qualificationFailure) {
-        setSubmitError(qualificationFailure);
-        return;
-      }
     }
 
     setIsSubmitting(true);
@@ -340,6 +324,9 @@ export function useJobApplication() {
     isSubmitting,
     uploadProgress,
     isAlreadySubmitted,
+    canApply,
+    applicationEligibilityError,
+    applicationEligibilityLoading,
     handleFileSelect,
     handleCoverLetterSelect,
     reviewApplication,

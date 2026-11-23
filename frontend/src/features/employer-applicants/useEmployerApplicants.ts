@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useAuth } from "@/features/auth/useAuth";
-import { getEmployerApplicants } from "@/features/employer-applicants/api";
+import { getEmployerApplicants, type BackendApplicationStatus } from "@/features/employer-applicants/api";
 import type { Applicant } from "@/features/employer-applicants/types";
 
-export function useEmployerApplicants() {
+export function useEmployerApplicants(status?: BackendApplicationStatus) {
   const { token, status: authStatus } = useAuth();
   const [applicants, setApplicants] = useState<Applicant[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -17,8 +17,10 @@ export function useEmployerApplicants() {
   const load = useCallback(async () => {
     const requestId = ++requestSequence.current;
     if (!token || authStatus === "loading") return;
+    setIsLoading(true);
+    setError(null);
     try {
-      const response = await getEmployerApplicants(token);
+      const response = await getEmployerApplicants(token, 1, status);
       if (requestId === requestSequence.current) {
         setApplicants(response.applicants);
         setCurrentPage(response.currentPage);
@@ -32,7 +34,7 @@ export function useEmployerApplicants() {
     } finally {
       if (requestId === requestSequence.current) setIsLoading(false);
     }
-  }, [authStatus, token]);
+  }, [authStatus, status, token]);
 
   const loadMore = useCallback(async () => {
     if (!token || isLoadingMore || currentPage >= lastPage) return;
@@ -40,7 +42,7 @@ export function useEmployerApplicants() {
     setIsLoadingMore(true);
     setError(null);
     try {
-      const response = await getEmployerApplicants(token, currentPage + 1);
+      const response = await getEmployerApplicants(token, currentPage + 1, status);
       if (requestId === requestSequence.current) {
         setApplicants((current) => [...current, ...response.applicants]);
         setCurrentPage(response.currentPage);
@@ -54,7 +56,7 @@ export function useEmployerApplicants() {
     } finally {
       if (requestId === requestSequence.current) setIsLoadingMore(false);
     }
-  }, [currentPage, isLoadingMore, lastPage, token]);
+  }, [currentPage, isLoadingMore, lastPage, status, token]);
 
   useEffect(() => {
     // The request updates state only after its promise settles.

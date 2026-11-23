@@ -12,6 +12,7 @@ use App\Models\Application;
 use App\Models\ApplicationStatusHistory;
 use App\Models\JobListing;
 use App\Models\User;
+use App\Services\ApplicantApplicationEligibility;
 use App\Services\ApplicantJobMatcher;
 use App\Services\MediaStorage;
 use App\Services\NotificationService;
@@ -35,7 +36,26 @@ class ApplicationController extends Controller
         private readonly ResumeStorage $resumeStorage,
         private readonly MediaStorage $mediaStorage,
         private readonly ApplicantJobMatcher $applicantJobMatcher,
+        private readonly ApplicantApplicationEligibility $applicationEligibility,
     ) {}
+
+    public function eligibility(Request $request): JsonResponse
+    {
+        $user = $request->user();
+        $verification = $this->applicationEligibility->currentVerification($user);
+        $reason = $user->email_verified_at === null
+            ? 'Verify your email address before submitting applications.'
+            : ($user->hasBeenHired()
+                ? 'You have been marked as hired and cannot submit new applications.'
+                : $this->applicationEligibility->verificationReason($verification));
+
+        return response()->json([
+            'can_apply' => $reason === null,
+            'reason' => $reason,
+            'identity_verification_status' => $verification?->status ?? 'unverified',
+            'identity_verification_rejection_reason' => $verification?->rejection_reason,
+        ]);
+    }
 
     public function store(Request $request, JobListing $jobListing): JsonResponse
     {
@@ -76,6 +96,24 @@ class ApplicationController extends Controller
         [$application, $isReapplication, $fullReached] = DB::transaction(function () use ($applicant, $jobListing, $validated): array {
             $fullReached = false;
             User::query()->whereKey($applicant->id)->lockForUpdate()->firstOrFail();
+            if ($applicant->hasBeenHired()) {
+                throw new HttpResponseException(response()->json([
+                    'message' => 'You have been marked as hired and cannot submit new applications.',
+                    'code' => 'applicant_already_hired',
+                ], 403));
+            }
+
+            $verification = $this->applicationEligibility->currentVerification($applicant, true);
+            $verificationReason = $this->applicationEligibility->verificationReason($verification);
+            if ($verificationReason !== null) {
+                throw new HttpResponseException(response()->json([
+                    'message' => $verificationReason,
+                    'code' => 'identity_verification_required',
+                    'identity_verification_status' => $verification?->status ?? 'unverified',
+                    'rejection_reason' => $verification?->rejection_reason,
+                ], 403));
+            }
+
             $listing = JobListing::query()
                 ->with(['company.user', 'company.verification', 'category'])
                 ->lockForUpdate()
@@ -85,14 +123,6 @@ class ApplicationController extends Controller
                 throw new HttpResponseException(response()->json([
                     'message' => 'This listing is not currently accepting applications.',
                     'code' => 'listing_not_open',
-                ], 422));
-            }
-
-            $qualificationFailure = $this->jobQualificationFailure($listing, $applicant);
-            if ($qualificationFailure !== null) {
-                throw new HttpResponseException(response()->json([
-                    'message' => $qualificationFailure,
-                    'code' => 'job_qualification_ineligible',
                 ], 422));
             }
 
@@ -282,7 +312,7 @@ class ApplicationController extends Controller
         ]);
 
         $applications = $request->user()->applications()
-            ->with(['jobListing.company', 'resume', 'coverLetterDocument', 'statusHistories', 'interviews'])
+            ->with(['jobListing.company', 'resume', 'coverLetterDocument', 'statusHistories', 'interviews.availability'])
             ->when(isset($filters['status']), fn (Builder $query): Builder => $query->where('status', $filters['status']))
             ->orderByDesc('applied_at')
             ->orderByDesc('id')
@@ -710,6 +740,25 @@ class ApplicationController extends Controller
         return $this->downloadApplicationResume($application);
     }
 
+    public function employerResumeUrls(Request $request, int $application): JsonResponse
+    {
+        $application = $this->employerApplicationQuery($request->user())
+            ->with('resume')
+            ->findOrFail($application);
+        $resume = $application->resume;
+
+        if ($resume === null || $resume->applicant_id !== $application->applicant_id) {
+            abort(404, 'The resume file is unavailable.');
+        }
+
+        return response()->json([
+            'data' => $this->resumeStorage->downloadUrls(
+                $resume,
+                $application->resume_original_filename,
+            ),
+        ]);
+    }
+
     public function employerCoverLetter(Request $request, int $application): StreamedResponse
     {
         $application = $this->employerApplicationQuery($request->user())
@@ -737,12 +786,9 @@ class ApplicationController extends Controller
         $rejectedAt = $this->rejectionDate($application);
         $interview = $application->relationLoaded('interviews')
             ? $application->interviews
-                ->where('status', 'scheduled')
-                ->sortByDesc('scheduled_at')
+                ->sortByDesc('id')
                 ->first()
             : $application->interviews()
-                ->where('status', 'scheduled')
-                ->orderByDesc('scheduled_at')
                 ->orderByDesc('id')
                 ->first();
 
@@ -776,6 +822,21 @@ class ApplicationController extends Controller
                 'meeting_url' => $interview->meeting_url,
                 'meeting_instructions' => $interview->meeting_instructions,
                 'applicant_notes' => $interview->applicant_notes,
+                'availability' => $interview->availability
+                    ->map(fn ($availability): array => [
+                        'date' => $availability->available_date->toDateString(),
+                        'start_time' => substr($availability->start_time, 0, 5),
+                        'end_time' => substr($availability->end_time, 0, 5),
+                        'break_start_time' => $availability->break_start_time === null
+                            ? null
+                            : substr($availability->break_start_time, 0, 5),
+                        'break_end_time' => $availability->break_end_time === null
+                            ? null
+                            : substr($availability->break_end_time, 0, 5),
+                        'duration_minutes' => $availability->duration_minutes,
+                        'buffer_minutes' => $availability->buffer_minutes,
+                    ])
+                    ->values(),
             ] : null,
             'listing' => $this->listingSummary($application->jobListing),
             'status_history' => $application->statusHistories
@@ -809,58 +870,6 @@ class ApplicationController extends Controller
         $date = $rejection?->created_at ?? $application->updated_at ?? now();
 
         return CarbonImmutable::instance($date);
-    }
-
-    private function jobQualificationFailure(JobListing $listing, User $applicant): ?string
-    {
-        if ($listing->listing_type !== 'job') {
-            return null;
-        }
-
-        $profile = $applicant->applicantProfile()->with('skills')->first();
-        $failures = [];
-
-        $requiredSkills = collect($listing->required_skills ?? []);
-        if ($requiredSkills->isNotEmpty()) {
-            $applicantSkills = $profile?->skills
-                ->pluck('name')
-                ->map(fn (string $skill): string => $this->normalizeSkill($skill))
-                ->all() ?? [];
-            $missingSkills = $requiredSkills->reject(
-                fn (string $skill): bool => in_array($this->normalizeSkill($skill), $applicantSkills, true),
-            )->values();
-
-            if ($missingSkills->isNotEmpty()) {
-                $failures[] = 'Missing required skills: '.$missingSkills->implode(', ').'.';
-            }
-        }
-
-        if ($listing->experience_required) {
-            $minimumYears = $listing->minimum_experience_years ?? 1;
-            $experienceLevel = $profile?->experience_level;
-            $reportedMinimumYears = match ($experienceLevel) {
-                '1_3_years' => 1,
-                '3_5_years' => 3,
-                '5_plus_years' => 5,
-                'fresh_graduate' => 0,
-                default => null,
-            };
-
-            if ($reportedMinimumYears === null) {
-                $failures[] = "Add your work experience to your profile. This job requires at least {$minimumYears} years of experience.";
-            } elseif ($reportedMinimumYears < $minimumYears) {
-                $failures[] = "This job requires at least {$minimumYears} years of experience, but your profile indicates at least {$reportedMinimumYears}.";
-            }
-        }
-
-        return $failures === []
-            ? null
-            : 'You do not meet this job listing\'s qualifications. '.implode(' ', $failures);
-    }
-
-    private function normalizeSkill(string $skill): string
-    {
-        return trim(preg_replace('/[^a-z0-9]+/i', ' ', mb_strtolower($skill)) ?? '');
     }
 
     private function employerApplicationData(Application $application): array

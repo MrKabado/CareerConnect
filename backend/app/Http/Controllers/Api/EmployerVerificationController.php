@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Mail\RoleNotificationMail;
 use App\Models\ActivityLog;
 use App\Models\Company;
+use App\Models\CompanyMediaAsset;
 use App\Models\CompanyVerification;
 use App\Models\User;
 use App\Models\VerificationDocument;
@@ -331,6 +332,84 @@ class EmployerVerificationController extends Controller
             'message' => 'Company logo removed.',
             'company' => $this->companyData($company->fresh()),
         ]);
+    }
+
+    public function uploadCompanyMedia(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'photo' => ['required', 'image', 'mimes:jpg,jpeg,png,webp', 'extensions:jpg,jpeg,png,webp', 'max:5120'],
+            'alt_text' => ['required', 'string', 'max:255'],
+        ]);
+        $company = $request->user()->company;
+        if ($company === null) {
+            return response()->json([
+                'message' => 'Create your company profile before uploading company photos.',
+                'code' => 'company_profile_required',
+            ], 422);
+        }
+        if ($company->mediaAssets()->count() >= 12) {
+            return response()->json([
+                'message' => 'A maximum of 12 company photos can be uploaded.',
+                'code' => 'company_media_limit_reached',
+            ], 422);
+        }
+
+        $file = $request->file('photo');
+        $stored = $this->mediaStorage->storePublicImage(
+            $file,
+            'company-media/'.$company->id,
+            'career-connect/employers/'.$company->id.'/company-media',
+        );
+
+        try {
+            $mediaAsset = $company->mediaAssets()->create([
+                'storage_disk' => $stored['disk'],
+                'file_path' => $stored['path'],
+                'cloudinary_asset_id' => $stored['asset_id'],
+                'original_filename' => $file->getClientOriginalName(),
+                'mime_type' => $file->getMimeType() ?? 'application/octet-stream',
+                'size_bytes' => $file->getSize(),
+                'alt_text' => trim($validated['alt_text']),
+            ]);
+        } catch (Throwable $exception) {
+            try {
+                $this->mediaStorage->delete(
+                    $stored['disk'],
+                    $stored['path'],
+                    $stored['asset_id'],
+                    'image',
+                    'upload',
+                );
+            } catch (Throwable $cleanupException) {
+                throw new RuntimeException('The failed company photo upload could not be cleaned up.', previous: $cleanupException);
+            }
+
+            throw $exception;
+        }
+
+        return response()->json([
+            'message' => 'Company photo uploaded.',
+            'media' => $this->companyMediaData($mediaAsset),
+        ], 201);
+    }
+
+    public function deleteCompanyMedia(Request $request, CompanyMediaAsset $companyMediaAsset): JsonResponse
+    {
+        $company = $request->user()->company;
+        if ($company === null || $companyMediaAsset->company_id !== $company->id) {
+            abort(404, 'The company photo is unavailable.');
+        }
+
+        $this->mediaStorage->delete(
+            $companyMediaAsset->storage_disk,
+            $companyMediaAsset->file_path,
+            $companyMediaAsset->cloudinary_asset_id,
+            'image',
+            'upload',
+        );
+        $companyMediaAsset->delete();
+
+        return response()->json(['message' => 'Company photo removed.']);
     }
 
     public function uploadDocument(Request $request): JsonResponse
@@ -781,18 +860,24 @@ class EmployerVerificationController extends Controller
     {
         return $company->name !== null
             && trim((string) $company->name) !== ''
+            && $company->category_id !== null
             && $company->company_size !== null
             && in_array($company->country, self::isoCountryCodes(), true)
             && $company->address !== null
+            && trim((string) $company->address) !== ''
             && $company->city !== null
+            && trim((string) $company->city) !== ''
             && $company->contact_name !== null
+            && trim((string) $company->contact_name) !== ''
             && $company->contact_phone !== null
             && $this->isValidPhoneNumber($company->contact_phone)
             && $company->contact_email !== null
+            && filter_var($company->contact_email, FILTER_VALIDATE_EMAIL) !== false
             && $company->description !== null
-            && trim((string) $company->description) !== ''
+            && strlen(trim((string) $company->description)) >= 100
             && $company->industry !== null
-            && trim((string) $company->industry) !== '';
+            && trim((string) $company->industry) !== ''
+            && filter_var($company->website, FILTER_VALIDATE_URL) !== false;
     }
 
     protected function hasRequiredDocuments(CompanyVerification $verification): bool
@@ -864,11 +949,28 @@ class EmployerVerificationController extends Controller
             'logo_url' => $company->logo_path
                 ? $this->mediaStorage->publicImageUrl($company->logo_disk, $company->logo_path)
                 : null,
+            'media' => $company->mediaAssets()
+                ->oldest('id')
+                ->get()
+                ->map(fn (CompanyMediaAsset $mediaAsset): array => $this->companyMediaData($mediaAsset))
+                ->values(),
             'hires_jobs' => $company->hires_jobs,
             'hires_ojt' => $company->hires_ojt,
             'open_to_moa' => $company->open_to_moa,
             'accepted_courses' => $company->accepted_courses,
             'is_verified' => $company->is_verified,
+        ];
+    }
+
+    private function companyMediaData(CompanyMediaAsset $mediaAsset): array
+    {
+        return [
+            'id' => $mediaAsset->id,
+            'url' => $this->mediaStorage->publicImageUrl($mediaAsset->storage_disk, $mediaAsset->file_path),
+            'alt_text' => $mediaAsset->alt_text,
+            'original_filename' => $mediaAsset->original_filename,
+            'mime_type' => $mediaAsset->mime_type,
+            'size_bytes' => $mediaAsset->size_bytes,
         ];
     }
 

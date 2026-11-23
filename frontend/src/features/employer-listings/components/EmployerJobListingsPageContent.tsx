@@ -52,7 +52,9 @@ export default function EmployerJobListingsPageContent() {
     newListingStep,
     setNewListingStep,
     newListingForm,
+    salaryRangeError,
     updateNewListingForm,
+    updateNewListingList,
     handleSaveDraft,
     handlePublish,
     modalTitle,
@@ -112,6 +114,7 @@ export default function EmployerJobListingsPageContent() {
               <p aria-live="polite" className="py-8 text-center text-sm text-[#738385]">Loading your listings…</p>
             ) : (
               <JobListingsBoard
+                key={filter}
                 listings={visibleListings}
                 selectedId={selectedId}
                 setSelectedId={setSelectedId}
@@ -134,10 +137,12 @@ export default function EmployerJobListingsPageContent() {
         newListingStep={newListingStep}
         modalTitle={modalTitle}
         newListingForm={newListingForm}
+        salaryRangeError={salaryRangeError}
         onClose={closeCreateModal}
         onTypePick={handleNewListingTypePick}
         onBack={() => setNewListingStep(1)}
         onFieldChange={(field, value) => updateNewListingForm(field, value)}
+        onListChange={updateNewListingList}
         onSaveDraft={handleSaveDraft}
         onPublish={handlePublish}
       />

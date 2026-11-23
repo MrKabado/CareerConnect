@@ -3,10 +3,12 @@ import { Link } from "react-router";
 import EmployerWorkspaceLayout from "@/components/common/employer/EmployerWorkspaceLayout";
 import { useEmployerStatus } from "@/features/employer-registration/useEmployerStatus";
 import {
+  getCompanyProfile,
   getCompanyProfileSlug,
   getCompanyProfileUrl,
   toEditableCompanyProfile,
   updateCompanyProfile,
+  type CompanyProfile,
   type EditableCompanyProfile,
 } from "@/features/companies/companyProfiles";
 import { useCompanyProfile } from "@/features/companies/useCompanyProfile";
@@ -18,14 +20,39 @@ import CompanyMediaManager from "@/features/company-verification/components/Comp
 import { useCompanyVerification } from "@/features/company-verification/useCompanyVerification";
 import { useDialogBehavior } from "@/hooks/useDialogBehavior";
 import { useAuth } from "@/features/auth/useAuth";
-import { employerVerificationFilesApi } from "@/features/employer-verification/backendApi";
-import ProfileStrengthCard from "@/features/company-profile/components/ProfileStrengthCard";
-import { computeProfileStrength } from "@/features/company-profile/strength";
+import {
+  employerVerificationFilesApi,
+  type EmployerCompany,
+} from "@/features/employer-verification/backendApi";
 
 const inputClassName = "w-full rounded-xl border border-[#dfe8e7] bg-white px-3 py-2.5 text-sm text-[#344749] outline-none focus:border-[#078b8d] focus:ring-2 focus:ring-[#078b8d]/15";
 const cardEditButtonClass = "text-[10px] font-semibold text-[#087879] underline underline-offset-2";
 
 type AboutProfileDraft = Pick<EditableCompanyProfile, "overview" | "industry" | "location" | "founded">;
+
+function mergeSavedCompany(
+  profile: CompanyProfile,
+  company: EmployerCompany,
+): CompanyProfile {
+  return {
+    ...profile,
+    id: getCompanyProfileSlug(company.name),
+    name: company.name,
+    industry: company.industry ?? "",
+    teamSize: company.company_size ?? "",
+    location: company.city ?? company.address ?? "",
+    overview: company.description ?? "",
+    website: company.website ?? "",
+    hiringEmail: company.contact_email ?? "",
+    contactNumber: company.contact_phone ?? "",
+    logoUrl: company.logo_url ?? "",
+  };
+}
+
+function optionalCompanyField(value: string): string | null {
+  const trimmed = value.trim();
+  return trimmed && trimmed.toLocaleLowerCase() !== "not provided" ? trimmed : null;
+}
 
 function ProfileField({
   label,
@@ -103,18 +130,25 @@ function StringListEditor({
 }
 
 export default function EmployerCompanyProfilePage() {
-  const { token } = useAuth();
+  const { user, token } = useAuth();
   const { employer } = useEmployerStatus();
-  const companyName = employer?.companyName ?? "";
+  const [serverCompany, setServerCompany] = useState<EmployerCompany | null>(null);
+  const companyName = serverCompany?.name ?? employer?.companyName ?? "";
   const profileSlug = getCompanyProfileSlug(companyName);
-  const profile = useCompanyProfile(companyName);
+  const localProfile = useCompanyProfile(companyName);
+  const profile = serverCompany
+    ? mergeSavedCompany(localProfile, serverCompany)
+    : localProfile;
   const verification = useCompanyVerification();
   const [serverWebsite, setServerWebsite] = useState(profile.website ?? "");
   const employerLogoUrl = verification.record.media?.logo?.url || profile.logoUrl;
   const [editing, setEditing] = useState(false);
   const editDialogRef = useRef<HTMLElement>(null);
   useDialogBehavior(editDialogRef, editing, () => setEditing(false));
+  const savingProfileRef = useRef(false);
+  const [isSavingProfile, setIsSavingProfile] = useState(false);
   const [editingHiringSetup, setEditingHiringSetup] = useState(false);
+  const [hiringSetupError, setHiringSetupError] = useState<string | null>(null);
   const [editingContact, setEditingContact] = useState(false);
   const [draft, setDraft] = useState<EditableCompanyProfile>(() => toEditableCompanyProfile(profile));
   const [hiringSetupDraft, setHiringSetupDraft] = useState(() => ({
@@ -130,6 +164,7 @@ export default function EmployerCompanyProfilePage() {
     hiringEmail: profile.hiringEmail ?? "",
     contactNumber: profile.contactNumber ?? "",
   }));
+  const [companyLoadError, setCompanyLoadError] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [editingAbout, setEditingAbout] = useState(false);
   const [aboutDraft, setAboutDraft] = useState<AboutProfileDraft>(() => ({
@@ -154,20 +189,127 @@ export default function EmployerCompanyProfilePage() {
   const [locationSaveError, setLocationSaveError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!token) return;
+    if (!token || user?.role !== "employer") return;
     let active = true;
     employerVerificationFilesApi.company(token)
       .then(({ company }) => {
         if (!active) return;
-        const website = company?.website ?? "";
-        setServerWebsite(website);
-        setContactDraft((current) => ({ ...current, website }));
+        setCompanyLoadError(null);
+        if (!company) return;
+        const savedProfile = mergeSavedCompany(
+          getCompanyProfile(company.name),
+          company,
+        );
+        setServerCompany(company);
+        setServerWebsite(company.website ?? "");
+        setDraft(toEditableCompanyProfile(savedProfile));
+        setContactDraft({
+          website: company.website ?? "",
+          hiringEmail: company.contact_email ?? "",
+          contactNumber: company.contact_phone ?? "",
+        });
+        setAboutDraft({
+          overview: savedProfile.overview,
+          industry: savedProfile.industry,
+          location: savedProfile.location,
+          founded: savedProfile.founded ?? "",
+        });
+        setHiringSetupDraft(savedProfile.hiringDefaults ?? {
+          title: "",
+          department: "",
+          location: savedProfile.location,
+          workspace: "",
+          schoolPartnerships: "",
+          acceptedCourses: "",
+        });
+        setLifeAtDraft(savedProfile.lifeAt.map((item) => ({ ...item })));
+        setBenefitDraft([...(savedProfile.benefits ?? [])]);
+        setLocationDraft((savedProfile.locations ?? []).map((location) => ({ ...location })));
       })
-      .catch(() => {});
+      .catch((requestError: unknown) => {
+        if (active) {
+          setCompanyLoadError(
+            requestError instanceof Error
+              ? requestError.message
+              : "Unable to load your saved company profile.",
+          );
+        }
+      });
     return () => { active = false; };
-  }, [token]);
+  }, [token, user?.role]);
+
+  async function persistCompanyProfile(profileDraft: EditableCompanyProfile): Promise<void> {
+    if (savingProfileRef.current) {
+      throw new Error("A company profile save is already in progress.");
+    }
+    savingProfileRef.current = true;
+    setIsSavingProfile(true);
+
+    try {
+      if (!token || user?.role !== "employer") {
+        throw new Error("Sign in with an employer account to save your company profile.");
+      }
+
+      const name = profileDraft.name.trim();
+      if (!name) {
+        throw new Error("Enter a company name before saving.");
+      }
+
+      const website = optionalCompanyField(profileDraft.website);
+      let normalizedWebsite: string | null = null;
+      if (website) {
+        normalizedWebsite = /^https?:\/\//i.test(website) ? website : `https://${website}`;
+        try {
+          new URL(normalizedWebsite);
+        } catch {
+          throw new Error("Enter a valid website URL.");
+        }
+      }
+
+      const { company } = await employerVerificationFilesApi.updateCompany(token, {
+        name,
+        category_id: serverCompany?.category_id ?? null,
+        company_size: optionalCompanyField(profileDraft.teamSize),
+        address: serverCompany?.address ?? null,
+        country: serverCompany?.country ?? null,
+        city: optionalCompanyField(profileDraft.location),
+        industry: optionalCompanyField(profileDraft.industry),
+        website: normalizedWebsite,
+        description: optionalCompanyField(profileDraft.overview),
+        contact_name: serverCompany?.contact_name ?? user.name,
+        contact_email: optionalCompanyField(profileDraft.hiringEmail),
+        contact_phone: optionalCompanyField(profileDraft.contactNumber),
+      });
+
+      const savedProfile = {
+        ...profileDraft,
+        name: company.name,
+        industry: company.industry ?? "",
+        teamSize: company.company_size ?? "",
+        location: company.city ?? company.address ?? "",
+        overview: company.description ?? "",
+        website: company.website ?? "",
+        hiringEmail: company.contact_email ?? "",
+        contactNumber: company.contact_phone ?? "",
+        logoUrl: profileDraft.logoUrl,
+      };
+      setServerCompany(company);
+      setServerWebsite(company.website ?? "");
+      updateCompanyProfile(getCompanyProfileSlug(company.name), savedProfile);
+    } finally {
+      savingProfileRef.current = false;
+      setIsSavingProfile(false);
+    }
+  }
+
+  function openProfileEditor() {
+    setDraft(toEditableCompanyProfile(profile));
+    setSaveError(null);
+    setEditing(true);
+  }
 
   function openHiringSetupEditor() {
+    setHiringSetupError(null);
     setHiringSetupDraft({
       title: profile.hiringDefaults?.title ?? "",
       department: profile.hiringDefaults?.department ?? "",
@@ -180,6 +322,11 @@ export default function EmployerCompanyProfilePage() {
   }
 
   function saveHiringSetupEditor() {
+    if (!Object.values(hiringSetupDraft).every((value) => value.trim().length > 0)) {
+      setHiringSetupError("Complete all six hiring default fields before saving.");
+      return;
+    }
+
     try {
       updateCompanyProfile(profileSlug, {
         ...toEditableCompanyProfile(profile),
@@ -188,9 +335,10 @@ export default function EmployerCompanyProfilePage() {
       companyVerificationApi.setHiringDefaultsComplete(
         Object.values(hiringSetupDraft).every((value) => value.trim().length > 0),
       );
+      setHiringSetupError(null);
       setEditingHiringSetup(false);
     } catch (caught) {
-      setSaveError(
+      setHiringSetupError(
         caught instanceof Error ? caught.message : "The hiring setup could not be saved.",
       );
     }
@@ -207,28 +355,13 @@ export default function EmployerCompanyProfilePage() {
 
   async function saveContactEditor() {
     try {
-      if (!token) throw new Error("Sign in to update your company profile.");
-      const normalizedWebsite = contactDraft.website.trim();
-      if (normalizedWebsite) {
-        try {
-          new URL(normalizedWebsite.match(/^https?:\/\//i) ? normalizedWebsite : `https://${normalizedWebsite}`);
-        } catch {
-          throw new Error("Enter a valid website URL.");
-        }
-      }
-      const response = await employerVerificationFilesApi.updateCompany(token, {
-        name: companyName || "Company profile",
-        website: normalizedWebsite || null,
-        contact_email: contactDraft.hiringEmail.trim() || null,
-        contact_phone: contactDraft.contactNumber.trim() || null,
-      });
-      setServerWebsite(response.company.website ?? "");
-      updateCompanyProfile(profileSlug, {
+      await persistCompanyProfile({
         ...toEditableCompanyProfile(profile),
         website: contactDraft.website,
         hiringEmail: contactDraft.hiringEmail,
         contactNumber: contactDraft.contactNumber,
       });
+      setSaveError(null);
       setEditingContact(false);
     } catch (caught) {
       setSaveError(
@@ -248,12 +381,13 @@ export default function EmployerCompanyProfilePage() {
     setEditingAbout(true);
   }
 
-  function saveAboutEditor() {
+  async function saveAboutEditor() {
     try {
-      updateCompanyProfile(profileSlug, {
+      await persistCompanyProfile({
         ...toEditableCompanyProfile(profile),
         ...aboutDraft,
       });
+      setAboutSaveError(null);
       setEditingAbout(false);
     } catch (caught) {
       setAboutSaveError(
@@ -332,72 +466,27 @@ export default function EmployerCompanyProfilePage() {
   async function handleSave(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     try {
-      if (token) {
-        await employerVerificationFilesApi.updateCompany(token, {
-          name: draft.name || companyName || "Company profile",
-          website: draft.website.trim() || null,
-          contact_email: draft.hiringEmail.trim() || null,
-          contact_phone: draft.contactNumber.trim() || null,
-        });
-        setServerWebsite(draft.website.trim());
-      }
-      updateCompanyProfile(profileSlug, draft);
+      await persistCompanyProfile(draft);
+      setHiringSetupDraft({ ...draft.hiringDefaults });
       companyVerificationApi.setHiringDefaultsComplete(
         Object.values(draft.hiringDefaults).every((value) => value.trim().length > 0),
       );
+      setSaveError(null);
       setEditing(false);
     } catch (caught) {
       setSaveError(caught instanceof Error ? caught.message : "The company profile could not be saved.");
     }
   }
 
-  const profileStrength = computeProfileStrength(
-    {
-      name: profile.name,
-      industry: profile.industry,
-      teamSize: profile.teamSize,
-      website: serverWebsite,
-      overview: profile.overview,
-      location: profile.location,
-      contactEmail: profile.hiringEmail,
-      contactPhone: profile.contactNumber,
-      locations: profile.locations,
-      benefits: profile.benefits,
-      cultureSummary: profile.cultureSummary,
-      lifeAt: profile.lifeAt,
-    },
-    {
-      logo: employerLogoUrl
-        ? { id: "company-logo", url: employerLogoUrl, altText: `${profile.name} logo` }
-        : null,
-      banner: null,
-      gallery: [],
-      videoUrl: "",
-      coverImageId: null,
-    },
-  );
-
   return (
     <EmployerWorkspaceLayout>
       <main className="mx-auto w-full max-w-[1136px] flex-1 px-10 py-6 max-[920px]:px-6 max-[680px]:px-4 max-[680px]:py-5">
-            <div className="relative isolate mb-5 flex flex-col gap-3 py-5 before:absolute before:inset-y-0 before:left-1/2 before:-z-10 before:w-screen before:-translate-x-1/2 before:border-b before:border-[#deeeeb] before:bg-[radial-gradient(ellipse_at_77%_0%,rgba(194,236,228,0.56),transparent_44%),linear-gradient(112deg,#f0faf8_0%,#e8f7f4_53%,#e4f5f2_100%)] md:flex-row md:items-end md:justify-between">
-              <div>
-                <p className="text-[9px] font-semibold text-[#188783]">
-                  {profile.name}
-                </p>
-                <h1 className="mt-2 text-[25px] leading-tight font-bold tracking-[-0.8px] text-[#263638] max-[600px]:text-[22px]">
-                  Company Profile
-                </h1>
-                <p className="mt-1 text-[11px] text-[#849293]">
-                  Manage how {profile.name} appears to job and OJT applicants.
-                </p>
-              </div>
-
+            <div className="relative isolate mb-5 flex justify-end py-5 before:absolute before:inset-y-0 before:left-1/2 before:-z-10 before:w-screen before:-translate-x-1/2 before:border-b before:border-[#deeeeb] before:bg-[radial-gradient(ellipse_at_77%_0%,rgba(194,236,228,0.56),transparent_44%),linear-gradient(112deg,#f0faf8_0%,#e8f7f4_53%,#e4f5f2_100%)]">
               <div className="flex flex-wrap gap-2">
               <button
                 type="button"
                 className="inline-flex items-center justify-center rounded-xl border border-[#dfe8e7] bg-white px-4 py-2.5 text-sm font-semibold text-[#1d3133] shadow-sm transition hover:border-[#d1e6e4]"
-                onClick={() => setEditing(true)}
+                onClick={openProfileEditor}
               >
                 Edit Preferences
               </button>
@@ -412,10 +501,11 @@ export default function EmployerCompanyProfilePage() {
               </Link>
               </div>
             </div>
-
-            <div className="mb-5">
-              <ProfileStrengthCard strength={profileStrength} />
-            </div>
+            {companyLoadError ? (
+              <p className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800" role="alert">
+                {companyLoadError}
+              </p>
+            ) : null}
 
             <section className="rounded-[18px] border border-[#dfeae8] bg-white p-4 shadow-[0_10px_20px_rgba(27,54,52,0.03)] md:p-5">
               <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
@@ -468,7 +558,7 @@ export default function EmployerCompanyProfilePage() {
                   <form
                     onSubmit={(event) => {
                       event.preventDefault();
-                      saveAboutEditor();
+                      void saveAboutEditor();
                     }}
                   >
                     <div className="mb-4 flex items-center justify-between gap-3">
@@ -539,10 +629,11 @@ export default function EmployerCompanyProfilePage() {
                             Cancel
                           </button>
                           <button
+                            disabled={isSavingProfile}
                             className="rounded-lg bg-[#0d8fa2] px-3 py-2 text-[10px] font-semibold text-white hover:bg-[#0b7a89]"
                             type="submit"
                           >
-                            Save changes
+                            {isSavingProfile ? "Saving..." : "Save changes"}
                           </button>
                         </div>
                       </>
@@ -880,11 +971,18 @@ export default function EmployerCompanyProfilePage() {
                 <CompanyHiringSetupDetails
                   draft={hiringSetupDraft}
                   editing={editingHiringSetup}
-                  onChange={(field, value) => setHiringSetupDraft((current) => ({ ...current, [field]: value }))}
-                  onCancel={() => setEditingHiringSetup(false)}
+                  onChange={(field, value) => {
+                    setHiringSetupDraft((current) => ({ ...current, [field]: value }));
+                    setHiringSetupError(null);
+                  }}
+                  onCancel={() => {
+                    setEditingHiringSetup(false);
+                    setHiringSetupError(null);
+                  }}
                   onEdit={openHiringSetupEditor}
                   onSave={saveHiringSetupEditor}
                   profile={profile}
+                  saveError={hiringSetupError}
                 />
 
                 <div className="rounded-[20px] border border-[#e5eeeb] bg-white p-4 shadow-[0_10px_24px_rgba(31,51,52,0.03)] md:p-5">
@@ -937,11 +1035,12 @@ export default function EmployerCompanyProfilePage() {
                           Cancel
                         </button>
                         <button
+                          disabled={isSavingProfile}
                           className="rounded-xl bg-[#0d8fa2] px-4 py-2 text-[10px] font-semibold text-white hover:bg-[#0b7a89]"
                           onClick={saveContactEditor}
                           type="button"
                         >
-                          Save changes
+                          {isSavingProfile ? "Saving..." : "Save changes"}
                         </button>
                       </div>
                     </div>
@@ -1169,10 +1268,11 @@ export default function EmployerCompanyProfilePage() {
                   Cancel
                 </button>
                 <button
+                  disabled={isSavingProfile}
                   className="rounded-xl bg-[#0d8fa2] px-5 py-2.5 text-sm font-semibold text-white hover:bg-[#0b7a89]"
                   type="submit"
                 >
-                  Save profile
+                  {isSavingProfile ? "Saving..." : "Save profile"}
                 </button>
               </div>
             </form>

@@ -19,6 +19,7 @@ type ApplicationsPageContentProps = {
   hasMore: boolean;
   loadMore: () => void;
   retry: () => void;
+  reload: () => void;
 };
 
 export default function ApplicationsPageContent({
@@ -35,6 +36,7 @@ export default function ApplicationsPageContent({
   hasMore,
   loadMore,
   retry,
+  reload,
 }: ApplicationsPageContentProps) {
   return (
     <div className="flex min-h-screen min-w-[320px] flex-col overflow-x-hidden bg-[#f5f8f8] font-sans text-[#263a3c] antialiased">
@@ -60,6 +62,7 @@ export default function ApplicationsPageContent({
         )}
         <ApplicationsTableSection
           applications={filteredApplications}
+          onInterviewUpdated={reload}
           onSelect={onSelect}
           selectedId={selectedId}
         />

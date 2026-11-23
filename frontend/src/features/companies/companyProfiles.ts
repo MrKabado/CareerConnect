@@ -355,6 +355,7 @@ export function getCompanyProfileBySlug(
     tagline: storedProfile?.tagline ?? "",
     logoUrl: storedProfile?.logoUrl ?? "",
     founded: storedProfile?.founded ?? "",
+    hiringDefaults: storedProfile?.hiringDefaults,
     highlights: storedProfile?.highlights ?? [],
     applicationProcess: storedProfile?.applicationProcess ?? [],
     lifeAt: storedProfile?.lifeAt ?? [],

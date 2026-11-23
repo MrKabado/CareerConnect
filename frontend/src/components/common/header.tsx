@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router";
 import { useAuth } from "@/features/auth/useAuth";
 import RoleNotificationBell from "@/features/notifications/RoleNotificationBell";
+import { useScrollDirectionHeader } from "@/hooks/useScrollDirectionHeader";
 
 const navItems = [
   { label: "Reports", to: "/admin", icon: null },
@@ -37,6 +38,9 @@ export default function Header({
   const [accountOpen, setAccountOpen] = useState(false);
   const [logoutError, setLogoutError] = useState<string | null>(null);
   const accountRef = useRef<HTMLDivElement>(null);
+  const { headerRef, isVisible: headerVisible } = useScrollDirectionHeader(
+    menuOpen || accountOpen,
+  );
   const adminInitials =
     user?.name
       .trim()
@@ -81,7 +85,12 @@ export default function Header({
   }
 
   return (
-    <header className="sticky top-0 z-40 grid h-[72px] grid-cols-[minmax(180px,0.75fr)_minmax(0,1.5fr)_minmax(150px,0.75fr)] items-center border-b border-[#e9efee] bg-white/95 px-[max(24px,calc((100vw-1180px)/2))] shadow-[0_1px_0_rgba(29,49,51,.02)] backdrop-blur-xl max-[920px]:h-[64px] max-[920px]:grid-cols-[minmax(150px,0.8fr)_minmax(0,1.2fr)_minmax(120px,0.8fr)] max-[920px]:px-4 max-[680px]:h-[60px] max-[680px]:grid-cols-[1fr_auto] max-[680px]:px-4">
+    <header
+      className={`sticky top-0 z-40 grid h-[72px] grid-cols-[minmax(180px,0.75fr)_minmax(0,1.5fr)_minmax(150px,0.75fr)] items-center border-b border-[#e9efee] bg-white/95 px-[max(24px,calc((100vw-1180px)/2))] shadow-[0_1px_0_rgba(29,49,51,.02)] backdrop-blur-xl transition-transform duration-300 motion-reduce:transition-none max-[920px]:h-[64px] max-[920px]:grid-cols-[minmax(150px,0.8fr)_minmax(0,1.2fr)_minmax(120px,0.8fr)] max-[920px]:px-4 max-[680px]:h-[60px] max-[680px]:grid-cols-[1fr_auto] max-[680px]:px-4 ${
+        headerVisible ? "translate-y-0" : "-translate-y-full"
+      }`}
+      ref={headerRef}
+    >
       <Link className="inline-flex items-center justify-self-start gap-2.5 whitespace-nowrap text-[17px] font-bold tracking-[-0.55px] text-[#263a3c] max-[680px]:gap-2 max-[680px]:text-base focus-visible:outline-[3px] focus-visible:outline-[#67c9c1] focus-visible:outline-offset-[3px]" to="/" aria-label="CareerConnect home">
         <span className="grid size-7.75 place-items-center rounded-[10px] bg-[#078b8d] text-[19px] font-bold tracking-[-1px] text-white max-[680px]:size-7 max-[680px]:rounded-lg max-[680px]:text-[17px]">C</span>
         <span>Career<span className="text-[#078b8d]">Connect</span></span>

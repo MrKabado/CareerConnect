@@ -53,6 +53,7 @@ export default function JobApplicationReviewStep({
           Back
         </button>
         <ApplicationPrimaryButton disabled={isSubmitting} onClick={() => void onSubmit()}>
+          {isSubmitting && <span aria-hidden="true" className="mr-2 inline-block size-3 animate-spin rounded-full border-2 border-current border-r-transparent" />}
           {isSubmitting ? "Submitting…" : "Submit application"}
         </ApplicationPrimaryButton>
       </div>

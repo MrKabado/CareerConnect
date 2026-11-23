@@ -10,11 +10,14 @@ use App\Models\IdentityVerification;
 use App\Models\Interview;
 use App\Models\JobListing;
 use App\Models\User;
+use App\Services\MediaStorage;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
 class DashboardController extends Controller
 {
+    public function __construct(private readonly MediaStorage $mediaStorage) {}
+
     public function adminActivity(Request $request): JsonResponse
     {
         $filters = $request->validate([
@@ -138,16 +141,93 @@ class DashboardController extends Controller
         $listings = $company?->jobListings();
         $applications = Application::query()
             ->whereHas('jobListing', fn ($query) => $query->where('company_id', $company?->id));
-        $pendingApplications = $company === null
-            ? 0
-            : (clone $applications)->where('status', 'pending')->count();
+        $applicationStatusCounts = $company === null
+            ? []
+            : (clone $applications)
+                ->selectRaw('status, COUNT(*) as aggregate')
+                ->groupBy('status')
+                ->pluck('aggregate', 'status')
+                ->all();
+        $applicationStatusCounts = array_replace(
+            array_fill_keys(Application::STATUSES, 0),
+            $applicationStatusCounts,
+        );
+        $pendingApplications = $applicationStatusCounts['pending'];
         $upcomingInterviews = $company === null
             ? 0
             : Interview::query()
+                ->where('employer_id', $request->user()->id)
                 ->where('status', 'scheduled')
                 ->where('scheduled_at', '>=', now())
-                ->whereHas('application.jobListing', fn ($query) => $query->where('company_id', $company->id))
+                ->whereHas('application', fn ($query) => $query
+                    ->where('status', 'interview')
+                    ->whereHas('jobListing', fn ($listingQuery) => $listingQuery
+                        ->where('company_id', $company->id)))
                 ->count();
+        $recentApplications = $company === null
+            ? collect()
+            : (clone $applications)
+                ->with(['applicant.applicantProfile', 'jobListing'])
+                ->orderByDesc('applied_at')
+                ->orderByDesc('id')
+                ->limit(5)
+                ->get()
+                ->map(fn (Application $application): array => [
+                    'id' => $application->id,
+                    'status' => $application->status,
+                    'applied_at' => $application->applied_at?->toISOString(),
+                    'applicant' => [
+                        'id' => $application->applicant?->id,
+                        'name' => $application->applicant?->name ?? 'Applicant',
+                        'photo_url' => $application->applicant?->applicantProfile?->profile_photo_path
+                            ? $this->mediaStorage->publicImageUrl(
+                                $application->applicant->applicantProfile->profile_photo_disk,
+                                $application->applicant->applicantProfile->profile_photo_path,
+                            )
+                            : null,
+                    ],
+                    'listing' => [
+                        'title' => $application->jobListing?->title ?? 'Job listing',
+                    ],
+                ])
+                ->values();
+        $upcomingInterviewRecords = $company === null
+            ? collect()
+            : Interview::query()
+                ->where('employer_id', $request->user()->id)
+                ->where('status', 'scheduled')
+                ->where('scheduled_at', '>=', now())
+                ->whereHas('application', fn ($query) => $query
+                    ->where('status', 'interview')
+                    ->whereHas('jobListing', fn ($listingQuery) => $listingQuery
+                        ->where('company_id', $company->id)))
+                ->with(['applicant.applicantProfile', 'application.jobListing'])
+                ->orderBy('scheduled_at')
+                ->orderBy('id')
+                ->limit(5)
+                ->get()
+                ->map(fn (Interview $interview): array => [
+                    'id' => $interview->id,
+                    'application_id' => $interview->application_id,
+                    'status' => $interview->status,
+                    'scheduled_at' => $interview->scheduled_at?->utc()->toISOString(),
+                    'timezone' => $interview->timezone,
+                    'mode' => $interview->mode,
+                    'location' => $interview->location,
+                    'applicant' => [
+                        'name' => $interview->applicant?->name ?? 'Applicant',
+                        'photo_url' => $interview->applicant?->applicantProfile?->profile_photo_path
+                            ? $this->mediaStorage->publicImageUrl(
+                                $interview->applicant->applicantProfile->profile_photo_disk,
+                                $interview->applicant->applicantProfile->profile_photo_path,
+                            )
+                            : null,
+                    ],
+                    'listing' => [
+                        'title' => $interview->application?->jobListing?->title ?? 'Job listing',
+                    ],
+                ])
+                ->values();
         $unclearListings = $company === null
             ? 0
             : $company->jobListings()
@@ -200,14 +280,18 @@ class DashboardController extends Controller
             'data' => [
                 'total_job_listings' => $listings?->count() ?? 0,
                 'active_job_listings' => $listings?->where('status', 'open')->count() ?? 0,
-                'total_applications' => $company === null ? 0 : (clone $applications)->count(),
+                'total_applications' => array_sum($applicationStatusCounts),
                 'pending_applications' => $pendingApplications,
+                'shortlisted_applications' => $applicationStatusCounts['shortlisted'],
                 'upcoming_interviews' => $upcomingInterviews,
                 'closed_listings' => $company === null
                     ? 0
                     : $company->jobListings()->where('status', 'closed')->count(),
                 'total_applicants' => $company === null ? 0 : (clone $applications)->distinct('applicant_id')->count('applicant_id'),
-                'hired_applicants' => $company === null ? 0 : (clone $applications)->where('status', 'hired')->count(),
+                'hired_applicants' => $applicationStatusCounts['hired'],
+                'application_status_counts' => $applicationStatusCounts,
+                'recent_applications' => $recentApplications,
+                'upcoming_interview_records' => $upcomingInterviewRecords,
                 'recommendations' => $recommendations,
             ],
         ]);

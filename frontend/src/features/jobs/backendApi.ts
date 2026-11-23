@@ -37,6 +37,24 @@ export type PublicJobListing = {
   company?: { name: string; city: string | null; logo_path: string | null; logo_url: string | null } | null;
 };
 
+export type EmployerJobListing = Omit<
+  PublicJobListing,
+  "title" | "description" | "location" | "work_setup" | "ojt"
+> & {
+  title: string | null;
+  description: string | null;
+  location: string | null;
+  work_setup: "onsite" | "hybrid" | "remote" | null;
+  ojt?: {
+    duration_hours: number | null;
+    allowance_type: "paid" | "unpaid" | null;
+    allowance_amount: number | null;
+    slots: number | null;
+    accepted_courses: string[] | null;
+    moa_accepted: boolean;
+  } | null;
+};
+
 type Paginated<T> = {
   data: T[];
   links: { first: string | null; last: string | null; prev: string | null; next: string | null };
@@ -78,7 +96,7 @@ export function listingText(value: string[] | string | null | undefined): string
   return [value];
 }
 
-export function formatListingPay(listing: PublicJobListing): string {
+export function formatListingPay(listing: PublicJobListing | EmployerJobListing): string {
   if (listing.listing_type === "ojt") {
     if (listing.ojt?.allowance_type === "unpaid") return "Unpaid";
     return listing.ojt?.allowance_amount == null

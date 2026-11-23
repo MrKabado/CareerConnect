@@ -34,12 +34,14 @@ export type Application = {
   reapplicationAllowed?: boolean;
   hiredAt?: string;
   employmentEndedAt?: string | null;
-  interviewSchedule?: Pick<InterviewDetails, "date" | "time" | "timezone"> & {
+  interviewSchedule?: Pick<InterviewDetails, "date" | "time" | "timezone" | "durationMinutes"> & {
     mode?: "onsite" | "online" | "phone";
     meetingUrl?: string | null;
     meetingInstructions?: string | null;
     location?: string | null;
   };
+  interviewId?: number;
+  interviewStatus?: "invited" | "scheduled" | "completed" | "cancelled";
   resumeFileName?: string;
   applicationLetterFileName?: string;
   coverLetterFileName?: string;

@@ -49,6 +49,11 @@ type ProfileDocument = {
   url?: string;
 };
 
+type IdentitySelfieSelection = {
+  file: File;
+  previewUrl: string;
+};
+
 function ProfileDocumentCard({
   title,
   file,
@@ -168,7 +173,7 @@ const allowancePreferenceLabels: Record<string, string> = {
 };
 
 export default function ProfilePage() {
-  const { user, token, logout } = useAuth();
+  const { user, token, logout, refresh } = useAuth();
   const navigate = useNavigate();
   const [resumeError, setResumeError] = useState<string | null>(null);
   const [resumePreviewLoading, setResumePreviewLoading] = useState(false);
@@ -189,6 +194,7 @@ export default function ProfilePage() {
     useState(user?.role === "applicant" && Boolean(token));
   const [identityVerificationError, setIdentityVerificationError] = useState<string | null>(null);
   const [identityUploadProgress, setIdentityUploadProgress] = useState<number | null>(null);
+  const [identitySelfie, setIdentitySelfie] = useState<IdentitySelfieSelection | null>(null);
   const [resumeLoading, setResumeLoading] = useState(user?.role === "applicant" && Boolean(token));
   const [profileLoading, setProfileLoading] = useState(user?.role === "applicant" && Boolean(token));
   const [profileError, setProfileError] = useState<string | null>(null);
@@ -221,6 +227,11 @@ export default function ProfilePage() {
     () => setIsProfilePicturePreviewOpen(false),
   );
   useDialogBehavior(documentPreviewDialogRef, documentPreview !== null, closeDocumentPreview);
+  useEffect(() => {
+    return () => {
+      if (identitySelfie) URL.revokeObjectURL(identitySelfie.previewUrl);
+    };
+  }, [identitySelfie]);
   const onboarding = useSyncExternalStore(
     onboardingStore.subscribe,
     onboardingStore.getSnapshot,
@@ -1031,25 +1042,41 @@ export default function ProfilePage() {
     event.target.value = "";
     if (!file || !token) return;
 
-    const allowedExtension = /\.(jpe?g|png|pdf)$/i.test(file.name);
-    const allowedMimeType =
-      !file.type ||
-      ["image/jpeg", "image/png", "application/pdf"].includes(file.type);
+    const allowedExtension = /\.(jpe?g|png|webp)$/i.test(file.name);
+    const allowedMimeType = ["image/jpeg", "image/png", "image/webp"].includes(file.type);
     if (!allowedExtension || !allowedMimeType) {
-      setIdentityVerificationError("Choose a JPG, PNG, or PDF identity document.");
+      setIdentityVerificationError("Choose a valid JPG, PNG, or WebP selfie photo.");
       return;
     }
     if (file.size > 5 * 1024 * 1024) {
-      setIdentityVerificationError("Identity documents must be 5 MB or smaller.");
+      setIdentityVerificationError("Your selfie photo must be 5 MB or smaller.");
       return;
     }
+
+    setIdentityVerificationError(null);
+    try {
+      const image = await createImageBitmap(file);
+      image.close();
+    } catch {
+      setIdentityVerificationError("The selected file is not a readable image. Choose a valid photo.");
+      return;
+    }
+
+    setIdentitySelfie({
+      file,
+      previewUrl: URL.createObjectURL(file),
+    });
+  }
+
+  async function submitIdentityVerification() {
+    if (!identitySelfie || !token || identityUploadProgress !== null) return;
 
     setIdentityVerificationError(null);
     setIdentityUploadProgress(0);
     try {
       const response = await applicantFilesApi.submitIdentityVerification(
         token,
-        file,
+        identitySelfie.file,
         setIdentityUploadProgress,
       );
       setIdentityVerification({
@@ -1058,6 +1085,8 @@ export default function ProfilePage() {
         submitted_at: new Date().toISOString(),
         reviewed_at: null,
       });
+      setIdentitySelfie(null);
+      await refresh();
     } catch (requestError) {
       setIdentityVerificationError(
         requestError instanceof Error
@@ -1972,7 +2001,7 @@ export default function ProfilePage() {
                 <div className="rounded-lg border border-[#dce9e7] bg-[#f5f9f8] p-3">
                   <p className="text-[10px] font-semibold text-[#526365]">Identity review in progress</p>
                   <p className="mt-1 text-[9px] leading-4 text-[#718184]">
-                    Identity review is separate from application eligibility.
+                    You can apply for jobs and OJT opportunities after an Admin approves your identity verification.
                   </p>
                 </div>
               ) : identityVerification?.status === "rejected" ? (
@@ -1985,19 +2014,23 @@ export default function ProfilePage() {
                 </div>
               ) : (
                 <p className="rounded-lg bg-[#f5f9f8] p-3 text-[9px] leading-4 text-[#718184]">
-                  Identity verification is separate from application eligibility and does not need to be approved before you apply.
+                  <span className="font-semibold">Identity verification not submitted.</span>{" "}
+                  Admin approval is required before you can apply for jobs or OJT opportunities.
                 </p>
               )}
+              <p className="mt-2 rounded-lg bg-[#f5f9f8] p-2.5 text-[9px] leading-4 text-[#526365]">
+                Upload one clear photo showing your face and your own valid government ID together in the same image. Keep the ID details readable.
+              </p>
               {(!identityVerification || identityVerification.status === "rejected") &&
                 !identityVerificationLoading && (
                   <label className="mt-2 flex cursor-pointer items-center justify-center rounded-lg border border-dashed border-[#d6e5e3] bg-[#f8fbfb] p-2.5 text-center text-[9px] font-semibold text-[#526365] hover:border-[#078b8d] focus-within:outline-[3px] focus-within:outline-[#67c9c1]">
-                    {identityUploadProgress !== null
-                      ? "Uploading identity document…"
+                    {identitySelfie
+                      ? "Choose a different selfie photo"
                       : identityVerification?.status === "rejected"
-                        ? "Upload a replacement ID"
-                        : "Upload a government-issued ID"}
+                        ? "Choose a replacement selfie with ID"
+                        : "Choose selfie with ID"}
                     <input
-                      accept=".jpg,.jpeg,.png,.pdf"
+                      accept=".jpg,.jpeg,.png,.webp"
                       className="sr-only"
                       disabled={identityUploadProgress !== null}
                       onChange={(event) => void handleIdentityVerificationUpload(event)}
@@ -2005,13 +2038,43 @@ export default function ProfilePage() {
                     />
                   </label>
                 )}
+              {identitySelfie && (
+                <div className="mt-2 rounded-lg border border-[#dce9e7] bg-white p-2">
+                  <img
+                    alt="Preview of your selfie showing your face with your ID"
+                    className="mx-auto max-h-56 rounded-md object-contain"
+                    src={identitySelfie.previewUrl}
+                  />
+                  <div className="mt-2 flex items-center justify-between gap-2">
+                    <span className="truncate text-[8px] text-[#526365]">{identitySelfie.file.name}</span>
+                    <button
+                      className="shrink-0 rounded px-2 py-1 text-[8px] font-semibold text-[#8b332c] hover:bg-[#fff3f1] disabled:opacity-50"
+                      disabled={identityUploadProgress !== null}
+                      onClick={() => setIdentitySelfie(null)}
+                      type="button"
+                    >
+                      Remove
+                    </button>
+                  </div>
+                  <button
+                    aria-busy={identityUploadProgress !== null}
+                    className="mt-2 w-full rounded-lg bg-[#078b8d] px-3 py-2 text-[9px] font-semibold text-white hover:bg-[#067476] disabled:cursor-not-allowed disabled:opacity-60"
+                    disabled={identityUploadProgress !== null}
+                    onClick={() => void submitIdentityVerification()}
+                    type="button"
+                  >
+                    {identityUploadProgress !== null && <span aria-hidden="true" className="mr-2 inline-block size-3 animate-spin rounded-full border-2 border-current border-r-transparent" />}
+                    {identityUploadProgress !== null ? "Submitting for review…" : "Submit for review"}
+                  </button>
+                </div>
+              )}
               {identityUploadProgress !== null && (
                 <p className="mt-2 text-[9px] text-[#087879]" role="status">
                   Uploading… {identityUploadProgress}%
                 </p>
               )}
               <p className="mt-1 text-[8px] leading-4 text-[#849394]">
-                JPG, PNG, or PDF · 5 MB maximum
+                JPG, PNG, or WebP · 5 MB maximum. Replacements can be submitted after a rejection.
               </p>
               {identityVerificationError && (
                 <p className="mt-2 text-[9px] text-[#b34b4b]" role="alert">

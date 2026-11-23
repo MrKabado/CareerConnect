@@ -41,6 +41,9 @@ function toApplication(record: ApplicantApplicationRecord): Application {
           date,
           time,
           timezone: record.interview.timezone,
+          durationMinutes: record.interview.end_at
+            ? Math.max(0, Math.round((new Date(record.interview.end_at).getTime() - scheduled.getTime()) / 60000))
+            : undefined,
           mode: record.interview.mode,
           meetingUrl: record.interview.meeting_url,
           meetingInstructions: record.interview.meeting_instructions,
@@ -64,6 +67,8 @@ function toApplication(record: ApplicantApplicationRecord): Application {
     hiredAt: record.hired_at ?? undefined,
     employmentEndedAt: record.employment_ended_at,
     interviewSchedule,
+    interviewId: record.interview?.id,
+    interviewStatus: record.interview?.status,
     resumeFileName: record.resume?.original_filename,
     coverLetterFileName:
       record.cover_letter_document?.original_filename ??
@@ -137,6 +142,11 @@ export function useUserApplications() {
     onSearchChange: setSearch,
     onSelect: (id: number) => setSelectedId((current) => current === id ? null : id),
     retry: () => {
+      setIsLoading(true);
+      setError(null);
+      void loadPage(1, false);
+    },
+    reload: () => {
       setIsLoading(true);
       setError(null);
       void loadPage(1, false);

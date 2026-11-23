@@ -86,7 +86,11 @@ export default function ApplicantDetailPageContent() {
                 employmentEndedAt={applicantStage.applicant?.employmentEndedAt}
                 rejectionReason={applicantStage.applicant?.rejectionReason}
                 interviewDetails={applicantStage.applicant?.interviewDetails}
+                interviewStatus={applicantStage.applicant?.interviewStatus}
+                interviewAvailability={applicantStage.applicant?.interviewAvailability}
                 onAdvance={applicantStage.advance}
+                onUpdateAvailability={applicantStage.updateAvailability}
+                onInviteAgain={applicantStage.inviteAgain}
                 onReject={applicantStage.reject}
                 onRetry={applicantStage.retry}
                 onRecordEmploymentEnd={applicantStage.recordEmploymentEnd}

@@ -70,4 +70,9 @@ class Company extends Model
     {
         return $this->hasMany(CompanyRating::class);
     }
+
+    public function mediaAssets(): HasMany
+    {
+        return $this->hasMany(CompanyMediaAsset::class);
+    }
 }

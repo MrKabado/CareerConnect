@@ -4,7 +4,6 @@ import { Skeleton } from "@/components/ui/skeleton";
 import ApplicantDetailSkeleton from "@/features/employer-applicants/components/ApplicantDetailSkeleton";
 import type { Applicant, ApplicantDocument } from "@/features/employer-applicants/types";
 import {
-  downloadApplicantDocument,
   getApplicantPortfolioUrl,
   getExternalDocumentUrl,
   getGitHubUsername,
@@ -493,9 +492,7 @@ export function ApplicantDocumentPreviewDialog({
           <div className="flex shrink-0 items-center gap-2">
             <button
               type="button"
-              onClick={selectedDocument.dataUrl
-                ? () => downloadApplicantDocument(selectedDocument)
-                : () => onDownload(selectedDocument)}
+              onClick={() => onDownload(selectedDocument)}
               disabled={isDownloading}
               className="rounded-lg bg-[#078b98] px-3 py-2 text-[10px] font-semibold text-white hover:bg-[#06767f] focus-visible:outline-[3px] focus-visible:outline-[#67c9c1] disabled:cursor-wait disabled:opacity-60"
             >
@@ -531,9 +528,7 @@ export function ApplicantDocumentPreviewDialog({
             </p>
             <button
               type="button"
-              onClick={selectedDocument.dataUrl
-                ? () => downloadApplicantDocument(selectedDocument)
-                : () => onDownload(selectedDocument)}
+              onClick={() => onDownload(selectedDocument)}
               disabled={isDownloading}
               className="mt-4 rounded-lg bg-[#078b98] px-4 py-2.5 text-[10px] font-semibold text-white hover:bg-[#06767f] focus-visible:outline-[3px] focus-visible:outline-[#67c9c1] disabled:cursor-wait disabled:opacity-60"
             >

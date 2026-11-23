@@ -82,8 +82,13 @@ function phaseSevenApplication(
 function phaseSevenInterviewSchedule(array $changes = []): array
 {
     return array_merge([
-        'scheduled_at' => now('Asia/Manila')->addDays(2)->setTime(10, 0)->format('Y-m-d H:i:s'),
-        'end_at' => now('Asia/Manila')->addDays(2)->setTime(11, 0)->format('Y-m-d H:i:s'),
+        'availability_dates' => [now('Asia/Manila')->addDays(2)->toDateString()],
+        'start_time' => '09:00',
+        'end_time' => '17:00',
+        'break_start_time' => '12:00',
+        'break_end_time' => '13:00',
+        'duration_minutes' => 60,
+        'buffer_minutes' => 0,
         'timezone' => 'Asia/Manila',
         'mode' => 'online',
         'meeting_url' => 'https://meet.example.com/interview',
@@ -146,7 +151,7 @@ it('notifies applicants once for meaningful application status transitions and e
         ->and(json_encode($notification->data))->not->toContain('Do not expose this');
 });
 
-it('notifies applicants about changed interview schedules and cancellation without duplicates', function (): void {
+it('notifies applicants and employers about invites, booking, rescheduling, and cancellation without duplicates', function (): void {
     $applicant = User::factory()->create(['role' => 'applicant']);
     $employer = User::factory()->create(['role' => 'employer']);
     $application = phaseSevenApplication($applicant, $employer, 'shortlisted');
@@ -155,26 +160,31 @@ it('notifies applicants about changed interview schedules and cancellation witho
     $this->withToken($token)->postJson(
         "/api/employer/applications/{$application->id}/interviews",
         phaseSevenInterviewSchedule(),
-    )->assertCreated();
+    )->assertCreated()
+        ->assertJsonPath('data.status', 'invited');
     $interview = $application->interviews()->firstOrFail();
     expect($applicant->notifications()->count())->toBe(1)
-        ->and($applicant->notifications()->first()->data['event'])->toBe('interview_scheduled');
+        ->and($applicant->notifications()->first()->data['event'])->toBe('interview_invited');
 
-    $newSchedule = phaseSevenInterviewSchedule([
-        'scheduled_at' => now('Asia/Manila')->addDays(4)->setTime(13, 0)->format('Y-m-d H:i:s'),
-        'end_at' => now('Asia/Manila')->addDays(4)->setTime(14, 0)->format('Y-m-d H:i:s'),
-    ]);
+    $applicantToken = phaseSevenToken($applicant);
+    $date = now('Asia/Manila')->addDays(2)->toDateString();
     $this->app['auth']->forgetGuards();
-    $this->withToken($token)->putJson("/api/employer/interviews/{$interview->id}", $newSchedule)
-        ->assertOk()
-        ->assertJsonPath('data.scheduled_at', $interview->fresh()->scheduled_at->toISOString());
+    $this->withToken($applicantToken)->postJson("/api/applicant/interviews/{$interview->id}/schedule", [
+        'date' => $date,
+        'start_time' => '10:00',
+    ])->assertOk()
+        ->assertJsonPath('data.status', 'scheduled');
+
     $this->app['auth']->forgetGuards();
-    $this->withToken($token)->putJson("/api/employer/interviews/{$interview->id}", $newSchedule)
-        ->assertOk()
-        ->assertJsonPath('message', 'Interview schedule is unchanged.');
+    $this->withToken($applicantToken)->postJson("/api/applicant/interviews/{$interview->id}/schedule", [
+        'date' => $date,
+        'start_time' => '13:00',
+    ])->assertOk();
 
     expect($applicant->notifications()->count())->toBe(1)
-        ->and($applicant->notifications()->first()->data['event'])->toBe('interview_rescheduled');
+        ->and($applicant->notifications()->first()->data['event'])->toBe('interview_rescheduled')
+        ->and($employer->notifications()->count())->toBe(1)
+        ->and($employer->notifications()->first()->data['event'])->toBe('interview_rescheduled');
 
     $this->app['auth']->forgetGuards();
     $this->withToken($token)->postJson("/api/employer/interviews/{$interview->id}/cancel", [

@@ -8,12 +8,14 @@ type ApplicationsTableSectionProps = {
   applications: Application[];
   selectedId: number | null;
   onSelect: (id: number) => void;
+  onInterviewUpdated?: () => void;
 };
 
 export default function ApplicationsTableSection({
   applications,
   selectedId,
   onSelect,
+  onInterviewUpdated,
 }: ApplicationsTableSectionProps) {
   const selectedApplication = applications.find(
     (application) => application.id === selectedId,
@@ -37,6 +39,7 @@ export default function ApplicationsTableSection({
           <ApplicationDetailPanel
             application={selectedApplication}
             onClose={() => onSelect(selectedApplication.id)}
+            onInterviewUpdated={onInterviewUpdated}
           />
         )}
       </div>

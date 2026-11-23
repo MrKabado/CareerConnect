@@ -31,8 +31,8 @@ Employers register a company, submit verification documents, and, once an admin 
 
 ```
 Browser
- ├── http://192.168.254.125:5173  →  React + TypeScript (Vite dev server)
- └── http://192.168.254.125:8000  →  Nginx → PHP-FPM (Laravel API) → MySQL (Docker-internal)
+ ├── http://localhost:5173  →  React + TypeScript (Vite dev server)
+ └── http://localhost:8000  →  Nginx → PHP-FPM (Laravel API) → MySQL (Docker-internal)
 ```
 
 | Layer | Choice |
@@ -44,7 +44,7 @@ Browser
 | Files | Laravel filesystem: private disk for documents, public disk for logos and photos |
 | Infrastructure | Docker Compose: `app`, `web`, `db`, `frontend`, and `phpmyadmin` (tools file) |
 
-The browser calls the API directly, so the API base URL in React is `http://192.168.254.125:8000/api`, never a Docker service name.
+The browser calls the API directly, so the API base URL in React is `http://localhost:8000/api`, never a Docker service name.
 
 ---
 
@@ -87,7 +87,7 @@ Store enums as strings and back them with PHP enums.
 | EmploymentType | `full_time`, `part_time`, `contract` |
 | ApplicationStatus | `applied`, `under_review`, `shortlisted`, `interview_scheduled`, `hired`, `rejected` |
 | InterviewMode | `onsite`, `video`, `phone` |
-| InterviewStatus | `scheduled`, `completed`, `cancelled` |
+| InterviewStatus | `invited`, `scheduled`, `completed`, `cancelled` |
 | VerificationStatus | `draft`, `pending`, `approved`, `rejected` |
 | DocumentType | `business_registration`, `business_permit`, `supporting` |
 | RejectionReason | `document_unreadable`, `name_mismatch`, `expired_permit`, `other` |
@@ -235,19 +235,18 @@ Listing `status` moves `draft` → `open` → `closed`. Activate/deactivate togg
 
 ### 4.6 Applying and the hiring pipeline
 
-1. The applicant applies to an `open` listing with a resume and an optional cover letter. The application starts as `applied`, and the employer is notified.
+1. The applicant applies to an eligible `open` listing with a resume and an optional cover letter. The application starts as `pending`, and the employer is notified. Required skills and declared experience inform recommendations and applicant ranking but do not block applications; other eligibility rules still apply.
 2. The employer moves the application through the pipeline. Every change notifies the applicant.
 
 | From | Allowed next status |
 |---|---|
-| `applied` | `under_review`, `rejected` |
-| `under_review` | `shortlisted`, `rejected` |
-| `shortlisted` | `interview_scheduled`, `rejected` |
-| `interview_scheduled` | `hired`, `rejected` |
+| `pending` | `reviewing`, `rejected` |
+| `reviewing` | `shortlisted`, `interview`, `rejected` |
+| `shortlisted` | `interview`, `hired`, `rejected` |
+| `interview` | `hired`, `rejected` |
 | `hired`, `rejected` | none (final) |
 
-- `interview_scheduled` is only reachable by scheduling an interview (`POST /api/applications/{id}/interview`), which is allowed from `shortlisted`.
-- Rescheduling updates the same interview row. Cancelling sets the interview's status to `cancelled`; the application stays `interview_scheduled` until the employer reschedules or rejects.
+- Employers publish availability for shortlisted applications. The applicant books or reschedules a slot from that availability; the server revalidates the slot under an employer lock. Availability edits preserve confirmed interview times. Cancelling sets the interview's status to `cancelled`; the application stays `interview` until another invitation is published, the employer hires, or rejects.
 - A completed interview does not change the application status. The employer then moves it to `hired` or `rejected`.
 
 ---
@@ -273,10 +272,12 @@ Enforce these on the server. The UI only mirrors them. Write one feature test pe
 | R13 | Inactive or deactivated users cannot authenticate or use protected endpoints; their tokens are revoked when an admin deactivates them. | 403 `account_deactivated` |
 | R14 | The admin queue includes only verifications whose employer has a verified email. | none |
 | R15 | Rejection requires a `rejection_reason`. Submissions, approvals, and rejections are never overwritten. | 422 |
-| R16 | `job` listings require `employment_type`. `ojt` listings require `duration_hours`, `allowance_type`, `slots`, and `allowance_amount` when paid. `salary_max` is not below `salary_min`. | 422 |
+| R16 | `job` listings require `employment_type`. `ojt` listings require `duration_hours`, `allowance_type`, `slots`, and `allowance_amount` when paid. When both job salary endpoints are provided, `salary_max` must be greater than `salary_min`; publishing requires both. | 422 |
 | R17 | An application needs a resume: an existing `resume_id` owned by the applicant, or an upload in the same request. | 422 |
-| R18 | File limits: resumes, cover letters, and verification documents up to 5 MB; verification documents PDF/JPG/PNG; resumes and cover letters PDF/DOCX; logos and photos JPG/PNG/WEBP up to 2 MB. | 422 |
+| R18 | File limits: resumes and cover letters up to 5 MB and PDF/DOCX; applicant identity verification requires a valid JPG/JPEG/PNG/WebP image up to 5 MB; employer verification documents accept PDF/JPG/PNG up to 5 MB; logos and profile photos accept JPG/PNG/WEBP up to 2 MB. | 422 |
 | R19 | A resume referenced by an application cannot be deleted. | 409 `resume_in_use` |
+| R20 | Once an applicant has an application marked hired, they cannot submit any further applications, including after employment ends. Required skills are not a hard application blocker. | 403 `applicant_already_hired` |
+| R21 | Job and OJT applications require an Admin-verified applicant identity record. Missing records are `unverified`; `pending` and `rejected` records cannot apply. Eligibility is rechecked in the application transaction, and rejected applicants can resubmit verification. | 403 `identity_verification_required` |
 
 ---
 
@@ -510,11 +511,23 @@ Unique constraint on `(job_listing_id, applicant_id)`.
 
 | Column | Type | Notes |
 |---|---|---|
-| application_id | FK → applications, unique | One interview per application |
-| scheduled_at | datetime | |
+| application_id | FK → applications | Multiple invitations/interviews may be retained |
+| scheduled_at | nullable datetime | UTC; null while invited |
+| end_at | nullable datetime | UTC |
+| timezone | string | IANA timezone used for employer availability |
 | mode | string(10) | InterviewMode |
-| status | string(15), default `scheduled` | InterviewStatus |
-| notes | text, null | |
+| status | string(15), default `invited` | InterviewStatus |
+
+### interview_availabilities
+
+| Column | Type | Notes |
+|---|---|---|
+| interview_id | FK → interviews | |
+| available_date | date | Unique with interview_id |
+| start_time / end_time | time | Employer-local working window |
+| break_start_time / break_end_time | nullable time | Excluded from generated slots |
+| duration_minutes | unsigned small integer | Interview slot duration |
+| buffer_minutes | unsigned small integer | Buffer before the next slot |
 
 ### saved_listings (optional)
 
@@ -709,8 +722,12 @@ Compute on demand: for the returned page on search, and for the candidate pool o
 | PATCH | `/applications/{id}/status` | Employer | Pipeline move (R10); never to `interview_scheduled` |
 | POST | `/applications/{id}/withdraw` | Applicant | Optional |
 | GET | `/applications/{id}/cover-letter` | Owner or listing owner | Download |
-| POST | `/applications/{id}/interview` | Employer | Schedule; sets `interview_scheduled` |
-| PUT | `/interviews/{id}` | Employer | Reschedule, edit notes, mark `completed` or `cancelled` |
+| POST | `/applications/{id}/interviews` | Employer | Publish availability and invite applicant |
+| PUT | `/interviews/{id}/availability` | Employer | Edit dates and time windows |
+| GET | `/interviews/{id}/availability` | Applicant | View available dates and slots |
+| POST | `/interviews/{id}/schedule` | Applicant | Book or reschedule an available slot |
+| POST | `/interviews/{id}/cancel` | Applicant or Employer | Cancel; preserves interview history |
+| PATCH | `/interviews/{id}/status` | Employer | Mark a past interview `completed` |
 | GET | `/interviews` | Applicant, Employer | Own, upcoming first |
 
 **Employer registration and verification**
@@ -898,10 +915,15 @@ POST jobs             listing_type, title, category_id, work_setup, location,
 POST jobs/{id}/apply  resume_id (owned by the user) or resume file (pdf,docx, max 5 MB) required
                       cover_letter nullable|file|mimes:pdf,docx|max:5120
 
-POST applications/{id}/interview
-                      scheduled_at required|date|after:now
-                      mode in InterviewMode
-                      notes nullable|string|max:1000
+POST applications/{id}/interviews
+                      availability_dates required|array|date_format:Y-m-d
+                      start_time/end_time required|date_format:H:i
+                      optional break start/end, duration (15-180), buffer (0-60)
+                      timezone required|timezone; mode in InterviewMode
+
+POST interviews/{id}/schedule
+                      date required|date_format:Y-m-d
+                      start_time required|date_format:H:i; must match a generated slot
 
 POST admin/verifications/{id}/reject
                       reason required|in RejectionReason

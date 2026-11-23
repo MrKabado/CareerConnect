@@ -89,13 +89,7 @@ class ResumeStorage
 
     public function download(Resume $resume, string $filename, string $mimeType): StreamedResponse
     {
-        $expectedPrefix = 'applicant-resumes/'.$resume->applicant_id.'/';
-        $path = $resume->storage_path;
-
-        if (! str_starts_with($path, $expectedPrefix)
-            || preg_match('#^applicant-resumes/[0-9]+/[a-f0-9-]+\.(pdf|docx)$#i', $path) !== 1) {
-            abort(404, 'The resume file is unavailable.');
-        }
+        $path = $this->validatedStoragePath($resume);
 
         if ($resume->storage_disk === 'cloudinary') {
             if ($resume->cloudinary_asset_id === null || $resume->cloudinary_asset_id === '') {
@@ -110,7 +104,7 @@ class ResumeStorage
             );
         }
 
-        if ($resume->storage_disk !== 'local' || ! Storage::disk('local')->exists($path)) {
+        if (! Storage::disk('local')->exists($path)) {
             abort(404, 'The resume file is unavailable.');
         }
 
@@ -119,5 +113,45 @@ class ResumeStorage
             'X-Content-Type-Options' => 'nosniff',
             'Cache-Control' => 'private, no-store',
         ]);
+    }
+
+    /**
+     * @return array{preview_url: string, download_url: string}|null
+     */
+    public function downloadUrls(Resume $resume, string $filename): ?array
+    {
+        $path = $this->validatedStoragePath($resume);
+
+        if ($resume->storage_disk === 'local') {
+            return null;
+        }
+
+        if ($resume->cloudinary_asset_id === null || $resume->cloudinary_asset_id === '') {
+            abort(404, 'The resume file is unavailable.');
+        }
+
+        $extension = pathinfo($path, PATHINFO_EXTENSION);
+
+        return [
+            'preview_url' => $this->cloudinary->privateDownloadUrl($path, $extension, false),
+            'download_url' => $this->cloudinary->privateDownloadUrl($path, $extension, $filename),
+        ];
+    }
+
+    private function validatedStoragePath(Resume $resume): string
+    {
+        $expectedPrefix = 'applicant-resumes/'.$resume->applicant_id.'/';
+        $path = $resume->storage_path;
+
+        if (! str_starts_with($path, $expectedPrefix)
+            || preg_match('#^applicant-resumes/[0-9]+/[a-f0-9-]+\.(pdf|docx)$#i', $path) !== 1) {
+            abort(404, 'The resume file is unavailable.');
+        }
+
+        if (! in_array($resume->storage_disk, ['local', 'cloudinary'], true)) {
+            abort(404, 'The resume file is unavailable.');
+        }
+
+        return $path;
     }
 }

@@ -4,7 +4,7 @@ return [
     'paths' => ['api/*', 'sanctum/csrf-cookie'],
     'allowed_methods' => ['*'],
     'allowed_origins' => array_values(array_unique([
-        env('FRONTEND_URL', 'http://192.168.254.125:5173'),
+        env('FRONTEND_URL', 'http://localhost:5173'),
         'http://localhost:5173',
         'http://127.0.0.1:5173',
     ])),

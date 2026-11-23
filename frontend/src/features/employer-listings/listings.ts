@@ -18,6 +18,7 @@ export type EmployerListing = {
   status: EmployerListingStatus;
   updated: string;
   description: string;
+  requirements?: string[];
   responsibilities: string[];
   salary: string;
   skills: string[];
@@ -28,6 +29,12 @@ export type EmployerListing = {
   salaryMax?: number | null;
   employmentType?: "full_time" | "part_time" | "contract";
   minimumExperienceYears?: number | null;
+  ojtDurationHours?: number | null;
+  ojtAllowanceType?: "paid" | "unpaid" | null;
+  ojtAllowanceAmount?: number | null;
+  ojtSlots?: number | null;
+  acceptedCourses?: string[];
+  moaAccepted?: boolean;
   hiring: {
     type: string;
     schedule: string;

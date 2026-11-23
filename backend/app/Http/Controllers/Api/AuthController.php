@@ -258,10 +258,14 @@ class AuthController extends Controller
     }
 
     /**
-     * @return array{id: int, name: string, email: string, role: string, account_status: string, email_verified_at: ?string}
+     * @return array{id: int, name: string, email: string, role: string, account_status: string, email_verified_at: ?string, has_been_hired: bool, identity_verification_status: ?string, identity_verification_rejection_reason: ?string}
      */
     private function userData(User $user): array
     {
+        $identityVerification = $user->role === 'applicant'
+            ? $user->identityVerification
+            : null;
+
         return [
             'id' => $user->id,
             'name' => $user->name,
@@ -269,6 +273,11 @@ class AuthController extends Controller
             'role' => $user->role,
             'account_status' => $user->account_status,
             'email_verified_at' => $user->email_verified_at?->toISOString(),
+            'has_been_hired' => $user->role === 'applicant' && $user->hasBeenHired(),
+            'identity_verification_status' => $user->role === 'applicant'
+                ? ($identityVerification?->status ?? 'unverified')
+                : null,
+            'identity_verification_rejection_reason' => $identityVerification?->rejection_reason,
         ];
     }
 }

@@ -92,7 +92,7 @@ export default function RoleNotificationBell({ role }: { role: Role }) {
       else if (item.event?.includes("listing")) navigate("/admin/job-listings");
       else navigate("/admin");
     } else if (role === "employer") {
-      if (item.event?.startsWith("application")) navigate("/employer/applicants");
+      if (item.event?.startsWith("application") || item.event?.startsWith("interview")) navigate("/employer/applicants");
       else if (item.event?.startsWith("listing")) navigate("/employer/listings");
       else navigate("/employer/overview");
     } else {

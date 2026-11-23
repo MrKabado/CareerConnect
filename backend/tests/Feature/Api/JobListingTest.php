@@ -176,6 +176,87 @@ it('creates a draft owned by the authenticated employer without trusting client 
     ]);
 });
 
+it('allows non-empty incomplete drafts but rejects empty drafts and incomplete publishing', function (): void {
+    $employer = User::factory()->create(['role' => 'employer']);
+    listingTestCompany($employer, true);
+    $token = $employer->createToken('employer')->plainTextToken;
+
+    $draft = $this->withToken($token)->postJson('/api/jobs', [
+        'listing_type' => 'job',
+        'save_as_draft' => true,
+        'title' => 'backend developer',
+    ])->assertCreated()
+        ->assertJsonPath('data.title', 'Backend Developer')
+        ->assertJsonPath('data.status', 'draft')
+        ->assertJsonPath('data.category', null);
+
+    $listingId = $draft->json('data.id');
+    $this->assertDatabaseHas('job_listings', [
+        'id' => $listingId,
+        'title' => 'Backend Developer',
+        'category_id' => null,
+        'description' => null,
+    ]);
+
+    $this->withToken($token)->patchJson("/api/jobs/{$listingId}/status", ['status' => 'open'])
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors(['category_id', 'description', 'salary_min', 'salary_max']);
+
+    $this->withToken($token)->postJson('/api/jobs', [
+        'listing_type' => 'ojt',
+        'save_as_draft' => true,
+    ])->assertUnprocessable()
+        ->assertJsonValidationErrors('draft');
+
+    $ojtDraft = $this->withToken($token)->postJson('/api/jobs', [
+        'listing_type' => 'ojt',
+        'save_as_draft' => true,
+        'description' => 'internship program',
+    ])->assertCreated();
+    $this->assertDatabaseHas('ojt_listing_details', [
+        'job_listing_id' => $ojtDraft->json('data.id'),
+        'duration_hours' => null,
+        'allowance_type' => null,
+        'slots' => null,
+    ]);
+});
+
+it('enforces salary digit limits and applicant count database limits', function (): void {
+    $employer = User::factory()->create(['role' => 'employer']);
+    listingTestCompany($employer);
+    $category = Category::create(['name' => 'Engineering']);
+    $token = $employer->createToken('employer')->plainTextToken;
+
+    $this->withToken($token)->postJson('/api/jobs', listingTestPayload($category, [
+        'salary_min' => 999999998,
+        'salary_max' => 999999999,
+        'applicant_limit' => 4294967295,
+        'title' => 'senior backend developer',
+        'location' => 'new york city',
+        'description' => 'build useful software.',
+    ]))->assertCreated()
+        ->assertJsonPath('data.title', 'Senior Backend Developer')
+        ->assertJsonPath('data.location', 'New York City')
+        ->assertJsonPath('data.description', 'Build useful software.');
+
+    $this->withToken($token)->postJson('/api/jobs', listingTestPayload($category, [
+        'salary_min' => 0,
+        'salary_max' => 1000000000,
+    ]))->assertUnprocessable()
+        ->assertJsonValidationErrors('salary_max');
+
+    $this->withToken($token)->postJson('/api/jobs', listingTestPayload($category, [
+        'salary_min' => '0000000000',
+        'salary_max' => 100,
+    ]))->assertUnprocessable()
+        ->assertJsonValidationErrors('salary_min');
+
+    $this->withToken($token)->postJson('/api/jobs', listingTestPayload($category, [
+        'applicant_limit' => 4294967296,
+    ]))->assertUnprocessable()
+        ->assertJsonValidationErrors('applicant_limit');
+});
+
 it('stores structured job experience and skill requirements', function (): void {
     $employer = User::factory()->create(['role' => 'employer']);
     listingTestCompany($employer);
@@ -222,6 +303,11 @@ it('validates listing fields and stores OJT allowance separately from job salary
         ->assertJsonValidationErrors('salary_max');
 
     $this->withToken($token)->postJson('/api/jobs', listingTestPayload($category, [
+        'salary_min' => 60000,
+        'salary_max' => 60000,
+    ]))->assertCreated();
+
+    $this->withToken($token)->postJson('/api/jobs', listingTestPayload($category, [
         'listing_type' => 'ojt',
         'employment_type' => 'full_time',
         'salary_min' => 30000,
@@ -260,6 +346,18 @@ it('requires salary information before publishing but allows draft listings with
         ->assertUnprocessable()
         ->assertJsonValidationErrors(['salary_min', 'salary_max']);
 
+    $this->withToken($token)->putJson("/api/jobs/{$listingId}", listingTestPayload($category, [
+        'salary_min' => 40000,
+        'salary_max' => 60000,
+    ]))->assertOk();
+    $this->withToken($token)->putJson("/api/jobs/{$listingId}", listingTestPayload($category, [
+        'salary_min' => 60000,
+        'salary_max' => 60000,
+    ]))->assertOk();
+    JobListing::query()->findOrFail($listingId)->update(['salary_max' => 30000]);
+    $this->withToken($token)->patchJson("/api/jobs/{$listingId}/status", ['status' => 'open'])
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors(['salary_min', 'salary_max']);
     $this->withToken($token)->putJson("/api/jobs/{$listingId}", listingTestPayload($category, [
         'salary_min' => 40000,
         'salary_max' => 60000,

@@ -2,7 +2,7 @@ import { Link } from "react-router";
 
 type HiringPipelineCardProps = {
   maximumPipelineCount: number;
-  pipeline: Array<{ label: string; count: number; color: string }>;
+  pipeline: Array<{ status: string; label: string; count: number; color: string }>;
 };
 
 export default function HiringPipelineCard({ maximumPipelineCount, pipeline }: HiringPipelineCardProps) {
@@ -23,12 +23,13 @@ export default function HiringPipelineCard({ maximumPipelineCount, pipeline }: H
         </Link>
       </div>
       <div className="space-y-4">
-        {pipeline.map(({ label, count, color }) => (
-          <div
-            className="grid grid-cols-[minmax(100px,0.8fr)_minmax(0,1fr)_32px] items-center gap-3 text-[10px]"
-            key={label}
+        {pipeline.map(({ status, label, count, color }) => (
+          <Link
+            className="grid grid-cols-[minmax(100px,0.8fr)_minmax(0,1fr)_32px] items-center gap-3 rounded-sm text-[10px] focus-visible:outline-[3px] focus-visible:outline-[#67c9c1]"
+            key={status}
+            to={`/employer/applicants?status=${status}`}
           >
-            <span className="text-[#687b7e]">{label}</span>
+            <span className="text-[#687b7e] hover:text-[#078b8d]">{label}</span>
             <div
               aria-label={`${label}: ${count}`}
               className="h-2 overflow-hidden rounded-full bg-[#edf2f1]"
@@ -46,7 +47,7 @@ export default function HiringPipelineCard({ maximumPipelineCount, pipeline }: H
               />
             </div>
             <span className="text-right font-semibold text-[#344749]">{count}</span>
-          </div>
+          </Link>
         ))}
       </div>
     </article>

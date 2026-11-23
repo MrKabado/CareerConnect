@@ -1,6 +1,7 @@
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { Link } from "react-router";
 import EmploymentTenureCounter from "@/features/applications/EmploymentTenureCounter";
+import ApplicantInterviewBookingDialog from "@/features/user-applications/components/ApplicantInterviewBookingDialog";
 import type {
   Application,
   ApplicationStatus,
@@ -144,10 +145,13 @@ function formatApplicationDate(value: string): string {
 export function ApplicationDetailPanel({
   application,
   onClose,
+  onInterviewUpdated,
 }: {
   application: Application;
   onClose: () => void;
+  onInterviewUpdated?: () => void;
 }) {
+  const [isInterviewDialogOpen, setIsInterviewDialogOpen] = useState(false);
   const stages =
     application.status === "Rejected"
       ? (["Applied", "Under Review", "Rejected"] as ApplicationStatus[])
@@ -223,11 +227,22 @@ export function ApplicationDetailPanel({
                   : "Wait for an employer update"}
           </p>
           <p className="mt-1 text-[9px] leading-[1.55] text-[#718184]">
-            {statusGuidance[application.status]}
+            {application.interviewStatus === "invited"
+              ? "The employer invited you to choose an interview time from their available dates."
+              : statusGuidance[application.status]}
           </p>
+          {application.interviewStatus === "invited" && application.interviewId ? (
+            <button
+              className="mt-3 rounded-lg bg-[#0e8e9b] px-3 py-2 text-[10px] font-semibold text-white hover:bg-[#0a7d8a]"
+              onClick={() => setIsInterviewDialogOpen(true)}
+              type="button"
+            >
+              Choose interview time
+            </button>
+          ) : null}
         </section>
 
-        {application.status === "Interview Scheduled" && application.interviewSchedule ? (
+        {application.interviewStatus === "scheduled" && application.interviewSchedule ? (
           <section aria-label="Interview details" className="rounded-[10px] border border-[#ded5f2] bg-[#faf7ff] p-3">
             <h3 className="text-[8px] font-bold uppercase tracking-[0.04em] text-[#765cb8]">
               Interview details
@@ -235,6 +250,14 @@ export function ApplicationDetailPanel({
             <p className="mt-1.5 text-[10px] font-semibold text-[#354749]">
               {formatInterviewSchedule(application.interviewSchedule)}
             </p>
+            {application.interviewSchedule.durationMinutes ? (
+              <p className="mt-1 text-[9px] text-[#647779]">
+                Duration: {application.interviewSchedule.durationMinutes} minutes
+              </p>
+            ) : null}
+            {application.interviewSchedule.mode === "phone" ? (
+              <p className="mt-1 text-[9px] text-[#647779]">Phone interview</p>
+            ) : null}
             {application.interviewSchedule.mode === "online" && application.interviewSchedule.meetingUrl ? (
               <a
                 className="mt-2 inline-flex break-all text-[9px] font-semibold text-[#078b8d] underline underline-offset-2"
@@ -254,6 +277,21 @@ export function ApplicationDetailPanel({
                 {application.interviewSchedule.meetingInstructions}
               </p>
             ) : null}
+            {application.interviewId ? (
+              <button
+                className="mt-3 rounded-lg border border-[#d6c9ed] bg-white px-3 py-2 text-[10px] font-semibold text-[#765cb8] hover:bg-[#f7f2ff]"
+                onClick={() => setIsInterviewDialogOpen(true)}
+                type="button"
+              >
+                Reschedule or cancel
+              </button>
+            ) : null}
+          </section>
+        ) : null}
+        {application.interviewStatus === "cancelled" ? (
+          <section aria-label="Interview cancellation" className="rounded-[10px] border border-[#f1d8d5] bg-[#fff7f6] p-3">
+            <h3 className="text-[8px] font-bold uppercase tracking-[0.04em] text-[#a75b57]">Interview cancelled</h3>
+            <p className="mt-1.5 text-[9px] leading-4 text-[#875d5a]">Your interview was cancelled. If the employer sends a new invitation, you can choose another time here.</p>
           </section>
         ) : null}
 
@@ -360,6 +398,14 @@ export function ApplicationDetailPanel({
           </Link>
         )}
       </div>
+      {isInterviewDialogOpen && application.interviewId ? (
+        <ApplicantInterviewBookingDialog
+          interviewId={application.interviewId}
+          isScheduled={application.interviewStatus === "scheduled"}
+          onClose={() => setIsInterviewDialogOpen(false)}
+          onUpdated={() => onInterviewUpdated?.()}
+        />
+      ) : null}
     </aside>
   );
 }

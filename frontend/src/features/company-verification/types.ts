@@ -84,6 +84,8 @@ export type CompanyVerificationSnapshot = {
   record: CompanyVerificationRecord;
   stages: CompanyVerificationStage[];
   percent: number;
+  syncStatus: "idle" | "loading" | "ready" | "error";
+  syncError: string | null;
   nextAction: CompanyVerificationAction;
   currentStage: CompanyVerificationStage | null;
   firstIncompleteRequiredStage: CompanyVerificationStage | null;

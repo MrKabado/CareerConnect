@@ -57,7 +57,11 @@ class ApplicantProfileController extends Controller
                 ]);
             }
 
-            $profile->fill(array_intersect_key($validated, array_flip(['phone', 'city'])));
+            $profileFields = array_intersect_key($validated, array_flip(['phone', 'city']));
+            if (isset($profileFields['city'])) {
+                $profileFields['city'] = $this->capitalizeWords(trim($profileFields['city']));
+            }
+            $profile->fill($profileFields);
             $profile->save();
         });
 
@@ -163,8 +167,8 @@ class ApplicantProfileController extends Controller
             'experience_level' => ['nullable', Rule::in(['Fresh graduate', '1–3 years', '3–5 years', '5+ years'])],
             'employment_types' => ['required_if:goal,job-seeker', 'array', 'min:1', 'max:3'],
             'employment_types.*' => ['required', Rule::in(['Full-time', 'Part-time', 'Contract']), 'distinct'],
-            'minimum_salary' => ['nullable', 'integer', 'min:0'],
-            'maximum_salary' => ['nullable', 'integer', 'min:0'],
+            'minimum_salary' => ['nullable', 'integer', 'min:0', 'max:4294967295'],
+            'maximum_salary' => ['nullable', 'integer', 'min:0', 'max:4294967295'],
             'work_setup' => ['required', Rule::in(['Onsite', 'Hybrid', 'Remote'])],
             'preferred_locations' => ['required', 'array', 'min:1', 'max:10'],
             'preferred_locations.*' => ['required', 'string', 'max:100', 'distinct:ignore_case'],
@@ -177,6 +181,7 @@ class ApplicantProfileController extends Controller
             'allowance_preference' => ['required_if:goal,ojt-seeker', 'nullable', Rule::in(['Required', 'Preferred', 'Not required'])],
         ]);
 
+        $validated = $this->normalizeProfileFields($validated);
         $categoryNames = $validated['goal'] === 'job-seeker'
             ? $validated['job_categories']
             : $validated['training_fields'];
@@ -622,8 +627,8 @@ class ApplicantProfileController extends Controller
             'experience_level' => ['sometimes', 'nullable', Rule::in(self::EXPERIENCE_LEVELS)],
             'employment_types' => ['sometimes', 'array', 'max:3'],
             'employment_types.*' => ['required', 'string', Rule::in(self::EMPLOYMENT_TYPES), 'distinct'],
-            'salary_min' => ['sometimes', 'nullable', 'integer', 'min:0'],
-            'salary_max' => ['sometimes', 'nullable', 'integer', 'min:0'],
+            'salary_min' => ['sometimes', 'nullable', 'integer', 'min:0', 'max:4294967295'],
+            'salary_max' => ['sometimes', 'nullable', 'integer', 'min:0', 'max:4294967295'],
         ];
     }
 
@@ -692,7 +697,9 @@ class ApplicantProfileController extends Controller
         foreach (['desired_titles', 'preferred_locations', 'other_categories'] as $key) {
             if (array_key_exists($key, $fields) && is_array($fields[$key])) {
                 $fields[$key] = collect($fields[$key])
-                    ->map(fn (string $value): string => trim($value))
+                    ->map(fn (string $value): string => in_array($key, ['desired_titles', 'preferred_locations'], true)
+                        ? $this->capitalizeWords(trim($value))
+                        : trim($value))
                     ->filter()
                     ->unique(fn (string $value): string => mb_strtolower($value))
                     ->values()
@@ -701,6 +708,15 @@ class ApplicantProfileController extends Controller
         }
 
         return $fields;
+    }
+
+    private function capitalizeWords(string $value): string
+    {
+        return preg_replace_callback(
+            '/(^|[\s.\'-])(\p{L})/u',
+            fn (array $match): string => $match[1].mb_strtoupper($match[2]),
+            $value,
+        ) ?? $value;
     }
 
     private function validateMergedSalaryRange(ApplicantProfile $profile, array $fields): void

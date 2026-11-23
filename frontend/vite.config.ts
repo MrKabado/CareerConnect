@@ -12,9 +12,9 @@ export default defineConfig({
     },
   },
   server: {
-    host: "0.0.0.0",
+    host: "localhost",
     port: 5173,
     strictPort: true,
-    allowedHosts: ["192.168.254.125"],
+    allowedHosts: ["localhost", "127.0.0.1"],
   },
 });

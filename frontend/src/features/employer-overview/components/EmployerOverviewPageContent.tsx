@@ -1,5 +1,6 @@
 import EmployerWorkspaceLayout from "@/components/common/employer/EmployerWorkspaceLayout";
 import ErrorBoundary from "@/components/common/ErrorBoundary";
+import DashboardActivitySections from "@/features/employer-overview/components/DashboardActivitySections";
 import HiringPipelineCard from "@/features/employer-overview/components/HiringPipelineCard";
 import OverviewHeader from "@/features/employer-overview/components/OverviewHeader";
 import OverviewStatsSection from "@/features/employer-overview/components/OverviewStatsSection";
@@ -28,6 +29,14 @@ export default function EmployerOverviewPageContent() {
           </ErrorBoundary>
         </section>
 
+        <ErrorBoundary>
+          <DashboardActivitySections
+            error={error}
+            isLoading={isLoading}
+            onRetry={retry}
+            stats={stats}
+          />
+        </ErrorBoundary>
       </main>
     </EmployerWorkspaceLayout>
   );

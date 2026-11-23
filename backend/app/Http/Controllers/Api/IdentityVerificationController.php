@@ -9,12 +9,16 @@ use App\Models\IdentityVerification;
 use App\Models\User;
 use App\Services\MediaStorage;
 use App\Services\NotificationService;
+use Closure;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 use Symfony\Component\HttpKernel\Exception\ConflictHttpException;
 
@@ -39,7 +43,20 @@ class IdentityVerificationController extends Controller
     public function store(Request $request): JsonResponse
     {
         $request->validate([
-            'document' => ['required', 'file', 'mimes:jpg,jpeg,png,pdf', 'extensions:jpg,jpeg,png,pdf', 'max:5120'],
+            'status' => ['prohibited'],
+            'rejection_reason' => ['prohibited'],
+            'document' => [
+                'required',
+                'image',
+                'mimes:jpg,jpeg,png,webp',
+                'extensions:jpg,jpeg,png,webp',
+                'max:5120',
+                static function (string $attribute, mixed $value, Closure $fail): void {
+                    if (! $value instanceof UploadedFile || @getimagesize($value->getRealPath()) === false) {
+                        $fail('The document must be a readable image file.');
+                    }
+                },
+            ],
         ]);
 
         $file = $request->file('document');
@@ -193,7 +210,7 @@ class IdentityVerificationController extends Controller
 
         if ($identityVerification->document_path === null
             || ! str_starts_with($identityVerification->document_path, 'applicant-verifications/'.$identityVerification->user_id.'/')
-            || preg_match('#^applicant-verifications/[0-9]+/[a-f0-9-]+\.(pdf|jpg|jpeg|png)$#i', $identityVerification->document_path) !== 1) {
+            || preg_match('#^applicant-verifications/[0-9]+/[a-f0-9-]+\.(pdf|jpg|jpeg|png|webp)$#i', $identityVerification->document_path) !== 1) {
             abort(404, 'The identity document is no longer available.');
         }
 
@@ -242,7 +259,7 @@ class IdentityVerificationController extends Controller
             ],
         ]);
 
-        $reviewedVerification = DB::transaction(function () use ($identityVerification, $request, $validated): IdentityVerification {
+        [$reviewedVerification, $reviewEventId] = DB::transaction(function () use ($identityVerification, $request, $validated): array {
             $verification = IdentityVerification::query()
                 ->lockForUpdate()
                 ->findOrFail($identityVerification->id);
@@ -253,6 +270,12 @@ class IdentityVerificationController extends Controller
 
             Gate::forUser($request->user())->authorize('review', $verification);
 
+            if ($validated['status'] === 'verified' && ! $this->hasValidSelfieDocument($verification)) {
+                throw ValidationException::withMessages([
+                    'status' => ['A valid selfie photo showing the applicant with their own ID is required before approval.'],
+                ]);
+            }
+
             $verification->update([
                 'status' => $validated['status'],
                 'rejection_reason' => $validated['status'] === 'rejected' ? $validated['rejection_reason'] : null,
@@ -261,7 +284,7 @@ class IdentityVerificationController extends Controller
                 'expires_at' => now()->addDays(config('careerconnect.identity_document_retention_days')),
             ]);
 
-            ActivityLog::create([
+            $reviewEvent = ActivityLog::create([
                 'user_id' => $verification->user_id,
                 'actor_id' => $request->user()->id,
                 'action' => 'admin.identity_verification_reviewed',
@@ -273,7 +296,7 @@ class IdentityVerificationController extends Controller
                 ],
             ]);
 
-            return $verification;
+            return [$verification, $reviewEvent->id];
         });
 
         $reviewedVerification->loadMissing('user');
@@ -290,7 +313,7 @@ class IdentityVerificationController extends Controller
                 $title,
                 $message,
                 [
-                    'dedupe_key' => 'applicant_identity_review-'.$reviewedVerification->id,
+                    'dedupe_key' => 'applicant_identity_review-'.$reviewEventId,
                     'identity_verification_id' => $reviewedVerification->id,
                     'verification_status' => $reviewedVerification->status,
                 ],
@@ -306,5 +329,31 @@ class IdentityVerificationController extends Controller
             'message' => 'Identity verification review recorded.',
             'status' => $reviewedVerification->status,
         ]);
+    }
+
+    private function hasValidSelfieDocument(IdentityVerification $verification): bool
+    {
+        $path = $verification->document_path;
+        if ($path === null
+            || ! in_array(strtolower($verification->document_mime_type ?? ''), [
+                'image/jpeg',
+                'image/png',
+                'image/webp',
+            ], true)
+            || ! in_array(strtolower(pathinfo($path, PATHINFO_EXTENSION)), [
+                'jpg',
+                'jpeg',
+                'png',
+                'webp',
+            ], true)) {
+            return false;
+        }
+
+        return match ($verification->storage_disk) {
+            'local' => Storage::disk('local')->exists($path),
+            'cloudinary' => is_string($verification->cloudinary_asset_id)
+                && $verification->cloudinary_asset_id !== '',
+            default => false,
+        };
     }
 }

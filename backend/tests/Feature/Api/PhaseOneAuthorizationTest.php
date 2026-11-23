@@ -30,6 +30,20 @@ function fakeIdentityPdf(): UploadedFile
     );
 }
 
+function fakeIdentityImage(): UploadedFile
+{
+    $chunk = static fn (string $type, string $contents): string => pack('N', strlen($contents))
+        .$type
+        .$contents
+        .pack('H*', hash('crc32b', $type.$contents));
+    $image = "\x89PNG\r\n\x1a\n"
+        .$chunk('IHDR', pack('NNC5', 1, 1, 8, 6, 0, 0, 0))
+        .$chunk('IDAT', gzcompress("\x00\xff\xff\xff\xff"))
+        .$chunk('IEND', '');
+
+    return UploadedFile::fake()->createWithContent('identity-selfie.png', $image);
+}
+
 it('registers applicant and employer through role-specific endpoints', function (): void {
     Mail::fake();
 
@@ -116,7 +130,7 @@ it('allows applicants to submit a private identity document once and view only i
         ->assertJsonPath('verification', null);
 
     $this->withToken($token)->postJson('/api/applicant/identity-verification', [
-        'document' => fakeIdentityPdf(),
+        'document' => fakeIdentityImage(),
     ])->assertCreated()
         ->assertJsonPath('status', 'pending');
 
@@ -131,17 +145,28 @@ it('allows applicants to submit a private identity document once and view only i
         ->assertJsonMissingPath('verification.document_path');
 
     $this->withToken($token)->postJson('/api/applicant/identity-verification', [
-        'document' => fakeIdentityPdf(),
+        'document' => fakeIdentityImage(),
     ])->assertStatus(409);
 
     $this->withToken($token)->postJson('/api/applicant/identity-verification', [
         'document' => UploadedFile::fake()->create('unsafe.exe', 10, 'application/x-msdownload'),
     ])->assertUnprocessable()
         ->assertJsonValidationErrors('document');
+
+    $this->withToken($token)->postJson('/api/applicant/identity-verification', [
+        'document' => fakeIdentityPdf(),
+    ])->assertUnprocessable()
+        ->assertJsonValidationErrors('document');
+
+    $this->withToken($token)->postJson('/api/applicant/identity-verification', [
+        'document' => UploadedFile::fake()->createWithContent('corrupt.png', 'not an image'),
+    ])->assertUnprocessable()
+        ->assertJsonValidationErrors('document');
 });
 
 it('lets admins review identity submissions and applicants resubmit after rejection', function (): void {
     Storage::fake('local');
+    Mail::fake();
 
     $applicant = User::factory()->create(['role' => 'applicant']);
     $admin = User::factory()->create(['role' => 'admin']);
@@ -149,7 +174,15 @@ it('lets admins review identity submissions and applicants resubmit after reject
     $adminToken = $admin->createToken('admin')->plainTextToken;
 
     $this->withToken($applicantToken)->postJson('/api/applicant/identity-verification', [
-        'document' => fakeIdentityPdf(),
+        'document' => fakeIdentityImage(),
+        'status' => 'verified',
+    ])->assertUnprocessable()
+        ->assertJsonValidationErrors('status');
+    expect(IdentityVerification::where('user_id', $applicant->id)->exists())->toBeFalse();
+
+    $this->app['auth']->forgetGuards();
+    $this->withToken($applicantToken)->postJson('/api/applicant/identity-verification', [
+        'document' => fakeIdentityImage(),
     ])->assertCreated();
 
     $verification = IdentityVerification::where('user_id', $applicant->id)->firstOrFail();
@@ -175,6 +208,18 @@ it('lets admins review identity submissions and applicants resubmit after reject
         ->assertOk()
         ->assertJsonCount(1, 'data');
 
+    $missingDocumentApplicant = User::factory()->create(['role' => 'applicant']);
+    $missingDocumentVerification = IdentityVerification::create([
+        'user_id' => $missingDocumentApplicant->id,
+        'status' => 'pending',
+    ]);
+    $this->app['auth']->forgetGuards();
+    $this->withToken($adminToken)->postJson("/api/admin/identity-verifications/{$missingDocumentVerification->id}/review", [
+        'status' => 'verified',
+    ])->assertUnprocessable()
+        ->assertJsonValidationErrors('status');
+    $missingDocumentVerification->delete();
+
     $this->app['auth']->forgetGuards();
     $this->withToken($adminToken)->postJson("/api/admin/identity-verifications/{$verification->id}/review", [
         'status' => 'rejected',
@@ -188,11 +233,14 @@ it('lets admins review identity submissions and applicants resubmit after reject
         ->assertJsonPath('status', 'rejected');
 
     expect($verification->refresh()->reviewed_by)->toBe($admin->id)
-        ->and($verification->reviewed_at)->not->toBeNull();
+        ->and($verification->reviewed_at)->not->toBeNull()
+        ->and($applicant->notifications()->count())->toBe(1)
+        ->and($applicant->notifications()->first()?->data['event'])->toBe('applicant_identity_rejected')
+        ->and($applicant->notifications()->first()?->data['message'])->toContain('The image is unreadable.');
 
     $this->app['auth']->forgetGuards();
     $this->withToken($applicantToken)->postJson('/api/applicant/identity-verification', [
-        'document' => fakeIdentityPdf(),
+        'document' => fakeIdentityImage(),
     ])->assertCreated();
 
     $verification->refresh();
@@ -206,7 +254,10 @@ it('lets admins review identity submissions and applicants resubmit after reject
 
     expect($verification->refresh()->status)->toBe('verified')
         ->and($verification->reviewed_by)->toBe($admin->id)
-        ->and($verification->expires_at)->not->toBeNull();
+        ->and($verification->expires_at)->not->toBeNull()
+        ->and($applicant->notifications()->count())->toBe(2)
+        ->and($applicant->notifications()->get()->pluck('data.event')->all())
+        ->toContain('applicant_identity_verified');
 
     $this->app['auth']->forgetGuards();
     $this->withToken($adminToken)->getJson('/api/admin/identity-verifications?status=all')
@@ -304,15 +355,15 @@ it('keeps Cloudinary identity documents private and prunes them after retention'
     $gateway->shouldReceive('download')
         ->once()
         ->withArgs(fn (string $path, string $extension, string $filename, string $mimeType, string $resourceType): bool => str_starts_with($path, 'applicant-verifications/'.$applicant->id.'/')
-            && $extension === 'pdf'
-            && $filename === 'identity-document.pdf'
-            && $mimeType === 'application/pdf'
+            && $extension === 'png'
+            && $filename === 'identity-document.png'
+            && $mimeType === 'image/png'
             && $resourceType === 'raw'
         )
         ->andReturnUsing(fn (): StreamedResponse => response()->streamDownload(
-            static fn () => print ('%PDF-1.4'),
-            'identity-document.pdf',
-            ['Content-Type' => 'application/pdf'],
+            static fn () => print ("\x89PNG\r\n\x1a\n"),
+            'identity-document.png',
+            ['Content-Type' => 'image/png'],
         ));
     $gateway->shouldReceive('delete')
         ->once()
@@ -323,7 +374,7 @@ it('keeps Cloudinary identity documents private and prunes them after retention'
     $this->app->instance(CloudinaryMediaGateway::class, $gateway);
 
     $this->withToken($applicantToken)->postJson('/api/applicant/identity-verification', [
-        'document' => fakeIdentityPdf(),
+        'document' => fakeIdentityImage(),
     ])->assertCreated()
         ->assertJsonMissingPath('document_path');
 
@@ -334,8 +385,8 @@ it('keeps Cloudinary identity documents private and prunes them after retention'
     $this->app['auth']->forgetGuards();
     $this->withToken($adminToken)->get("/api/admin/identity-verifications/{$verification->id}/document")
         ->assertOk()
-        ->assertHeader('content-type', 'application/pdf')
-        ->assertStreamedContent('%PDF-1.4');
+        ->assertHeader('content-type', 'image/png')
+        ->assertStreamedContent("\x89PNG\r\n\x1a\n");
 
     $verification->update(['expires_at' => now()->subSecond()]);
     Artisan::call('app:prune-identity-documents');
@@ -456,6 +507,10 @@ it('enforces the application eligibility middleware on direct API requests', fun
     $this->postJson('/__test/application')->assertUnauthorized();
 
     $applicant = User::factory()->create(['role' => 'applicant']);
+    IdentityVerification::create([
+        'user_id' => $applicant->id,
+        'status' => 'verified',
+    ]);
     $token = $applicant->createToken('applicant')->plainTextToken;
 
     $this->withToken($token)->postJson('/__test/application')

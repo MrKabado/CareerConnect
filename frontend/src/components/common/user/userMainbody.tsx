@@ -13,6 +13,7 @@ import {
   applicationStatusLabel,
   type ApplicantListingStatus,
 } from "@/features/user-applications/backendApi";
+import { getIdentityVerificationMessage } from "@/features/user-applications/identityVerification";
 import {
   formatListingPay,
   listingText,
@@ -266,6 +267,17 @@ export default function MainBody({
   const listingStatusesError = listingStatusKey && listingStatusesResult?.key === listingStatusKey
     ? listingStatusesResult.error
     : null;
+  const identityVerificationStatus = user?.role === "applicant"
+    ? user.identity_verification_status ?? "unverified"
+    : null;
+  const identityVerificationMessage = identityVerificationStatus
+    ? getIdentityVerificationMessage(
+        identityVerificationStatus,
+        user?.role === "applicant" ? user.identity_verification_rejection_reason : null,
+      )
+    : null;
+  const identityVerificationBlocksApplications =
+    user?.role === "applicant" && identityVerificationStatus !== "verified";
   const hasJobSeekerPreferences =
     applicantProfile !== null
     && applicantProfile.looking_for_jobs
@@ -916,6 +928,40 @@ export default function MainBody({
       </aside>
 
       <div className="min-w-0">
+        {user?.role === "applicant" && (
+          <div
+            className={`mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border px-4 py-3 ${
+              identityVerificationStatus === "verified"
+                ? "border-[#d6ebe4] bg-[#f0f8f5] text-[#247b63]"
+                : "border-[#eadfc5] bg-[#fffbf1] text-[#765b24]"
+            }`}
+            role={identityVerificationStatus === "verified" ? "status" : "alert"}
+          >
+            <div>
+              <p className="text-xs font-semibold">
+                {identityVerificationStatus === "verified"
+                  ? "Identity verified"
+                  : identityVerificationStatus === "pending"
+                    ? "Identity verification pending"
+                    : identityVerificationStatus === "rejected"
+                      ? "Identity verification needs attention"
+                      : "Identity verification required"}
+              </p>
+              {identityVerificationMessage && (
+                <p className="mt-1 text-[11px] leading-5">{identityVerificationMessage}</p>
+              )}
+            </div>
+            {identityVerificationStatus !== "verified" && (
+              <button
+                className="rounded-lg border border-current px-3 py-1.5 text-[10px] font-semibold hover:bg-white/70"
+                onClick={() => navigate("/profile")}
+                type="button"
+              >
+                {identityVerificationStatus === "pending" ? "View status" : "Verify identity"}
+              </button>
+            )}
+          </div>
+        )}
         <div className="flex min-h-[54px] items-center justify-between gap-4">
           <div>
             <h2 className="text-[22px] font-bold tracking-[-0.35px] text-[#293d3e] max-[680px]:text-[17px]">
@@ -1147,15 +1193,36 @@ export default function MainBody({
                     <div className="flex items-center gap-3">
                       <button
                         className="rounded-lg bg-[#078b8d] px-3 py-1.5 text-[10px] font-semibold text-white hover:bg-[#067476] disabled:cursor-not-allowed disabled:bg-[#9aa6a7]"
-                        disabled={hasActiveApplication || isCooldownActive}
+                        aria-describedby={user?.has_been_hired
+                          ? `hired-application-notice-${job.listingId}`
+                          : identityVerificationBlocksApplications
+                            ? `identity-application-notice-${job.listingId}`
+                            : undefined}
+                        disabled={user?.has_been_hired || identityVerificationBlocksApplications || hasActiveApplication || isCooldownActive}
                         onClick={(event) => {
                           event.stopPropagation();
                           navigate(`/apply/${job.listingId}`);
                         }}
                         type="button"
                       >
-                        {hasActiveApplication ? "Applied" : isCooldownActive ? "Reapply unavailable" : "Apply"}
+                        {user?.has_been_hired
+                          ? "Applications unavailable"
+                          : hasActiveApplication
+                            ? "Applied"
+                            : isCooldownActive
+                              ? "Reapply unavailable"
+                              : "Apply"}
                       </button>
+                      {user?.has_been_hired && (
+                        <span className="text-[9px] text-[#758687]" id={`hired-application-notice-${job.listingId}`}>
+                          You have been marked as hired and cannot submit new applications.
+                        </span>
+                      )}
+                      {identityVerificationBlocksApplications && !user?.has_been_hired && (
+                        <span className="max-w-56 text-[9px] text-[#758687]" id={`identity-application-notice-${job.listingId}`}>
+                          {identityVerificationMessage}
+                        </span>
+                      )}
                       <span className="whitespace-nowrap text-[9px] text-[#9aa6a7]">{job.posted}</span>
                     </div>
                   </div>

@@ -89,12 +89,7 @@ class CloudinaryMediaGateway
         string $mimeType,
         string $resourceType = 'raw',
     ): StreamedResponse {
-        $url = $this->client()->uploadApi()->privateDownloadUrl($publicId, $extension, [
-            'resource_type' => $resourceType,
-            'type' => 'authenticated',
-            'attachment' => true,
-            'expires_at' => now()->addMinutes(2)->timestamp,
-        ]);
+        $url = $this->privateDownloadUrl($publicId, $extension, $filename, $resourceType);
         $cloudinaryResponse = Http::withOptions(['stream' => true])->get($url);
         if (! $cloudinaryResponse->successful()) {
             throw new RuntimeException('Cloudinary file download failed with HTTP status '.$cloudinaryResponse->status().'.');
@@ -115,6 +110,20 @@ class CloudinaryMediaGateway
                 'Cache-Control' => 'private, no-store',
             ],
         );
+    }
+
+    public function privateDownloadUrl(
+        string $publicId,
+        string $extension,
+        string|false $attachment,
+        string $resourceType = 'raw',
+    ): string {
+        return $this->client()->uploadApi()->privateDownloadUrl($publicId, $extension, [
+            'resource_type' => $resourceType,
+            'type' => 'authenticated',
+            'attachment' => $attachment,
+            'expires_at' => now()->addMinutes(5)->timestamp,
+        ]);
     }
 
     public function imageUrl(string $publicId): string

@@ -195,10 +195,12 @@ function LoginCredentialsForm({
       )}
 
       <button
-        className="h-11 w-full rounded-[9px] bg-[#078b8d] text-[13px] font-semibold text-white shadow-[0_4px_10px_rgba(7,139,141,0.2)] transition hover:bg-[#06797b] focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-[#078b8d] active:translate-y-px max-[760px]:h-8 max-[760px]:rounded-lg max-[760px]:text-[10px]"
+        aria-busy={isSubmitting}
+        className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-[9px] bg-[#078b8d] text-[13px] font-semibold text-white shadow-[0_4px_10px_rgba(7,139,141,0.2)] transition hover:bg-[#06797b] focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-[#078b8d] active:translate-y-px max-[760px]:h-8 max-[760px]:rounded-lg max-[760px]:text-[10px]"
         disabled={isSubmitting}
         type="submit"
       >
+        {isSubmitting && <span aria-hidden="true" className="size-3 animate-spin rounded-full border-2 border-current border-r-transparent" />}
         {isSubmitting ? "Logging in…" : "Log in"}
       </button>
     </form>

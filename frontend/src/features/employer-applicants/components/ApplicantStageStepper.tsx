@@ -8,7 +8,12 @@ import StatusTimeline from "@/features/employer-applicants/components/StatusTime
 import EmploymentTenureCounter from "@/features/applications/EmploymentTenureCounter";
 import { applicantStatusConfig, forwardApplicantStatuses } from "@/features/employer-applicants/statuses";
 import type { ApplicantStatus } from "@/features/employer-applicants/statuses";
-import type { ApplicantStatusHistoryEntry, ApplicantStatusUpdatePayload, InterviewDetails } from "@/features/employer-applicants/types";
+import type {
+  ApplicantStatusHistoryEntry,
+  ApplicantStatusUpdatePayload,
+  InterviewAvailabilityDetails,
+  InterviewDetails,
+} from "@/features/employer-applicants/types";
 import { cn } from "@/lib/cn";
 
 type ApplicantStageStepperProps = {
@@ -21,7 +26,11 @@ type ApplicantStageStepperProps = {
   employmentEndedAt?: string;
   rejectionReason?: string;
   interviewDetails?: InterviewDetails;
+  interviewStatus?: "invited" | "scheduled" | "completed" | "cancelled";
+  interviewAvailability?: InterviewAvailabilityDetails;
   onAdvance: (payload?: ApplicantStatusUpdatePayload) => Promise<boolean>;
+  onUpdateAvailability: (details: InterviewAvailabilityDetails) => Promise<boolean>;
+  onInviteAgain: (details: InterviewAvailabilityDetails) => Promise<boolean>;
   onReject: (payload?: ApplicantStatusUpdatePayload) => Promise<boolean>;
   onRetry: () => Promise<boolean>;
   onRecordEmploymentEnd: (employmentEndedAt: string) => Promise<boolean>;
@@ -50,7 +59,11 @@ export default function ApplicantStageStepper({
   employmentEndedAt,
   rejectionReason,
   interviewDetails,
+  interviewStatus,
+  interviewAvailability,
   onAdvance,
+  onUpdateAvailability,
+  onInviteAgain,
   onReject,
   onRetry,
   onRecordEmploymentEnd,
@@ -71,6 +84,11 @@ export default function ApplicantStageStepper({
       return;
     }
     if (status === "interview_scheduled") {
+      if (interviewStatus === "invited") return;
+      if (interviewStatus === "cancelled") {
+        setIsScheduleOpen(true);
+        return;
+      }
       setIsHiredConfirmOpen(true);
       return;
     }
@@ -78,10 +96,21 @@ export default function ApplicantStageStepper({
     if (advanced) setAnnouncement(`Moved to ${applicantStatusConfig[applicantStatusConfig[status].nextStage!].label}.`);
   }
 
-  async function handleScheduleInterview(details: InterviewDetails) {
-    const advanced = await onAdvance({ interviewDetails: details, ...(details.message ? { note: details.message } : {}) });
-    if (advanced) setAnnouncement("Interview scheduled.");
-    return advanced;
+  async function handleScheduleInterview(details: InterviewAvailabilityDetails) {
+    const saved = status === "shortlisted"
+      ? await onAdvance({ interviewAvailability: details, ...(details.message ? { note: details.message } : {}) })
+      : interviewStatus === "cancelled"
+        ? await onInviteAgain(details)
+        : await onUpdateAvailability(details);
+    if (saved) {
+      setAnnouncement(
+        status === "shortlisted" || interviewStatus === "cancelled"
+          ? "Applicant invited to schedule an interview."
+          : "Interview availability updated.",
+      );
+      setIsScheduleOpen(false);
+    }
+    return saved;
   }
 
   async function handleReject(payload: ApplicantStatusUpdatePayload) {
@@ -194,17 +223,48 @@ export default function ApplicantStageStepper({
         </>
       )}
 
-      {status === "interview_scheduled" && interviewDetails ? (
+      {status === "interview_scheduled" && interviewStatus === "invited" && interviewAvailability ? (
+        <section className="mx-4 mt-4 rounded-lg border border-[#d9eae7] bg-[#f3faf8] p-4 text-xs sm:mx-5">
+          <h2 className="font-semibold text-[#176d73]">Applicant invited to schedule</h2>
+          <p className="mt-1 text-[#5b7072]">
+            {interviewAvailability.dates.length} available date{interviewAvailability.dates.length === 1 ? "" : "s"} · {interviewAvailability.startTime}–{interviewAvailability.endTime} {interviewAvailability.timezone} · {interviewAvailability.durationMinutes}-minute slots
+          </p>
+        </section>
+      ) : null}
+      {status === "interview_scheduled" && interviewStatus === "scheduled" && interviewDetails ? (
         <dl className="mx-4 mt-4 grid gap-2 rounded-lg border border-[#e1ebea] bg-[#f7fbfa] p-4 text-xs sm:mx-5 sm:grid-cols-2">
           <div><dt className="text-[#718586]">Interview</dt><dd className="mt-1 font-medium text-[#31494b]">{interviewDetails.date} · {interviewDetails.time} {interviewDetails.timezone}</dd></div>
-          <div><dt className="text-[#718586]">Format</dt><dd className="mt-1 font-medium text-[#31494b]">{interviewDetails.format === "online" ? "Online" : "On-site"}</dd></div>
-          <div className="sm:col-span-2"><dt className="text-[#718586]">{interviewDetails.format === "online" ? "Meeting link" : "Address"}</dt><dd className="mt-1 break-all font-medium text-[#31494b]">{interviewDetails.locationOrLink}</dd></div>
+          <div><dt className="text-[#718586]">Duration</dt><dd className="mt-1 font-medium text-[#31494b]">{interviewDetails.durationMinutes ? `${interviewDetails.durationMinutes} minutes` : "Not provided"}</dd></div>
+          <div><dt className="text-[#718586]">Format</dt><dd className="mt-1 font-medium text-[#31494b]">{interviewDetails.format === "online" ? "Online" : interviewDetails.format === "phone" ? "Phone" : "On-site"}</dd></div>
+          {interviewDetails.locationOrLink ? <div className="sm:col-span-2"><dt className="text-[#718586]">{interviewDetails.format === "online" ? "Meeting link" : interviewDetails.format === "phone" ? "Phone instructions" : "Address"}</dt><dd className="mt-1 break-all font-medium text-[#31494b]">{interviewDetails.locationOrLink}</dd></div> : null}
           {interviewDetails.message ? <div className="sm:col-span-2"><dt className="text-[#718586]">Message</dt><dd className="mt-1 text-[#31494b]">{interviewDetails.message}</dd></div> : null}
         </dl>
       ) : null}
 
       <div className="mt-5 flex flex-wrap items-center gap-2 px-4 sm:px-5">
-        <NextActionButton status={status} disabled={isSaving} onClick={() => void handleNextAction()} />
+        <NextActionButton
+          status={status}
+          label={status === "interview_scheduled" && interviewStatus === "invited"
+            ? "Awaiting applicant schedule"
+            : status === "interview_scheduled" && interviewStatus === "cancelled"
+              ? "Invite to schedule again"
+              : undefined}
+          disabled={isSaving || (status === "interview_scheduled" && interviewStatus === "invited")}
+          onClick={() => void handleNextAction()}
+        />
+        {status === "interview_scheduled" && interviewStatus === "cancelled" ? (
+          <p className="self-center text-xs text-[#8d393e]">The previous interview was cancelled.</p>
+        ) : null}
+        {status === "interview_scheduled" && (interviewStatus === "invited" || interviewStatus === "scheduled") ? (
+          <button type="button" onClick={() => setIsScheduleOpen(true)} disabled={isSaving} className="min-h-10 rounded-lg border border-[#0e8e9b] bg-white px-4 py-2 text-sm font-semibold text-[#0e7e87] hover:bg-[#f1f8f7] disabled:opacity-60">
+            Edit availability
+          </button>
+        ) : null}
+        {status === "interview_scheduled" && (interviewStatus === "invited" || interviewStatus === "cancelled") ? (
+          <button type="button" onClick={() => setIsHiredConfirmOpen(true)} disabled={isSaving} className="min-h-10 rounded-lg border border-[#c8ded4] bg-white px-4 py-2 text-sm font-semibold text-[#187850] hover:bg-[#f3faf6] disabled:opacity-60">
+            Mark as hired
+          </button>
+        ) : null}
         {status === "hired" && !employmentEndedAt ? (
           <button
             type="button"
@@ -233,7 +293,22 @@ export default function ApplicantStageStepper({
       <div className="sr-only" aria-live="polite" aria-atomic="true">{announcement}</div>
       <div className="mt-5 px-4 sm:px-5"><StatusTimeline history={history} /></div>
 
-      <ScheduleInterviewDialog open={isScheduleOpen} isSubmitting={isSaving} error={error} onRetry={() => void handleRetry()} onClose={() => !isSaving && setIsScheduleOpen(false)} onSubmit={handleScheduleInterview} />
+      {isScheduleOpen ? (
+        <ScheduleInterviewDialog
+          open
+          isSubmitting={isSaving}
+          error={error}
+          initialAvailability={status === "interview_scheduled"
+            ? interviewStatus === "cancelled" && interviewAvailability
+              ? { ...interviewAvailability, dates: [] }
+              : interviewAvailability
+            : undefined}
+          isReinvite={status === "interview_scheduled" && interviewStatus === "cancelled"}
+          onRetry={() => void handleRetry()}
+          onClose={() => !isSaving && setIsScheduleOpen(false)}
+          onSubmit={handleScheduleInterview}
+        />
+      ) : null}
       <RejectDialog open={isRejectOpen} isSubmitting={isSaving} error={error} onRetry={() => void handleRetry()} onClose={() => !isSaving && setIsRejectOpen(false)} onSubmit={handleReject} />
 
       <ApplicantDialog open={isHiredConfirmOpen} title="Mark applicant as hired?" role="alertdialog" error={error} onRetry={() => void handleRetry()} isRetrying={isSaving} onClose={() => !isSaving && setIsHiredConfirmOpen(false)}>

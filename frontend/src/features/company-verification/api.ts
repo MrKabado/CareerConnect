@@ -54,6 +54,19 @@ const emptyMedia: CompanyMediaCollection = {
 
 type CompanyVerificationStore = Record<string, CompanyVerificationRecord>;
 
+export type PersistedEmployerVerificationProgress = {
+  employerId: string;
+  emailVerified: boolean;
+  status: "incomplete" | "pending" | "verified" | "rejected";
+  companyExists: boolean;
+  companyName: string | null;
+  companyProfileComplete: boolean;
+  workEmail: string;
+  website: string;
+  requiredDocumentKinds: string[];
+  rejectionReason: string | null;
+};
+
 const entityTypes: readonly CompanyEntityType[] = [
   "sole_proprietor",
   "company",
@@ -137,6 +150,9 @@ function readStore(): CompanyVerificationStore {
 }
 
 let store = readStore();
+let backendProgress: PersistedEmployerVerificationProgress | null = null;
+let backendSyncStatus: "idle" | "loading" | "ready" | "error" = "idle";
+let backendSyncError: string | null = null;
 
 function simulateDelay(): Promise<void> {
   return new Promise((resolve) => window.setTimeout(resolve, 300));
@@ -246,19 +262,59 @@ function getReviewStatus(
   return "not_submitted";
 }
 
+function getBackendEmployerStatus(
+  status: PersistedEmployerVerificationProgress["status"],
+): string {
+  switch (status) {
+    case "pending":
+      return "pending_review";
+    case "verified":
+      return "approved";
+    case "rejected":
+      return "rejected";
+    case "incomplete":
+      return "docs_required";
+  }
+}
+
 function getSnapshot(): CompanyVerificationSnapshot {
   const employer = employerRegistrationApi.getSnapshot();
-  const record = employer ? store[employer.id] ?? {} : {};
-  const reviewStatus = getReviewStatus(record, employer?.status);
-  const isLegacyApproved = employer?.status === "approved" &&
+  const employerId = backendProgress?.employerId ?? employer?.id ?? null;
+  const record = employerId ? store[employerId] ?? {} : {};
+  const employerStatus = backendProgress
+    ? getBackendEmployerStatus(backendProgress.status)
+    : employer?.status;
+  const companyName = backendProgress
+    ? backendProgress.companyName ?? undefined
+    : employer?.companyName;
+  const reviewStatus = backendProgress
+    ? backendProgress.status === "verified"
+      ? "approved"
+      : backendProgress.status === "pending"
+        ? "submitted"
+        : backendProgress.status === "rejected"
+          ? "needs_changes"
+          : "not_submitted"
+    : getReviewStatus(record, employerStatus);
+  const isLegacyApproved = !backendProgress &&
+    employerStatus === "approved" &&
     record.reviewStatus !== "needs_changes";
-  const isLegacySubmitted = employer?.status === "pending_review" &&
+  const isLegacySubmitted = !backendProgress &&
+    employerStatus === "pending_review" &&
     record.reviewStatus === undefined;
-  const hasSubmittedDocuments = record.legalDocumentsSubmitted === true ||
-    isLegacyApproved ||
-    isLegacySubmitted ||
-    (employer !== null && hasRequiredEmployerVerificationDocuments(employer.id));
-  const profile = employer ? getCompanyProfile(employer.companyName) : undefined;
+  const requiredKinds = ["business_registration", "business_permit"];
+  const persistedProgress = backendProgress;
+  const hasPersistedRequiredDocuments = persistedProgress !== null
+    && requiredKinds.every((kind) => persistedProgress.requiredDocumentKinds.includes(kind));
+  const hasSubmittedDocuments = backendProgress
+    ? hasPersistedRequiredDocuments ||
+      backendProgress.status === "pending" ||
+      backendProgress.status === "verified"
+    : record.legalDocumentsSubmitted === true ||
+      isLegacyApproved ||
+      isLegacySubmitted ||
+      (employer !== null && hasRequiredEmployerVerificationDocuments(employer.id));
+  const profile = companyName ? getCompanyProfile(companyName) : undefined;
   const media = record.media ?? emptyMedia;
   const profileStrength = profile ? computeProfileStrength(profile, media) : null;
   const strengthItemComplete = (id: string) =>
@@ -268,12 +324,20 @@ function getSnapshot(): CompanyVerificationSnapshot {
     strengthItemComplete("benefits_and_culture") &&
     strengthItemComplete("company_values");
   const mediaComplete = strengthItemComplete("company_media");
-  const emailVerified = record.emailVerifiedAt !== undefined ||
-    (employer !== null && employer.status !== "email_unverified");
-  const informationComplete = isCompanyVerificationInformationComplete(
-    record.companyInformation,
-  );
-  const isInformationComplete = informationComplete || isLegacyApproved || isLegacySubmitted;
+  const emailVerified = backendProgress
+    ? backendProgress.emailVerified ||
+      backendProgress.status === "pending" ||
+      backendProgress.status === "verified"
+    : record.emailVerifiedAt !== undefined ||
+      (employer !== null && employer.status !== "email_unverified");
+  const informationComplete = backendProgress
+    ? backendProgress.companyProfileComplete
+    : isCompanyVerificationInformationComplete(record.companyInformation);
+  const isInformationComplete = informationComplete ||
+    isLegacyApproved ||
+    isLegacySubmitted ||
+    (backendProgress !== null &&
+      (backendProgress.status === "pending" || backendProgress.status === "verified"));
   const isDocumentsComplete = hasSubmittedDocuments;
 
   const rawStatuses: Record<CompanyVerificationStageId, CompanyVerificationStageStatus> = {
@@ -284,9 +348,13 @@ function getSnapshot(): CompanyVerificationSnapshot {
         : "not_started",
     company_information: isInformationComplete
       ? "complete"
-      : record.companyInformation
-        ? "in_progress"
-        : "not_started",
+      : backendProgress
+        ? backendProgress.companyExists
+          ? "in_progress"
+          : "not_started"
+        : record.companyInformation
+          ? "in_progress"
+          : "not_started",
     legal_documents: isDocumentsComplete
       ? "complete"
       : record.legalDocumentsStarted
@@ -344,8 +412,9 @@ function getSnapshot(): CompanyVerificationSnapshot {
     unlockedStatuses.company_media = "locked";
   }
 
-  const reasons = reviewStatus === "needs_changes" && record.reviewReason
-    ? { verification_review: record.reviewReason }
+  const rejectionReason = backendProgress?.rejectionReason ?? record.reviewReason;
+  const reasons = reviewStatus === "needs_changes" && rejectionReason
+    ? { verification_review: rejectionReason }
     : {};
   const stages = buildCompanyVerificationStages(unlockedStatuses, reasons);
   const percent = stages.reduce(
@@ -370,20 +439,29 @@ function getSnapshot(): CompanyVerificationSnapshot {
         label: nextActionLabel(nextStage.id, nextStage.status),
         route: nextStage.route,
       };
-  const riskFlags = employer
+  const riskFlags = backendProgress
     ? getCompanyVerificationRiskFlags(
+        backendProgress.workEmail,
+        backendProgress.website,
+        record.companyInformation?.entityType,
+        record.registryMismatch,
+      )
+    : employer
+      ? getCompanyVerificationRiskFlags(
         employer.workEmail,
         record.companyInformation?.website ?? employer.website,
         record.companyInformation?.entityType,
         record.registryMismatch,
       )
-    : [];
+      : [];
 
   return {
-    employerId: employer?.id ?? null,
+    employerId,
     record,
     stages,
     percent,
+    syncStatus: backendSyncStatus,
+    syncError: backendSyncError,
     nextAction,
     currentStage,
     firstIncompleteRequiredStage,
@@ -420,7 +498,9 @@ function notify(): void {
   listeners.forEach((listener) => listener());
 }
 
-function requireEmployerId(): string {
+function requireEmployerId(preferredId?: string): string {
+  if (preferredId?.trim()) return preferredId;
+  if (backendProgress?.employerId) return backendProgress.employerId;
   const employer = employerRegistrationApi.getSnapshot();
   if (!employer) throw new Error("Register an employer account first.");
   return employer.id;
@@ -428,9 +508,10 @@ function requireEmployerId(): string {
 
 function updateRecord(
   update: (record: CompanyVerificationRecord) => CompanyVerificationRecord,
+  employerId?: string,
 ): void {
-  const employerId = requireEmployerId();
-  store = { ...store, [employerId]: update(store[employerId] ?? {}) };
+  const resolvedEmployerId = requireEmployerId(employerId);
+  store = { ...store, [resolvedEmployerId]: update(store[resolvedEmployerId] ?? {}) };
   try {
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(store));
   } catch {
@@ -445,6 +526,35 @@ export const companyVerificationApi = {
   subscribe(listener: () => void) {
     listeners.add(listener);
     return () => listeners.delete(listener);
+  },
+
+  beginBackendSync(employerId: string) {
+    if (backendProgress?.employerId !== employerId) {
+      backendProgress = null;
+    }
+    backendSyncStatus = "loading";
+    backendSyncError = null;
+    notify();
+  },
+
+  setBackendProgress(progress: PersistedEmployerVerificationProgress) {
+    backendProgress = progress;
+    backendSyncStatus = "ready";
+    backendSyncError = null;
+    notify();
+  },
+
+  setBackendSyncError(error: string) {
+    backendSyncStatus = "error";
+    backendSyncError = error;
+    notify();
+  },
+
+  clearBackendProgress() {
+    backendProgress = null;
+    backendSyncStatus = "idle";
+    backendSyncError = null;
+    notify();
   },
 
 
@@ -516,9 +626,8 @@ export const companyVerificationApi = {
     updateRecord((record) => ({ ...record, hiringDefaultsComplete: complete }));
   },
 
-  setCompanyMedia(media: CompanyMediaCollection) {
-    updateRecord((record) => ({ ...record, media }));
-    // TODO(backend): Store media privately and expose it only after moderation and authorization.
+  setCompanyMedia(media: CompanyMediaCollection, employerId?: string) {
+    updateRecord((record) => ({ ...record, media }), employerId);
   },
 
   validateFile: validateCompanyVerificationFile,

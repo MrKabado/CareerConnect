@@ -5,6 +5,7 @@ import Footer from "@/components/common/user/userFooter";
 import { useAuth } from "@/features/auth/useAuth";
 import { employerVerificationFilesApi } from "@/features/employer-verification/backendApi";
 import RoleNotificationBell from "@/features/notifications/RoleNotificationBell";
+import { useScrollDirectionHeader } from "@/hooks/useScrollDirectionHeader";
 
 const navigationItems = [
   { label: "Overview", to: "/employer/overview" },
@@ -22,6 +23,9 @@ function EmployerHeader() {
   const [logoutError, setLogoutError] = useState<string | null>(null);
   const accountAreaRef = useRef<HTMLDivElement>(null);
   const [companyLogoUrl, setCompanyLogoUrl] = useState<string | null>(null);
+  const { headerRef, isVisible: headerVisible } = useScrollDirectionHeader(
+    mobileMenuOpen || accountMenuOpen,
+  );
 
   useEffect(() => {
     if (!token || user?.role !== "employer") return;
@@ -79,7 +83,12 @@ function EmployerHeader() {
   }
 
   return (
-    <header className="relative grid h-18 grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center border-b border-[#edf1f1] bg-white px-[max(40px,calc((100vw-1136px)/2))] max-[920px]:h-16.5 max-[920px]:px-6 max-[680px]:h-15 max-[680px]:grid-cols-[1fr_auto] max-[680px]:px-4">
+    <header
+      className={`fixed inset-x-0 top-0 z-50 grid h-18 grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center border-b border-[#edf1f1] bg-white px-[max(40px,calc((100vw-1136px)/2))] transition-transform duration-300 motion-reduce:transition-none max-[920px]:h-16.5 max-[920px]:px-6 max-[680px]:h-15 max-[680px]:grid-cols-[1fr_auto] max-[680px]:px-4 ${
+        headerVisible ? "translate-y-0" : "-translate-y-full"
+      }`}
+      ref={headerRef}
+    >
       <Link
         aria-label="CareerConnect employer overview"
         className="inline-flex items-center justify-self-start gap-2.5 whitespace-nowrap text-[18px] font-bold tracking-[-0.55px] text-[#263a3c] focus-visible:outline-[3px] focus-visible:outline-[#67c9c1] focus-visible:outline-offset-[3px] max-[680px]:gap-2 max-[680px]:text-base"
@@ -199,6 +208,7 @@ export default function EmployerWorkspaceLayout({
   return (
     <div className="flex min-h-screen min-w-[320px] flex-col overflow-x-hidden bg-[#f5f8f8] font-sans text-[#263a3c] antialiased">
       <EmployerHeader />
+      <div aria-hidden="true" className="h-18 shrink-0 max-[920px]:h-16.5 max-[680px]:h-15" />
       {children}
       <Footer />
     </div>

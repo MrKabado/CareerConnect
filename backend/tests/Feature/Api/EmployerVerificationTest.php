@@ -35,7 +35,7 @@ it('allows employers to manage their company profile, logo, and verification sta
         'city' => 'Cebu City',
         'industry' => 'Information Technology',
         'website' => 'https://acmetech.test',
-        'description' => 'A growing software company',
+        'description' => 'A growing software company that builds reliable digital products, supports local businesses, and provides practical technology services to communities.',
         'contact_name' => 'Jane Doe',
         'contact_phone' => '+639171234567',
         'contact_email' => 'jane@acmetech.test',
@@ -51,6 +51,12 @@ it('allows employers to manage their company profile, logo, and verification sta
     $this->withToken($token)->postJson('/api/employer/company/logo', [
         'logo' => UploadedFile::fake()->create('logo.png', 120, 'image/png'),
     ])->assertOk();
+
+    $this->withToken($token)->getJson('/api/employer/verification')
+        ->assertOk()
+        ->assertJsonPath('company_profile_complete', true)
+        ->assertJsonPath('profile_strength.percent', 100)
+        ->assertJsonPath('profile_strength.missing', []);
 
     $this->withToken($token)->postJson('/api/employer/verification/documents', [
         'type' => 'business_registration',
@@ -287,6 +293,48 @@ it('organizes Cloudinary employer logos and private verification documents by co
         ->assertOk();
     $this->app['auth']->forgetGuards();
     $this->withToken($token)->deleteJson('/api/employer/company/logo')->assertOk();
+});
+
+it('stores company gallery photos on the server and restricts photo deletion to the owner', function (): void {
+    Storage::fake('public');
+    Config::set('careerconnect.media_storage_disk', 'local');
+    $owner = User::factory()->create(['role' => 'employer']);
+    $ownerToken = $owner->createToken('company-media-owner')->plainTextToken;
+    $other = User::factory()->create(['role' => 'employer']);
+    $otherToken = $other->createToken('company-media-other')->plainTextToken;
+
+    $this->withToken($ownerToken)->putJson('/api/employer/company', ['name' => 'Media Company'])
+        ->assertOk();
+    $company = Company::query()->where('user_id', $owner->id)->firstOrFail();
+
+    $upload = $this->withToken($ownerToken)->postJson('/api/employer/company/media', [
+        'photo' => UploadedFile::fake()->createWithContent(
+            'office.png',
+            base64_decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADUlEQVR4nGP4z8AAAAMBAQDJ/pLvAAAAAElFTkSuQmCC'),
+        ),
+        'alt_text' => 'Team workspace',
+    ])->assertCreated()
+        ->assertJsonPath('media.alt_text', 'Team workspace')
+        ->assertJsonPath('media.mime_type', 'image/png');
+    $mediaId = $upload->json('media.id');
+    $media = $company->mediaAssets()->findOrFail($mediaId);
+
+    Storage::disk('public')->assertExists($media->file_path);
+    $this->app['auth']->forgetGuards();
+    $this->withToken($ownerToken)->getJson('/api/employer/company')
+        ->assertOk()
+        ->assertJsonPath('company.media.0.id', $media->id)
+        ->assertJsonPath('company.media.0.alt_text', 'Team workspace');
+
+    $this->app['auth']->forgetGuards();
+    $this->withToken($otherToken)->deleteJson("/api/employer/company/media/{$mediaId}")
+        ->assertNotFound();
+
+    $this->app['auth']->forgetGuards();
+    $this->withToken($ownerToken)->deleteJson("/api/employer/company/media/{$mediaId}")
+        ->assertOk();
+    Storage::disk('public')->assertMissing($media->file_path);
+    $this->assertDatabaseMissing('company_media_assets', ['id' => $mediaId]);
 });
 
 it('rejects invalid employer verification file types and files above the limit', function (): void {

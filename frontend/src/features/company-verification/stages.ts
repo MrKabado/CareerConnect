@@ -4,7 +4,7 @@ import type {
   CompanyVerificationStageStatus,
 } from "@/features/company-verification/types";
 
-type VerificationStageInput = {
+export type VerificationStageInput = {
   name?: string;
   overview?: string;
   industry?: string;
@@ -145,34 +145,60 @@ function isCompanyInformationComplete(profile: VerificationStageInput): boolean 
   return true;
 }
 
-function isHiringSetupComplete(profile: VerificationStageInput): boolean {
-  const hasLocations = Array.isArray(profile.locations) && profile.locations.length > 0;
-  const hasBenefits = Array.isArray(profile.benefits) && profile.benefits.filter((item) => item.trim().length > 0).length >= 3;
-  const hasCulture = hasMeaningfulText(profile.cultureSummary);
-  const hasValues = Array.isArray(profile.lifeAt) && profile.lifeAt.filter((item) => item.title?.trim() && item.description?.trim()).length >= 3;
-  const hasHiringDefaults = !!profile.hiringDefaults && [
-    profile.hiringDefaults.title,
-    profile.hiringDefaults.department,
-    profile.hiringDefaults.location,
-    profile.hiringDefaults.workspace,
-    profile.hiringDefaults.schoolPartnerships,
-    profile.hiringDefaults.acceptedCourses,
-  ].every((value) => hasMeaningfulText(value));
+export function getHiringSetupRequirements(profile: VerificationStageInput) {
+  const defaults = profile.hiringDefaults;
 
-  return hasLocations && hasBenefits && hasCulture && hasValues && hasHiringDefaults;
+  return [
+    {
+      label: "Hiring locations",
+      complete: Array.isArray(profile.locations) &&
+        profile.locations.some((location) => hasMeaningfulText(location.city)),
+    },
+    {
+      label: "Benefits",
+      complete: Array.isArray(profile.benefits) &&
+        profile.benefits.filter((benefit) => hasMeaningfulText(benefit)).length >= 3,
+    },
+    {
+      label: "Culture summary",
+      complete: hasMeaningfulText(profile.cultureSummary),
+    },
+    {
+      label: "Company values",
+      complete: Array.isArray(profile.lifeAt) &&
+        profile.lifeAt.filter((value) =>
+          hasMeaningfulText(value.title) && hasMeaningfulText(value.description),
+        ).length >= 3,
+    },
+    {
+      label: "Hiring defaults",
+      complete: !!defaults && [
+        defaults.title,
+        defaults.department,
+        defaults.location,
+        defaults.workspace,
+        defaults.schoolPartnerships,
+        defaults.acceptedCourses,
+      ].every((value) => hasMeaningfulText(value)),
+    },
+  ];
 }
 
-function isApprovedMediaAsset(asset: { status?: string } | null | undefined): boolean {
-  return !!asset && asset.status === "approved";
+function isHiringSetupComplete(profile: VerificationStageInput): boolean {
+  return getHiringSetupRequirements(profile).every((requirement) => requirement.complete);
+}
+
+function isUploadedMediaAsset(asset: { status?: string } | null | undefined): boolean {
+  return !!asset;
 }
 
 function isCompanyMediaComplete(profile: VerificationStageInput): boolean {
-  const logoApproved = isApprovedMediaAsset(profile.media?.logo);
-  const galleryApproved = Array.isArray(profile.media?.gallery)
-    ? profile.media.gallery.filter((asset) => isApprovedMediaAsset(asset)).length >= 3
+  const logoUploaded = isUploadedMediaAsset(profile.media?.logo);
+  const galleryUploaded = Array.isArray(profile.media?.gallery)
+    ? profile.media.gallery.filter((asset) => isUploadedMediaAsset(asset)).length >= 3
     : false;
 
-  return logoApproved && galleryApproved;
+  return logoUploaded && galleryUploaded;
 }
 
 export function computeStages(

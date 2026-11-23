@@ -13,8 +13,23 @@ export type ApplicantStatusHistoryEntry = {
 export type InterviewDetails = {
   date: string;
   time: string;
+  durationMinutes?: number;
   timezone: string;
-  format: "online" | "onsite";
+  format: "online" | "onsite" | "phone";
+  locationOrLink: string;
+  message?: string;
+};
+
+export type InterviewAvailabilityDetails = {
+  dates: string[];
+  startTime: string;
+  endTime: string;
+  breakStartTime: string | null;
+  breakEndTime: string | null;
+  durationMinutes: number;
+  bufferMinutes: number;
+  timezone: string;
+  format: "online" | "onsite" | "phone";
   locationOrLink: string;
   message?: string;
 };
@@ -26,7 +41,7 @@ export type OfferDetails = {
 
 export type ApplicantStatusUpdatePayload = {
   note?: string;
-  interviewDetails?: InterviewDetails;
+  interviewAvailability?: InterviewAvailabilityDetails;
   rejectionReason?: string;
 };
 
@@ -54,6 +69,9 @@ export type Applicant = {
   status: ApplicantStatus;
   statusHistory?: ApplicantStatusHistoryEntry[];
   interviewDetails?: InterviewDetails;
+  interviewId?: number;
+  interviewStatus?: "invited" | "scheduled" | "completed" | "cancelled";
+  interviewAvailability?: InterviewAvailabilityDetails;
   offerDetails?: OfferDetails;
   rejectionReason?: string;
   rejectionMessage?: string;

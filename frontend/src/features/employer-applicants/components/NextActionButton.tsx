@@ -9,12 +9,13 @@ const actionLabels: Partial<Record<ApplicantStatus, string>> = {
 
 type NextActionButtonProps = {
   status: ApplicantStatus;
+  label?: string;
   disabled?: boolean;
   onClick: () => void;
 };
 
-export default function NextActionButton({ status, disabled = false, onClick }: NextActionButtonProps) {
-  const label = actionLabels[status];
+export default function NextActionButton({ status, label: labelOverride, disabled = false, onClick }: NextActionButtonProps) {
+  const label = labelOverride ?? actionLabels[status];
   if (!label) return null;
 
   return (

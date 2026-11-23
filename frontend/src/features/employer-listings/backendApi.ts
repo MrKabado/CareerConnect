@@ -1,29 +1,30 @@
 import { apiRequest } from "@/lib/axios";
-import type { PublicJobListing } from "@/features/jobs/backendApi";
+import type { EmployerJobListing } from "@/features/jobs/backendApi";
 
 export type EmployerCategory = { id: number; name: string };
 export type CreateEmployerListingPayload = {
   listing_type: "job" | "ojt";
-  title: string;
+  save_as_draft?: boolean;
+  title?: string | null;
   category_id?: number;
-  custom_category_name?: string;
+  custom_category_name?: string | null;
   applicant_limit?: number | null;
   expires_at?: string | null;
-  description: string;
-  responsibilities: string;
-  requirements: string;
+  description?: string | null;
+  responsibilities?: string | null;
+  requirements?: string | null;
   required_skills?: string[];
-  location: string;
-  work_setup: "onsite" | "hybrid" | "remote";
+  location?: string | null;
+  work_setup?: "onsite" | "hybrid" | "remote" | null;
   experience_required?: boolean;
   minimum_experience_years?: number | null;
   employment_type?: "full_time" | "part_time" | "contract";
   salary_min?: number | null;
   salary_max?: number | null;
-  duration_hours?: number;
-  allowance_type?: "paid" | "unpaid";
+  duration_hours?: number | null;
+  allowance_type?: "paid" | "unpaid" | null;
   allowance_amount?: number | null;
-  slots?: number;
+  slots?: number | null;
   accepted_courses?: string[];
   moa_accepted?: boolean;
 };
@@ -44,7 +45,7 @@ export const employerListingsApi = {
   },
 
   listings(token: string, filters: EmployerListingFilters = {}) {
-    return apiRequest<Paginated<PublicJobListing>>(
+    return apiRequest<Paginated<EmployerJobListing>>(
       "/employer/jobs",
       { params: { per_page: 50, ...filters } },
       token,
@@ -52,7 +53,7 @@ export const employerListingsApi = {
   },
 
   create(token: string, data: CreateEmployerListingPayload) {
-    return apiRequest<{ data: PublicJobListing }>(
+    return apiRequest<{ data: EmployerJobListing }>(
       "/jobs",
       { method: "POST", data },
       token,
@@ -60,14 +61,14 @@ export const employerListingsApi = {
   },
 
   updateStatus(token: string, id: number, status: "draft" | "open" | "closed") {
-    return apiRequest<{ message: string; listing: PublicJobListing }>(
+    return apiRequest<{ message: string; listing: EmployerJobListing }>(
       `/jobs/${id}/status`,
       { method: "PATCH", data: { status } },
       token,
     );
   },
   update(token: string, id: number, data: CreateEmployerListingPayload) {
-    return apiRequest<{ data: PublicJobListing }>(
+    return apiRequest<{ data: EmployerJobListing }>(
       `/jobs/${id}`,
       { method: "PUT", data },
       token,

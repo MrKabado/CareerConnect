@@ -1,5 +1,6 @@
 import { useState, type KeyboardEvent } from "react";
 import type { OjtStepProps } from "@/components/features/onboarding/tracks/ojt/steps/ojtStepTypes";
+import { toNameCase } from "@/features/auth/nameFormatting";
 import {
   AddItemButton,
   OjtChoice,
@@ -36,7 +37,7 @@ function commitToken(
   currentItems: string[],
   limit?: number,
 ) {
-  const token = value.trim();
+  const token = field === "desiredJobTitles" ? toNameCase(value.trim()) : value.trim();
   if (
     !token ||
     currentItems.some((item) => item.toLowerCase() === token.toLowerCase())
@@ -94,7 +95,9 @@ function TokenField({
         <input
           className={`${ojtInputClassName} min-w-0 flex-1`}
           id={`job-${field}`}
-          onChange={(event) => setValue(event.target.value)}
+          onChange={(event) => setValue(
+            field === "desiredJobTitles" ? toNameCase(event.target.value) : event.target.value,
+          )}
           onKeyDown={(event) =>
             addToken(
               event,
