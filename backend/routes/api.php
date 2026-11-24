@@ -16,6 +16,7 @@ use App\Http\Controllers\Api\IdentityVerificationController;
 use App\Http\Controllers\Api\InterviewController;
 use App\Http\Controllers\Api\NotificationController;
 use App\Http\Controllers\Api\OtpController;
+use App\Http\Controllers\Api\PhilippineLocationController;
 use App\Http\Controllers\Api\PublicJobListingController;
 use Illuminate\Support\Facades\Route;
 
@@ -31,6 +32,17 @@ Route::middleware('throttle:5,1')->group(function (): void {
 });
 
 Route::get('/categories', [CategoryController::class, 'publicIndex']);
+Route::middleware('throttle:60,1')->prefix('locations')->group(function (): void {
+    Route::get('/regions', [PhilippineLocationController::class, 'regions']);
+    Route::get('/regions/{region}/provinces', [PhilippineLocationController::class, 'provinces'])
+        ->where('region', '[0-9]{10}');
+    Route::get('/regions/{region}/localities', [PhilippineLocationController::class, 'regionLocalities'])
+        ->where('region', '[0-9]{10}');
+    Route::get('/provinces/{province}/localities', [PhilippineLocationController::class, 'provinceLocalities'])
+        ->where('province', '[0-9]{10}');
+    Route::get('/localities/{locality}/barangays', [PhilippineLocationController::class, 'barangays'])
+        ->where('locality', '[0-9]{10}');
+});
 Route::get('/companies/{companySlug}/ratings', [CompanyRatingController::class, 'show']);
 Route::put('/companies/{companySlug}/ratings', [CompanyRatingController::class, 'save'])
     ->middleware(['auth:sanctum', 'account.active', 'abilities:*', 'role:applicant', 'throttle:60,1']);

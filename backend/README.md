@@ -8,14 +8,26 @@ Laravel 12 JSON API using MySQL and Sanctum bearer tokens. Public registration s
 2. Generate the application key with `docker compose run --rm backend php artisan key:generate`.
 3. Start MySQL and Laravel from this directory with `docker compose up --build -d`. The backend runs pending migrations on startup.
 4. Configure `ADMIN_SEED_NAME`, `ADMIN_SEED_EMAIL`, and `ADMIN_SEED_PASSWORD` in `.env`, then create the bootstrap admin with `docker compose exec -T backend php artisan db:seed --class=AdminUserSeeder --force`.
-5. In `frontend`, copy `.env.example` to `.env`, confirm `VITE_API_BASE_URL=http://localhost:8000/api`, install dependencies with `npm install`, and start Vite with `npm run dev`.
-6. Open `http://localhost:5173` on this computer. Configure `FRONTEND_URL` in `backend/.env` to the frontend origin when it differs from the default.
+5. In `frontend`, copy `.env.example` to `.env`, install dependencies with `npm install`, and start Vite with `npm run dev`. Set `HOST=localhost` for local-only use, or set it to this computer's LAN IP (for example, `HOST=192.168.254.125`) to access the app from another device. `VITE_API_BASE_URL` is built from `HOST`; the API will be reached at port 8000 on that same host.
+6. Open `http://localhost:5173` locally, or `http://<HOST>:5173` from a device on the same network. The backend CORS configuration permits the Vite dev server on private IPv4 addresses. For a different frontend origin, configure `FRONTEND_URL` in `backend/.env`.
 
 To clear the entire database and recreate only the configured admin bootstrap, run `docker compose exec -T backend php artisan migrate:fresh --seed --force` from this directory. This permanently deletes all database records and reruns every migration; do not run it against data you need.
 
-Required local environment values are `APP_KEY`, `DB_PASSWORD`, and `DB_ROOT_PASSWORD` in `backend/.env`, and `VITE_API_BASE_URL` in `frontend/.env`. `DB_DATABASE` and `DB_USERNAME` have Compose defaults. `USE_DELETE_USERS` controls the temporary admin account-deletion action; it defaults to `false` and should only be enabled for testing. Use unique local database passwords; do not commit either `.env` file.
+Required local environment values are `APP_KEY`, `DB_PASSWORD`, and `DB_ROOT_PASSWORD` in `backend/.env`; in `frontend/.env`, set `HOST` and keep `VITE_API_BASE_URL` pointing to the backend on the same host. `DB_DATABASE` and `DB_USERNAME` have Compose defaults. `USE_DELETE_USERS` controls the temporary admin account-deletion action; it defaults to `false` and should only be enabled for testing. Use unique local database passwords; do not commit either `.env` file.
 
 To stop Vite, press `Ctrl+C` in its terminal. To stop the Docker services, run `docker compose down` from `backend`. The named `mysql_data` volume and backend `storage` bind mount persist across stop/start and container recreation. **Do not use `docker compose down -v`** unless you intentionally want to delete the local database volume.
+
+## Job location maps
+
+Job addresses are geocoded once when an employer creates or updates a listing, then the returned latitude and longitude are stored with that listing and served by the existing job API. Address lookups use OpenStreetMap's Nominatim service with response caching and a one-request-per-second limit; addresses are not geocoded when applicants open a listing. Nominatim results that identify only a city, town, or other broad area are not saved as coordinates, so the applicant modal shows the address with a “Map location is unavailable” fallback rather than a misleading pin. Existing listings need to be saved again by their employer to attempt geocoding.
+
+The submitted business address is sent to Nominatim for the lookup. The default identifying User-Agent can be overridden with `OPENSTREETMAP_USER_AGENT`. The interactive map uses OpenStreetMap tiles and displays the required contributor attribution.
+
+## Philippine address selection
+
+Applicant profiles, employer company addresses, job workplaces, and on-site interview addresses use the shared searchable Region → Province → City/Municipality → Barangay selector. PSGC Cloud supplies authoritative names and parent-child relationships; the Laravel API caches each response for 24 hours and returns an explicit 503 if PSGC is unavailable. The public option routes are `GET /api/locations/regions`, `GET /api/locations/regions/{region}/provinces`, `GET /api/locations/regions/{region}/localities`, `GET /api/locations/provinces/{province}/localities`, and `GET /api/locations/localities/{locality}/barangays`.
+
+The backend validates submitted PSGC codes and their hierarchy before saving. Locality ZIP codes are suggested only when PSGC provides a valid four-digit value; ZIP codes remain editable and are never inferred from PSGC codes. Configure `PSGC_API_BASE_URL` or `PSGC_USER_AGENT` only when using a compatible PSGC endpoint or a custom identifying User-Agent. Apply pending database migrations with the normal backend startup or `php artisan migrate`; added structured address columns are nullable and preserve existing address values.
 
 ## Local file storage
 

@@ -11,6 +11,7 @@ use App\Models\InterviewHistory;
 use App\Models\User;
 use App\Services\InterviewAvailabilityService;
 use App\Services\NotificationService;
+use App\Services\PhilippineLocationService;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Http\Exceptions\HttpResponseException;
@@ -18,6 +19,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Arr;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 
@@ -25,11 +27,13 @@ class InterviewController extends Controller
 {
     public function __construct(
         private readonly InterviewAvailabilityService $availabilityService,
+        private readonly PhilippineLocationService $locations,
     ) {}
 
     public function store(Request $request, int $application): JsonResponse
     {
         $validated = $request->validate($this->availabilityRules());
+        $validated = $this->resolveOnsiteLocation($validated);
         $this->availabilityService->validateSchedule($validated);
         $this->validateOnlineMeetingDetails($request);
         $employer = $request->user();
@@ -55,6 +59,7 @@ class InterviewController extends Controller
                 'timezone' => $validated['timezone'],
                 'mode' => $validated['mode'],
                 'location' => $validated['location'] ?? null,
+                ...$this->interviewAddressAttributes($validated),
                 'meeting_url' => $validated['meeting_url'] ?? null,
                 'meeting_instructions' => $validated['meeting_instructions'] ?? null,
                 'internal_notes' => $validated['internal_notes'] ?? null,
@@ -142,6 +147,7 @@ class InterviewController extends Controller
     public function updateAvailability(Request $request, int $interview): JsonResponse
     {
         $validated = $request->validate($this->availabilityRules());
+        $validated = $this->resolveOnsiteLocation($validated);
         $this->availabilityService->validateSchedule($validated);
         $this->validateOnlineMeetingDetails($request);
 
@@ -167,6 +173,7 @@ class InterviewController extends Controller
             $interview->fill([
                 'mode' => $validated['mode'],
                 'location' => $validated['location'] ?? null,
+                ...$this->interviewAddressAttributes($validated),
                 'meeting_url' => $validated['meeting_url'] ?? null,
                 'meeting_instructions' => $validated['meeting_instructions'] ?? null,
                 'applicant_notes' => $validated['applicant_notes'] ?? null,
@@ -255,6 +262,7 @@ class InterviewController extends Controller
                 'timezone' => $interview->timezone,
                 'mode' => $interview->mode,
                 'location' => $interview->location,
+                ...$this->interviewAddressData($interview),
                 'meeting_url' => $interview->meeting_url,
                 'meeting_instructions' => $interview->meeting_instructions,
                 'listing_title' => $interview->application?->jobListing?->title,
@@ -596,6 +604,12 @@ class InterviewController extends Controller
             'timezone' => ['required', 'string', 'timezone'],
             'mode' => ['required', Rule::in(Interview::MODES)],
             'location' => ['required_if:mode,onsite', 'nullable', 'string', 'max:255'],
+            'region_code' => ['sometimes', 'nullable', 'regex:/^\d{10}$/D'],
+            'province_code' => ['sometimes', 'nullable', 'regex:/^\d{10}$/D'],
+            'city_municipality_code' => ['sometimes', 'nullable', 'regex:/^\d{10}$/D'],
+            'barangay_code' => ['sometimes', 'nullable', 'regex:/^\d{10}$/D'],
+            'street_address' => ['sometimes', 'nullable', 'string', 'max:255'],
+            'zip_code' => ['sometimes', 'nullable', 'regex:/^\d{4}$/D'],
             'meeting_url' => ['sometimes', 'nullable', 'url', 'max:2048'],
             'meeting_instructions' => ['sometimes', 'nullable', 'string', 'max:2000'],
             'internal_notes' => ['sometimes', 'nullable', 'string', 'max:5000'],
@@ -612,6 +626,78 @@ class InterviewController extends Controller
                 'meeting_url' => ['Provide a meeting URL or joining instructions for an online interview.'],
             ]);
         }
+    }
+
+    private function resolveOnsiteLocation(array $validated): array
+    {
+        if ($validated['mode'] !== 'onsite') {
+            return $validated;
+        }
+
+        $addressKeys = [
+            'region_code',
+            'province_code',
+            'city_municipality_code',
+            'barangay_code',
+            'street_address',
+            'zip_code',
+        ];
+        if (count(array_intersect($addressKeys, array_keys($validated))) === 0) {
+            return $validated;
+        }
+
+        $address = $this->locations->resolveAddress(
+            $validated,
+            required: true,
+            requireBarangay: true,
+        );
+        if (blank($address['street_address'])) {
+            throw ValidationException::withMessages([
+                'street_address' => ['Enter the onsite interview street address.'],
+            ]);
+        }
+
+        return [
+            ...$validated,
+            ...$address,
+            'location' => $this->locations->formatAddress($address),
+        ];
+    }
+
+    private function interviewAddressAttributes(array $validated): array
+    {
+        $fields = [
+            'street_address',
+            'region_code',
+            'region_name',
+            'province_code',
+            'province_name',
+            'city_municipality_code',
+            'city_municipality_name',
+            'barangay_code',
+            'barangay_name',
+            'zip_code',
+        ];
+
+        return $validated['mode'] === 'onsite'
+            ? array_merge(array_fill_keys($fields, null), Arr::only($validated, $fields))
+            : array_fill_keys($fields, null);
+    }
+
+    private function interviewAddressData(Interview $interview): array
+    {
+        return [
+            'street_address' => $interview->street_address,
+            'region_code' => $interview->region_code,
+            'region_name' => $interview->region_name,
+            'province_code' => $interview->province_code,
+            'province_name' => $interview->province_name,
+            'city_municipality_code' => $interview->city_municipality_code,
+            'city_municipality_name' => $interview->city_municipality_name,
+            'barangay_code' => $interview->barangay_code,
+            'barangay_name' => $interview->barangay_name,
+            'zip_code' => $interview->zip_code,
+        ];
     }
 
     private function availabilityAttributes(array $validated, string $date): array
@@ -759,6 +845,7 @@ class InterviewController extends Controller
             'timezone' => $interview->timezone,
             'mode' => $interview->mode,
             'location' => $interview->location,
+            ...$this->interviewAddressData($interview),
             'meeting_url' => $interview->meeting_url,
             'meeting_instructions' => $interview->meeting_instructions,
             'applicant_notes' => $interview->applicant_notes,

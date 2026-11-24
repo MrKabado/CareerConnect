@@ -12,6 +12,7 @@ use App\Models\User;
 use App\Models\VerificationDocument;
 use App\Services\MediaStorage;
 use App\Services\NotificationService;
+use App\Services\PhilippineLocationService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\UploadedFile;
@@ -31,7 +32,10 @@ class EmployerVerificationController extends Controller
 
     private const ISO_COUNTRY_CODES = 'AD AE AF AG AI AL AM AO AQ AR AS AT AU AW AX AZ BA BB BD BE BF BI BJ BL BM BN BO BQ BR BS BT BV BW BY BZ CA CC CD CF CG CH CI CK CL CM CN CO CR CU CV CW CX CY CZ DE DJ DK DM DO DZ EC EE EH ER ES ET FI FJ FK FM FO FR GA GF GG GH GI GL GM GN GP GQ GR GS GT GU GW GY HK HM HN HR HT HU ID IE IL IM IN IO IQ IR IS IT JE JM JO JP KE KG KH KI KM KN KP KR KW KY KZ LA LB LC LI LK LR LS LT LU LV LY MA MC MD ME MF MG MH MK ML MM MN MO MP MQ MR MS MT MU MV MW MX MY MZ NA NC NE NF NG NI NL NO NP NR NU NZ OM PA PE PF PG PH PK PL PM PN PR PS PT PW PY QA RE RO RS RU RW SA SB SC SD SE SG SH SI SJ SK SL SM SN SO SR SS ST SV SX SY SZ TC TD TF TG TH TJ TK TL TM TN TO TR TT TV TW TZ UA UG UM US UY UZ VA VC VE VG VI VN VU WF WS XK YE YT ZA ZM ZW';
 
-    public function __construct(private readonly MediaStorage $mediaStorage) {}
+    public function __construct(
+        private readonly MediaStorage $mediaStorage,
+        private readonly PhilippineLocationService $locations,
+    ) {}
 
     public function index(Request $request): JsonResponse
     {
@@ -136,8 +140,18 @@ class EmployerVerificationController extends Controller
                     'category' => $company->category?->name,
                     'company_size' => $company->company_size,
                     'address' => $company->address,
+                    'street_address' => $company->address,
                     'country' => $company->country,
                     'city' => $company->city,
+                    'region_code' => $company->region_code,
+                    'region_name' => $company->region_name,
+                    'province_code' => $company->province_code,
+                    'province_name' => $company->province_name,
+                    'city_municipality_code' => $company->city_municipality_code,
+                    'city_municipality_name' => $company->city,
+                    'barangay_code' => $company->barangay_code,
+                    'barangay_name' => $company->barangay_name,
+                    'zip_code' => $company->zip_code,
                     'industry' => $company->industry,
                     'website' => $company->website,
                     'description' => $company->description,
@@ -203,6 +217,7 @@ class EmployerVerificationController extends Controller
             'category_id' => ['nullable', 'exists:categories,id'],
             'company_size' => ['nullable', Rule::in(['1-10', '11-50', '51-200', '201-500', '500+', '501-1000', '1000+'])],
             'address' => ['nullable', 'string', 'max:255'],
+            'street_address' => ['sometimes', 'nullable', 'string', 'max:255'],
             'country' => [
                 'nullable',
                 'string',
@@ -210,6 +225,11 @@ class EmployerVerificationController extends Controller
                 Rule::in(self::isoCountryCodes()),
             ],
             'city' => ['nullable', 'string', 'max:100'],
+            'region_code' => ['sometimes', 'nullable', 'regex:/^\d{10}$/D'],
+            'province_code' => ['sometimes', 'nullable', 'regex:/^\d{10}$/D'],
+            'city_municipality_code' => ['sometimes', 'nullable', 'regex:/^\d{10}$/D'],
+            'barangay_code' => ['sometimes', 'nullable', 'regex:/^\d{10}$/D'],
+            'zip_code' => ['sometimes', 'nullable', 'regex:/^\d{4}$/D'],
             'industry' => ['nullable', 'string', 'max:100'],
             'website' => ['nullable', 'url'],
             'description' => ['nullable', 'string', 'max:1000'],
@@ -232,6 +252,72 @@ class EmployerVerificationController extends Controller
             'accepted_courses.*' => ['string', 'max:100'],
         ]);
 
+        $addressKeys = [
+            'region_code',
+            'province_code',
+            'city_municipality_code',
+            'barangay_code',
+            'street_address',
+            'zip_code',
+        ];
+        $country = $validated['country'] ?? null;
+        $hasStructuredAddress = count(array_intersect($addressKeys, array_keys($validated))) > 0;
+        if ($country === 'PH' && $hasStructuredAddress) {
+            $resolvedAddress = $this->locations->resolveAddress(
+                $validated,
+                required: true,
+                requireBarangay: true,
+            );
+            if (blank($resolvedAddress['street_address'])) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'street_address' => ['Enter the company street address.'],
+                ]);
+            }
+            $cityName = $resolvedAddress['city_municipality_name'];
+            unset($resolvedAddress['city_municipality_name']);
+            $validated = [
+                ...$validated,
+                ...$resolvedAddress,
+                'address' => $resolvedAddress['street_address'],
+                'city' => $cityName,
+            ];
+            unset($validated['street_address']);
+        } elseif ($country !== 'PH') {
+            $hasPhilippineCodes = collect([
+                'region_code',
+                'province_code',
+                'city_municipality_code',
+                'barangay_code',
+            ])->contains(fn (string $field): bool => filled($validated[$field] ?? null));
+            if ($hasPhilippineCodes) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'region_code' => ['Philippine location codes cannot be used for a non-Philippine address.'],
+                ]);
+            }
+            foreach ([
+                'region_code',
+                'region_name',
+                'province_code',
+                'province_name',
+                'city_municipality_code',
+                'barangay_code',
+                'barangay_name',
+                'zip_code',
+            ] as $locationField) {
+                if (array_key_exists($locationField, $validated)) {
+                    $validated[$locationField] = null;
+                }
+            }
+            if (array_key_exists('street_address', $validated)) {
+                $validated['address'] = $validated['street_address'];
+                unset($validated['street_address']);
+            }
+        } elseif (array_key_exists('street_address', $validated)) {
+            $validated['address'] = $validated['street_address'];
+            unset($validated['street_address']);
+        }
+
+        unset($validated['city_municipality_name']);
         $company = $user->company()->firstOrNew();
         $company->fill($validated);
         $company->user_id = $user->id;
@@ -937,8 +1023,18 @@ class EmployerVerificationController extends Controller
             'category_id' => $company->category_id,
             'company_size' => $company->company_size,
             'address' => $company->address,
+            'street_address' => $company->address,
             'country' => $company->country,
             'city' => $company->city,
+            'region_code' => $company->region_code,
+            'region_name' => $company->region_name,
+            'province_code' => $company->province_code,
+            'province_name' => $company->province_name,
+            'city_municipality_code' => $company->city_municipality_code,
+            'city_municipality_name' => $company->city,
+            'barangay_code' => $company->barangay_code,
+            'barangay_name' => $company->barangay_name,
+            'zip_code' => $company->zip_code,
             'industry' => $company->industry,
             'website' => $company->website,
             'description' => $company->description,

@@ -32,6 +32,21 @@ return [
         'url' => env('CLOUDINARY_URL'),
     ],
 
+    'openstreetmap' => [
+        'user_agent' => env(
+            'OPENSTREETMAP_USER_AGENT',
+            'CareerConnect/1.0 (+https://github.com/MrKabado/CareerConnect)',
+        ),
+    ],
+
+    'psgc' => [
+        'base_url' => env('PSGC_API_BASE_URL', 'https://psgc.cloud/api'),
+        'user_agent' => env(
+            'PSGC_USER_AGENT',
+            'CareerConnect/1.0 (+https://github.com/MrKabado/CareerConnect)',
+        ),
+    ],
+
     'slack' => [
         'notifications' => [
             'bot_user_oauth_token' => env('SLACK_BOT_USER_OAUTH_TOKEN'),

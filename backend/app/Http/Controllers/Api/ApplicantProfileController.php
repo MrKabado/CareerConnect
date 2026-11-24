@@ -7,6 +7,7 @@ use App\Models\ApplicantProfile;
 use App\Models\Category;
 use App\Models\Skill;
 use App\Services\MediaStorage;
+use App\Services\PhilippineLocationService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -16,7 +17,10 @@ use RuntimeException;
 
 class ApplicantProfileController extends Controller
 {
-    public function __construct(private readonly MediaStorage $mediaStorage) {}
+    public function __construct(
+        private readonly MediaStorage $mediaStorage,
+        private readonly PhilippineLocationService $locations,
+    ) {}
 
     private const EXPERIENCE_LEVELS = ['fresh_graduate', '1_3_years', '3_5_years', '5_plus_years'];
 
@@ -39,6 +43,7 @@ class ApplicantProfileController extends Controller
             'name' => ['sometimes', 'string', 'max:255'],
             'phone' => ['sometimes', 'nullable', 'string', 'max:30'],
             'city' => ['sometimes', 'nullable', 'string', 'max:100'],
+            ...$this->profileAddressRules(),
             'role' => ['prohibited'],
             'email' => ['prohibited'],
             'account_status' => ['prohibited'],
@@ -49,8 +54,9 @@ class ApplicantProfileController extends Controller
         ]);
 
         $profile = $this->profileFor($request);
+        $profileAddress = $this->profileAddressAttributes($validated);
 
-        DB::transaction(function () use ($validated, $request, $profile): void {
+        DB::transaction(function () use ($validated, $request, $profile, $profileAddress): void {
             if (array_key_exists('name', $validated)) {
                 $request->user()->update([
                     'name' => mb_convert_case(trim($validated['name']), MB_CASE_TITLE, 'UTF-8'),
@@ -58,10 +64,13 @@ class ApplicantProfileController extends Controller
             }
 
             $profileFields = array_intersect_key($validated, array_flip(['phone', 'city']));
-            if (isset($profileFields['city'])) {
+            if ($profileAddress === null && isset($profileFields['city'])) {
                 $profileFields['city'] = $this->capitalizeWords(trim($profileFields['city']));
             }
             $profile->fill($profileFields);
+            if ($profileAddress !== null) {
+                $profile->fill($profileAddress);
+            }
             $profile->save();
         });
 
@@ -422,6 +431,7 @@ class ApplicantProfileController extends Controller
                 'profile_links.other.url' => ['required_with:profile_links.other', 'string', 'max:2048'],
             ],
             $this->nestedOjtDetailRules(),
+            $this->profileAddressRules(),
         ));
         $profile = $this->profileFor($request);
         $lookingForJobs = $validated['looking_for_jobs'] ?? $profile->looking_for_jobs;
@@ -435,15 +445,19 @@ class ApplicantProfileController extends Controller
         }
 
         $fields = $this->normalizeProfileFields($validated);
+        $profileAddress = $this->profileAddressAttributes($validated);
         $this->validateMergedSalaryRange($profile, $fields);
 
-        DB::transaction(function () use ($profile, $validated, $fields, $lookingForJobs, $lookingForOjt): void {
+        DB::transaction(function () use ($profile, $validated, $fields, $profileAddress, $lookingForJobs, $lookingForOjt): void {
             $this->saveInterests($profile, $validated);
             $profile->fill($fields);
             $profile->fill(array_intersect_key(
                 $validated,
                 array_flip(['phone', 'city']),
             ));
+            if ($profileAddress !== null) {
+                $profile->fill($profileAddress);
+            }
             $profile->looking_for_jobs = $lookingForJobs;
             $profile->looking_for_ojt = $lookingForOjt;
             $profile->save();
@@ -490,6 +504,39 @@ class ApplicantProfileController extends Controller
         );
     }
 
+    private function profileAddressRules(): array
+    {
+        return [
+            'region_code' => ['sometimes', 'nullable', 'regex:/^\d{10}$/D'],
+            'province_code' => ['sometimes', 'nullable', 'regex:/^\d{10}$/D'],
+            'city_municipality_code' => ['sometimes', 'nullable', 'regex:/^\d{10}$/D'],
+            'barangay_code' => ['sometimes', 'nullable', 'regex:/^\d{10}$/D'],
+            'street_address' => ['sometimes', 'nullable', 'string', 'max:255'],
+            'zip_code' => ['sometimes', 'nullable', 'regex:/^\d{4}$/D'],
+        ];
+    }
+
+    private function profileAddressAttributes(array $validated): ?array
+    {
+        $addressKeys = [
+            'region_code',
+            'province_code',
+            'city_municipality_code',
+            'barangay_code',
+            'street_address',
+            'zip_code',
+        ];
+        if (count(array_intersect($addressKeys, array_keys($validated))) === 0) {
+            return null;
+        }
+
+        $address = $this->locations->resolveAddress($validated);
+        $address['city'] = $address['city_municipality_name'];
+        unset($address['city_municipality_name']);
+
+        return $address;
+    }
+
     private function profileData(ApplicantProfile $profile): array
     {
         $profile->loadMissing(['user:id,name,email', 'categories:id,name', 'skills:id,name', 'ojtDetails']);
@@ -500,6 +547,16 @@ class ApplicantProfileController extends Controller
             'email' => $profile->user->email,
             'phone' => $profile->phone,
             'city' => $profile->city,
+            'street_address' => $profile->street_address,
+            'region_code' => $profile->region_code,
+            'region_name' => $profile->region_name,
+            'province_code' => $profile->province_code,
+            'province_name' => $profile->province_name,
+            'city_municipality_code' => $profile->city_municipality_code,
+            'city_municipality_name' => $profile->city,
+            'barangay_code' => $profile->barangay_code,
+            'barangay_name' => $profile->barangay_name,
+            'zip_code' => $profile->zip_code,
             'profile_links' => $profile->profile_links ?? [],
             'other_categories' => $profile->other_categories ?? [],
             'profile_photo_path' => $profile->profile_photo_path,

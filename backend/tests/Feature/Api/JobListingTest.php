@@ -8,13 +8,44 @@ use App\Models\JobListing;
 use App\Models\User;
 use Illuminate\Foundation\Testing\LazilyRefreshDatabase;
 use Illuminate\Support\Facades\Config;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Http\Client\Request as HttpRequest;
 
 uses(LazilyRefreshDatabase::class)->group('api');
 
 beforeEach(function (): void {
     Config::set('careerconnect.media_storage_disk', 'local');
+    Http::fake(function (HttpRequest $request) {
+        if (str_contains($request->url(), 'psgc.cloud')) {
+            $path = trim((string) parse_url($request->url(), PHP_URL_PATH), '/');
+
+            return match ($path) {
+                'api/regions' => Http::response([
+                    ['code' => '0100000000', 'name' => 'Region I'],
+                ]),
+                'api/regions/0100000000/provinces' => Http::response([
+                    ['code' => '0102800000', 'name' => 'Ilocos Norte'],
+                ]),
+                'api/provinces/0102800000/cities-municipalities' => Http::response([
+                    ['code' => '0128010000', 'name' => 'Laoag City', 'type' => 'City', 'zip_code' => '2900'],
+                ]),
+                'api/cities-municipalities/0128010000/barangays' => Http::response([
+                    ['code' => '0128010001', 'name' => 'Barangay One'],
+                ]),
+                default => Http::response([], 404),
+            };
+        }
+
+        return Http::response([
+            [
+                'lat' => '10.3157',
+                'lon' => '123.8854',
+                'type' => $request['q'] === 'Zamboanga City' ? 'city' : 'house',
+            ],
+        ]);
+    });
 });
 
 function listingTestCompany(User $owner, bool $verified = false): Company
@@ -95,6 +126,88 @@ function listingTestRecord(
 
     return $listing;
 }
+
+it('stores precise job coordinates and exposes them through the public listing API', function (): void {
+    $employer = User::factory()->create(['role' => 'employer']);
+    $company = listingTestCompany($employer, true);
+    $category = Category::create(['name' => 'Engineering', 'is_active' => true]);
+    $token = $employer->createToken('employer')->plainTextToken;
+
+    $response = $this->withToken($token)->postJson('/api/jobs', listingTestPayload($category))
+        ->assertCreated()
+        ->assertJsonPath('data.latitude', 10.3157)
+        ->assertJsonPath('data.longitude', 123.8854);
+    $listingId = $response->json('data.id');
+
+    $this->withToken($token)->patchJson("/api/jobs/{$listingId}/status", ['status' => 'open'])
+        ->assertOk();
+    $this->getJson("/api/jobs/{$listingId}")
+        ->assertOk()
+        ->assertJsonPath('data.latitude', 10.3157)
+        ->assertJsonPath('data.longitude', 123.8854);
+
+    $this->assertDatabaseHas('job_listings', [
+        'id' => $listingId,
+        'latitude' => '10.3157000',
+        'longitude' => '123.8854000',
+    ]);
+    Http::assertSentCount(1);
+});
+
+it('stores and returns a validated Philippine workplace address', function (): void {
+    $employer = User::factory()->create(['role' => 'employer']);
+    listingTestCompany($employer, true);
+    $category = Category::create(['name' => 'Engineering', 'is_active' => true]);
+    $token = $employer->createToken('employer')->plainTextToken;
+    $listingId = $this->withToken($token)->postJson('/api/jobs', listingTestPayload($category, [
+        'location' => 'Laoag City',
+        'work_setup' => 'onsite',
+        'region_code' => '0100000000',
+        'province_code' => '0102800000',
+        'city_municipality_code' => '0128010000',
+        'barangay_code' => '0128010001',
+        'street_address' => '10 Main Street',
+        'zip_code' => '1234',
+    ]))
+        ->assertCreated()
+        ->assertJsonPath('data.region_name', 'Region I')
+        ->assertJsonPath('data.province_name', 'Ilocos Norte')
+        ->assertJsonPath('data.city_municipality_name', 'Laoag City')
+        ->assertJsonPath('data.barangay_name', 'Barangay One')
+        ->assertJsonPath('data.street_address', '10 Main Street')
+        ->assertJsonPath('data.zip_code', '1234')
+        ->json('data.id');
+
+    $this->assertDatabaseHas('job_listings', [
+        'id' => $listingId,
+        'region_code' => '0100000000',
+        'city_municipality_code' => '0128010000',
+        'barangay_code' => '0128010001',
+        'street_address' => '10 Main Street',
+        'zip_code' => '1234',
+    ]);
+
+    $this->withToken($token)->patchJson("/api/jobs/{$listingId}/status", ['status' => 'open'])
+        ->assertOk();
+    $this->getJson("/api/jobs/{$listingId}")
+        ->assertOk()
+        ->assertJsonPath('data.city_municipality_name', 'Laoag City')
+        ->assertJsonPath('data.street_address', '10 Main Street');
+});
+
+it('does not store coordinates for an imprecise geocoding result', function (): void {
+    $employer = User::factory()->create(['role' => 'employer']);
+    listingTestCompany($employer);
+    $category = Category::create(['name' => 'Engineering', 'is_active' => true]);
+    $token = $employer->createToken('employer')->plainTextToken;
+
+    $this->withToken($token)->postJson('/api/jobs', listingTestPayload($category, [
+        'location' => 'Zamboanga City',
+    ]))
+        ->assertCreated()
+        ->assertJsonPath('data.latitude', null)
+        ->assertJsonPath('data.longitude', null);
+});
 
 it('supports custom categories, applicant limits, expiration, manual closure and reopening', function (): void {
     $employer = User::factory()->create(['role' => 'employer']);

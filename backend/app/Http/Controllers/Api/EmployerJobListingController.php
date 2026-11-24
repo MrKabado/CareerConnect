@@ -10,7 +10,9 @@ use App\Models\ActivityLog;
 use App\Models\Category;
 use App\Models\Company;
 use App\Models\JobListing;
+use App\Services\JobLocationGeocoder;
 use App\Services\NotificationService;
+use App\Services\PhilippineLocationService;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -22,6 +24,11 @@ use Illuminate\Validation\ValidationException;
 
 class EmployerJobListingController extends Controller
 {
+    public function __construct(
+        private JobLocationGeocoder $jobLocationGeocoder,
+        private PhilippineLocationService $locations,
+    ) {}
+
     public function index(Request $request): AnonymousResourceCollection
     {
         $filters = $request->validate([
@@ -81,9 +88,11 @@ class EmployerJobListingController extends Controller
         Gate::authorize('create', JobListing::class);
         $company = $request->user()->company()->firstOrFail();
         $validated = $request->validated();
+        $validated = $this->resolveLocation($validated);
         $validated = $this->resolveCategory($validated);
+        $coordinates = $this->jobLocationGeocoder->geocode($validated['location'] ?? null);
 
-        $listing = DB::transaction(function () use ($company, $validated): JobListing {
+        $listing = DB::transaction(function () use ($company, $validated, $coordinates): JobListing {
             $customCategory = isset($validated['custom_category_name'])
                 ? Category::find($validated['category_id'])
                 : null;
@@ -92,6 +101,8 @@ class EmployerJobListingController extends Controller
                 : 'not_required';
             $listing = $company->jobListings()->create([
                 ...$this->listingAttributes($validated),
+                'latitude' => $coordinates['latitude'] ?? null,
+                'longitude' => $coordinates['longitude'] ?? null,
                 'status' => 'draft',
                 'published_at' => null,
                 'approval_status' => $approvalStatus,
@@ -129,10 +140,19 @@ class EmployerJobListingController extends Controller
         $listing = $request->user()->company()->firstOrFail()->jobListings()->findOrFail($jobListing);
         Gate::authorize('update', $listing);
         $validated = $request->validated();
+        $validated = $this->resolveLocation($validated);
         $validated = $this->resolveCategory($validated);
+        $location = $validated['location'] ?? $listing->location;
+        $locationChanged = trim((string) $location) !== trim((string) $listing->location);
+        $coordinates = $locationChanged || $listing->latitude === null || $listing->longitude === null
+            ? $this->jobLocationGeocoder->geocode($location)
+            : ['latitude' => $listing->latitude, 'longitude' => $listing->longitude];
 
-        DB::transaction(function () use ($listing, $validated): void {
-            $listing->fill($this->listingAttributes($validated))->save();
+        DB::transaction(function () use ($listing, $validated, $coordinates): void {
+            $listing->fill($this->listingAttributes($validated));
+            $listing->latitude = $coordinates['latitude'] ?? null;
+            $listing->longitude = $coordinates['longitude'] ?? null;
+            $listing->save();
             if (($validated['save_as_draft'] ?? false) === true) {
                 $listing->status = 'draft';
                 $listing->published_at = null;
@@ -324,6 +344,16 @@ class EmployerJobListingController extends Controller
             'responsibilities',
             'requirements',
             'location',
+            'street_address',
+            'region_code',
+            'region_name',
+            'province_code',
+            'province_name',
+            'city_municipality_code',
+            'city_municipality_name',
+            'barangay_code',
+            'barangay_name',
+            'zip_code',
             'work_setup',
             'employment_type',
             'salary_min',
@@ -367,6 +397,42 @@ class EmployerJobListingController extends Controller
             'company:id,name,city,logo_path,logo_disk',
             'ojtDetails:job_listing_id,duration_hours,allowance_type,allowance_amount,slots,accepted_courses,moa_accepted',
         ];
+    }
+
+    private function resolveLocation(array $validated): array
+    {
+        $addressKeys = [
+            'region_code',
+            'province_code',
+            'city_municipality_code',
+            'barangay_code',
+            'street_address',
+            'zip_code',
+        ];
+        if (count(array_intersect($addressKeys, array_keys($validated))) === 0) {
+            return $validated;
+        }
+
+        $isDraft = (bool) ($validated['save_as_draft'] ?? false);
+        $requiresPhysicalAddress = ! $isDraft
+            && in_array($validated['work_setup'] ?? null, ['onsite', 'hybrid'], true);
+        $address = $this->locations->resolveAddress(
+            $validated,
+            required: ! $isDraft,
+            requireBarangay: $requiresPhysicalAddress,
+        );
+        if ($requiresPhysicalAddress && blank($address['street_address'])) {
+            throw ValidationException::withMessages([
+                'street_address' => ['Enter the street address for this physical workplace.'],
+            ]);
+        }
+        $validated = [...$validated, ...$address];
+
+        if ($address['city_municipality_name'] !== null) {
+            $validated['location'] = $this->locations->formatAddress($address);
+        }
+
+        return $validated;
     }
 
     private function resolveCategory(array $validated): array
