@@ -11,6 +11,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\Rules\Password;
 use Illuminate\Validation\ValidationException;
 
 class OtpController extends Controller
@@ -53,6 +54,7 @@ class OtpController extends Controller
 
             return $user;
         });
+        $user->tokens()->where('name', 'careerconnect-onboarding-resume')->delete();
 
         return response()->json([
             'message' => 'Email verified successfully.',
@@ -87,7 +89,7 @@ class OtpController extends Controller
         $validated = $request->validate([
             'email' => ['required', 'email'],
             'code' => ['required', 'digits:6'],
-            'password' => ['required', 'string', 'min:8', 'confirmed'],
+            'password' => ['required', 'string', 'confirmed', Password::min(12)->letters()->mixedCase()->numbers()->symbols()],
         ]);
 
         DB::transaction(function () use ($validated): void {

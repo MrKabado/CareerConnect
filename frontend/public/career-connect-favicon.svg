@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="CareerConnect logo">
+  <circle cx="256" cy="256" r="256" fill="#078B8D"/>
+  <!-- stylized C -->
+  <path d="M350 117c-28-23-62-36-100-36-97 0-175 78-175 175s78 175 175 175c41 0 79-14 109-39l-43-49c-19 16-42 25-66 25-62 0-112-50-112-112S188 144 250 144c25 0 47 8 66 23z" fill="#fff"/>
+  <!-- briefcase -->
+  <path d="M204 203v-25c0-17 14-31 31-31h42c17 0 31 14 31 31v25h-31v-25h-42v25z" fill="#fff"/>
+  <rect x="163" y="203" width="189" height="133" rx="24" fill="#fff"/>
+  <path d="M163 262h189v30H163z" fill="#078B8D"/>
+  <rect x="238" y="252" width="39" height="52" rx="9" fill="#fff"/>
+  <rect x="248" y="262" width="19" height="32" rx="3" fill="#078B8D"/>
+  <!-- progress swoosh -->
+  <path d="M104 369c111 7 218-35 285-118-23 103-132 172-285 118z" fill="#fff"/>
+  <!-- sparkle -->
+  <path d="M407 121l14 38 38 14-38 14-14 38-14-38-38-14 38-14z" fill="#fff"/>
+</svg>

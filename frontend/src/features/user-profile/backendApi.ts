@@ -1,0 +1,323 @@
+import { apiBlob, apiRequest } from "@/lib/axios";
+import type { PhilippineAddress } from "@/features/locations/types";
+
+export type ApplicantResumeFile = {
+  id: number;
+  original_filename: string;
+  mime_type: string;
+  file_size: number;
+  is_current: boolean;
+  created_at: string | null;
+};
+
+export type ApplicantDocumentType = "cover_letter" | "certificate" | "education" | "other";
+
+export type ApplicantStoredDocument = {
+  id: number;
+  document_type: ApplicantDocumentType;
+  original_filename: string;
+  mime_type: string;
+  file_size: number;
+  is_current: boolean;
+  created_at: string | null;
+};
+
+export type ApplicantIdentityVerification = {
+  status: "pending" | "verified" | "rejected";
+  rejection_reason: string | null;
+  submitted_at: string | null;
+  reviewed_at: string | null;
+};
+
+type ResumeResponse = {
+  data: ApplicantResumeFile | null;
+};
+
+type ApplicantDocumentsResponse = {
+  data: ApplicantStoredDocument[];
+};
+
+export type ApplicantProfileData = {
+  name: string;
+  email: string;
+  phone: string | null;
+  city: string | null;
+  street_address: string | null;
+  region_code: string | null;
+  region_name: string | null;
+  province_code: string | null;
+  province_name: string | null;
+  city_municipality_code: string | null;
+  city_municipality_name: string | null;
+  barangay_code: string | null;
+  barangay_name: string | null;
+  zip_code: string | null;
+  profile_links: {
+    portfolio?: string | null;
+    github?: string | null;
+    linkedin?: string | null;
+    other?: { label: string; url: string } | null;
+  } | null;
+  other_categories: string[] | null;
+  profile_photo_url: string | null;
+  looking_for_jobs: boolean;
+  looking_for_ojt: boolean;
+  interests: { id: number; name: string }[];
+  skills: string[];
+  work_setups: string[] | null;
+  preferred_locations: string[] | null;
+  desired_titles: string[] | null;
+  employment_types: string[] | null;
+  experience_level: string | null;
+  salary_min: number | null;
+  salary_max: number | null;
+  ojt_details: {
+    school?: string | null;
+    course?: string | null;
+    year_level?: number | null;
+    education_status?: "undergraduate" | "graduated" | null;
+    graduation_year?: number | null;
+    required_hours?: number | null;
+    preferred_start_date?: string | null;
+    allowance_preference?: string | null;
+    requires_moa?: boolean | null;
+  } | null;
+};
+
+export type ApplicantCategory = { id: number; name: string };
+
+export const applicantFilesApi = {
+  categories() {
+    return apiRequest<{ data: ApplicantCategory[] }>("/categories");
+  },
+
+  async resume(token: string): Promise<ApplicantResumeFile | null> {
+    const response = await apiRequest<ResumeResponse>("/applicant/resume", {}, token);
+    return response.data;
+  },
+
+  async uploadResume(
+    token: string,
+    file: File,
+    onProgress: (progress: number) => void,
+  ): Promise<ApplicantResumeFile> {
+    const formData = new FormData();
+    formData.set("resume", file);
+    const response = await apiRequest<ResumeResponse>(
+      "/applicant/resume",
+      {
+        method: "POST",
+        data: formData,
+        onUploadProgress: (event) => {
+          if (event.total) onProgress(Math.round((event.loaded / event.total) * 100));
+        },
+      },
+      token,
+    );
+    if (!response.data) throw new Error("The server did not return the uploaded resume.");
+    return response.data;
+  },
+
+  async uploadOnboardingResume(
+    token: string,
+    file: File,
+    onProgress: (progress: number) => void,
+  ): Promise<ApplicantResumeFile> {
+    const formData = new FormData();
+    formData.set("resume", file);
+    const response = await apiRequest<ResumeResponse>(
+      "/onboarding/resume",
+      {
+        method: "POST",
+        data: formData,
+        onUploadProgress: (event) => {
+          if (event.total) onProgress(Math.round((event.loaded / event.total) * 100));
+        },
+      },
+      token,
+    );
+    if (!response.data) throw new Error("The server did not return the uploaded resume.");
+    return response.data;
+  },
+
+  async deleteResume(token: string): Promise<void> {
+    await apiRequest("/applicant/resume", { method: "DELETE" }, token);
+  },
+
+  downloadResume(token: string): Promise<Blob> {
+    return apiBlob("/applicant/resume/download", token);
+  },
+
+  async documents(token: string): Promise<ApplicantStoredDocument[]> {
+    const response = await apiRequest<ApplicantDocumentsResponse>("/applicant/documents", {}, token);
+    return response.data;
+  },
+
+  async uploadDocument(
+    token: string,
+    documentType: ApplicantDocumentType,
+    file: File,
+    onProgress: (progress: number) => void = () => {},
+  ): Promise<ApplicantStoredDocument> {
+    const formData = new FormData();
+    formData.set("document_type", documentType);
+    formData.set("document", file);
+    const response = await apiRequest<{ data: ApplicantStoredDocument }>(
+      "/applicant/documents",
+      {
+        method: "POST",
+        data: formData,
+        onUploadProgress: (event) => {
+          if (event.total) onProgress(Math.round((event.loaded / event.total) * 100));
+        },
+      },
+      token,
+    );
+    if (!response.data) throw new Error("The server did not return the uploaded document.");
+    return response.data;
+  },
+
+  deleteDocument(token: string, documentId: number) {
+    return apiRequest<{ message: string }>(
+      `/applicant/documents/${documentId}`,
+      { method: "DELETE" },
+      token,
+    );
+  },
+
+  downloadDocument(token: string, documentId: number): Promise<Blob> {
+    return apiBlob(`/applicant/documents/${documentId}/download`, token);
+  },
+
+  async identityVerification(token: string): Promise<ApplicantIdentityVerification | null> {
+    const response = await apiRequest<{
+      verification: ApplicantIdentityVerification | null;
+    }>("/applicant/identity-verification", {}, token);
+    return response.verification;
+  },
+
+  submitIdentityVerification(
+    token: string,
+    file: File,
+    onProgress: (progress: number) => void,
+  ) {
+    const formData = new FormData();
+    formData.set("document", file);
+    return apiRequest<{ message: string; status: "pending" }>(
+      "/applicant/identity-verification",
+      {
+        method: "POST",
+        data: formData,
+        onUploadProgress: (event) => {
+          if (event.total) onProgress(Math.round((event.loaded / event.total) * 100));
+        },
+      },
+      token,
+    );
+  },
+
+  async uploadPhoto(
+    token: string,
+    file: File,
+    onProgress: (progress: number) => void,
+  ): Promise<string> {
+    const formData = new FormData();
+    formData.set("photo", file);
+    const response = await apiRequest<{ photo_url: string }>(
+      "/applicant/profile/photo",
+      {
+        method: "POST",
+        data: formData,
+        onUploadProgress: (event) => {
+          if (event.total) onProgress(Math.round((event.loaded / event.total) * 100));
+        },
+      },
+      token,
+    );
+    return response.photo_url;
+  },
+
+  deletePhoto(token: string) {
+    return apiRequest<{ data: { profile_photo_url: string | null } }>(
+      "/applicant/profile/photo",
+      { method: "DELETE" },
+      token,
+    );
+  },
+
+  profile(token: string) {
+    return apiRequest<{
+      data: ApplicantProfileData;
+    }>("/applicant/profile", {}, token);
+  },
+
+  updateProfile(
+    token: string,
+    details: { name?: string; phone?: string | null; city?: string | null } & Partial<PhilippineAddress>,
+  ) {
+    return apiRequest<{ data: ApplicantProfileData }>(
+      "/applicant/profile",
+      { method: "PUT", data: details },
+      token,
+    );
+  },
+
+  updatePreferences(
+    token: string,
+    details: {
+      name?: string;
+      phone?: string | null;
+      city?: string | null;
+      region_code?: string | null;
+      province_code?: string | null;
+      city_municipality_code?: string | null;
+      barangay_code?: string | null;
+      street_address?: string | null;
+      zip_code?: string | null;
+      looking_for_jobs?: boolean;
+      looking_for_ojt?: boolean;
+      category_ids?: number[];
+      other_categories?: string[];
+      skills?: string[];
+      work_setups?: string[];
+      preferred_locations?: string[];
+      desired_titles?: string[];
+      employment_types?: string[];
+      salary_min?: number | null;
+      salary_max?: number | null;
+      experience_level?: string | null;
+      ojt_details?: {
+        school?: string | null;
+        course?: string | null;
+        year_level?: number | null;
+        education_status?: "undergraduate" | "graduated" | null;
+        graduation_year?: number | null;
+        required_hours?: number | null;
+        preferred_start_date?: string | null;
+        allowance_preference?: string | null;
+        requires_moa?: boolean | null;
+      };
+      profile_links?: {
+        portfolio?: string | null;
+        github?: string | null;
+        linkedin?: string | null;
+        other?: { label: string; url: string } | null;
+      } | null;
+    },
+  ) {
+    return apiRequest<{ data: ApplicantProfileData }>(
+      "/applicant/preferences",
+      { method: "PATCH", data: details },
+      token,
+    );
+  },
+};
+
+export function downloadApplicantFile(blob: Blob, fileName: string): void {
+  const objectUrl = URL.createObjectURL(blob);
+  const anchor = window.document.createElement("a");
+  anchor.href = objectUrl;
+  anchor.download = fileName;
+  anchor.click();
+  window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
+}

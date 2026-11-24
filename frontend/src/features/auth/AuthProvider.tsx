@@ -1,0 +1,183 @@
+import {
+  type ReactNode,
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
+import {
+  ApiError,
+  authApi,
+  type AuthUser,
+  type LoginCredentials,
+} from "@/features/auth/api";
+import { AuthContext, type AuthContextValue } from "@/features/auth/AuthContext";
+import { onboardingStore } from "@/features/onboarding/store";
+import { connectRealtime } from "@/lib/realtime";
+
+const TOKEN_STORAGE_KEY = "careerconnect-token";
+
+function getStoredToken() {
+  return (
+    localStorage.getItem(TOKEN_STORAGE_KEY) ??
+    sessionStorage.getItem(TOKEN_STORAGE_KEY)
+  );
+}
+
+function clearStoredToken() {
+  localStorage.removeItem(TOKEN_STORAGE_KEY);
+  sessionStorage.removeItem(TOKEN_STORAGE_KEY);
+}
+
+export function AuthProvider({ children }: { children: ReactNode }) {
+  const [token, setToken] = useState<string | null>(getStoredToken);
+  const [user, setUser] = useState<AuthUser | null>(null);
+  const [status, setStatus] = useState<AuthContextValue["status"]>(
+    token ? "loading" : "unauthenticated",
+  );
+  const [error, setError] = useState<string | null>(null);
+
+  const refresh = useCallback(async () => {
+    if (!token) {
+      setUser(null);
+      setError(null);
+      setStatus("unauthenticated");
+      return;
+    }
+
+    setStatus("loading");
+    setError(null);
+
+    try {
+      const response = await authApi.me(token);
+      setUser(response.user);
+      setStatus("authenticated");
+    } catch (requestError) {
+      if (requestError instanceof ApiError && requestError.status === 401) {
+        clearStoredToken();
+        setToken(null);
+        setUser(null);
+        setStatus("unauthenticated");
+        return;
+      }
+
+      setError(
+        requestError instanceof Error
+          ? requestError.message
+          : "Unable to verify your account.",
+      );
+      setStatus("error");
+    }
+  }, [token]);
+
+  useEffect(() => {
+    if (!token) {
+      return;
+    }
+
+    let active = true;
+
+    authApi
+      .me(token)
+      .then(({ user: authenticatedUser }) => {
+        if (active) {
+          setUser(authenticatedUser);
+          setStatus("authenticated");
+          setError(null);
+        }
+      })
+      .catch((requestError: unknown) => {
+        if (!active) {
+          return;
+        }
+
+        if (
+          requestError instanceof ApiError &&
+          requestError.status === 401
+        ) {
+          clearStoredToken();
+          setToken(null);
+          setUser(null);
+          setStatus("unauthenticated");
+          return;
+        }
+
+        setError(
+          requestError instanceof Error
+            ? requestError.message
+            : "Unable to verify your account.",
+        );
+        setStatus("error");
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [token]);
+
+  const login = useCallback(
+    async (credentials: LoginCredentials, remember: boolean) => {
+      const response = await authApi.login(credentials);
+      clearStoredToken();
+      const storage = remember ? localStorage : sessionStorage;
+      storage.setItem(TOKEN_STORAGE_KEY, response.token);
+      setToken(response.token);
+      setUser(response.user);
+      setError(null);
+      setStatus("authenticated");
+      return { user: response.user, token: response.token };
+    },
+    [],
+  );
+
+  const verifyEmail = useCallback(async (email: string, code: string) => {
+    const response = await authApi.verifyEmail(email, code);
+    onboardingStore.clearOnboardingToken();
+    clearStoredToken();
+    sessionStorage.setItem(TOKEN_STORAGE_KEY, response.token);
+    setToken(response.token);
+    setUser(response.user);
+    setError(null);
+    setStatus("authenticated");
+  }, []);
+
+  const logout = useCallback(async () => {
+    try {
+      if (token) {
+        await authApi.logout(token);
+      }
+    } finally {
+      clearStoredToken();
+      setToken(null);
+      setUser(null);
+      setError(null);
+      setStatus("unauthenticated");
+    }
+  }, [token]);
+
+  const value = useMemo(
+    () => ({ user, token, status, error, login, verifyEmail, logout, refresh }),
+    [user, token, status, error, login, verifyEmail, logout, refresh],
+  );
+
+  const realtimeUserId = user ? String(user.id) : null;
+  useEffect(() => {
+    let disposed = false;
+    let disconnect = () => {};
+    void connectRealtime(token, realtimeUserId)
+      .then((cleanup) => {
+        if (disposed) cleanup();
+        else disconnect = cleanup;
+      })
+      .catch((realtimeError: unknown) => {
+        if (!disposed) console.error("Unable to initialize real-time updates.", realtimeError);
+      });
+
+    return () => {
+      disposed = true;
+      disconnect();
+    };
+  }, [token, realtimeUserId]);
+
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+}

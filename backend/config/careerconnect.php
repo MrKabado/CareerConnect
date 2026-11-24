@@ -1,0 +1,13 @@
+<?php
+
+return [
+    'identity_document_retention_days' => max(30, (int) env('IDENTITY_DOCUMENT_RETENTION_DAYS', 730)),
+    'resume_max_size_kb' => max(1, (int) env('RESUME_MAX_SIZE_KB', 5120)),
+    'media_storage_disk' => env('MEDIA_STORAGE_DISK', env('RESUME_STORAGE_DISK', 'local')),
+    'use_delete_users' => filter_var(env('USE_DELETE_USERS', false), FILTER_VALIDATE_BOOLEAN),
+    'admin_seed' => [
+        'name' => env('ADMIN_SEED_NAME') ?: 'System Administrator',
+        'email' => env('ADMIN_SEED_EMAIL') ?: 'admin@gmail.com',
+        'password' => env('ADMIN_SEED_PASSWORD') ?: 'Password123?',
+    ],
+];

@@ -1,8 +1,13 @@
 <?php
 
+use App\Http\Middleware\ApplicantCanApply;
+use App\Http\Middleware\EnsureAccountIsActive;
+use App\Http\Middleware\EnsureListingAcceptsApplications;
+use App\Http\Middleware\RoleMiddleware;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
+use Laravel\Sanctum\Http\Middleware\CheckAbilities;
 
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
@@ -11,8 +16,18 @@ return Application::configure(basePath: dirname(__DIR__))
         commands: __DIR__.'/../routes/console.php',
         health: '/up',
     )
+    ->withBroadcasting(
+        __DIR__.'/../routes/channels.php',
+        attributes: ['middleware' => ['api', 'auth:sanctum', 'account.active', 'abilities:*']],
+    )
     ->withMiddleware(function (Middleware $middleware): void {
-        //
+        $middleware->alias([
+            'role' => RoleMiddleware::class,
+            'applicant.eligible' => ApplicantCanApply::class,
+            'account.active' => EnsureAccountIsActive::class,
+            'listing.accepting-applications' => EnsureListingAcceptsApplications::class,
+            'abilities' => CheckAbilities::class,
+        ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         //

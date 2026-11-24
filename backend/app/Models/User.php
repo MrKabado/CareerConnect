@@ -4,8 +4,14 @@ namespace App\Models;
 
 // use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Database\Factories\UserFactory;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasManyThrough;
+use Illuminate\Database\Eloquent\Relations\HasOne;
+use Illuminate\Database\Eloquent\Relations\MorphMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
+use Illuminate\Notifications\DatabaseNotification;
 use Illuminate\Notifications\Notifiable;
 use Laravel\Sanctum\HasApiTokens;
 
@@ -47,5 +53,94 @@ class User extends Authenticatable
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
         ];
+    }
+
+    public function identityVerification(): HasOne
+    {
+        return $this->hasOne(IdentityVerification::class);
+    }
+
+    public function applicantProfile(): HasOne
+    {
+        return $this->hasOne(ApplicantProfile::class);
+    }
+
+    public function resumes(): HasMany
+    {
+        return $this->hasMany(Resume::class, 'applicant_id');
+    }
+
+    public function applicantDocuments(): HasMany
+    {
+        return $this->hasMany(ApplicantDocument::class, 'applicant_id');
+    }
+
+    public function applications(): HasMany
+    {
+        return $this->hasMany(Application::class, 'applicant_id');
+    }
+
+    public function hasBeenHired(): bool
+    {
+        return $this->applications()
+            ->where(fn (Builder $query): Builder => $query
+                ->whereNotNull('hired_at')
+                ->orWhere('status', 'hired'))
+            ->exists();
+    }
+
+    public function notifications(): MorphMany
+    {
+        return $this->morphMany(DatabaseNotification::class, 'notifiable');
+    }
+
+    public function interviewsAsApplicant(): HasMany
+    {
+        return $this->hasMany(Interview::class, 'applicant_id');
+    }
+
+    public function interviewsAsEmployer(): HasMany
+    {
+        return $this->hasMany(Interview::class, 'employer_id');
+    }
+
+    public function company(): HasOne
+    {
+        return $this->hasOne(Company::class);
+    }
+
+    public function companyVerifications(): HasMany
+    {
+        return $this->hasManyThrough(CompanyVerification::class, Company::class);
+    }
+
+    public function jobListings(): HasManyThrough
+    {
+        return $this->hasManyThrough(JobListing::class, Company::class);
+    }
+
+    public function savedListings(): HasMany
+    {
+        return $this->hasMany(SavedListing::class);
+    }
+
+    public function activityLogs(): HasMany
+    {
+        return $this->hasMany(ActivityLog::class, 'user_id');
+    }
+
+    public function authoredActivityLogs(): HasMany
+    {
+        return $this->hasMany(ActivityLog::class, 'actor_id');
+    }
+
+    public function hasRole(string $role): bool
+    {
+        return $this->role === $role;
+    }
+
+    public function isActive(): bool
+    {
+        return $this->account_status === 'active';
     }
 }

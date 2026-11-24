@@ -1,0 +1,133 @@
+<?php
+
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
+use Illuminate\Database\Eloquent\SoftDeletes;
+
+class JobListing extends Model
+{
+    use SoftDeletes;
+
+    protected $fillable = [
+        'company_id',
+        'category_id',
+        'listing_type',
+        'title',
+        'description',
+        'responsibilities',
+        'requirements',
+        'required_skills',
+        'location',
+        'street_address',
+        'region_code',
+        'region_name',
+        'province_code',
+        'province_name',
+        'city_municipality_code',
+        'city_municipality_name',
+        'barangay_code',
+        'barangay_name',
+        'zip_code',
+        'latitude',
+        'longitude',
+        'work_setup',
+        'experience_required',
+        'minimum_experience_years',
+        'applicant_limit',
+        'expires_at',
+        'custom_category_name',
+        'approval_status',
+        'approval_reason',
+        'approval_reviewed_at',
+        'employment_type',
+        'salary_min',
+        'salary_max',
+        'status',
+        'published_at',
+    ];
+
+    protected function casts(): array
+    {
+        return [
+            'salary_min' => 'integer',
+            'salary_max' => 'integer',
+            'latitude' => 'float',
+            'longitude' => 'float',
+            'required_skills' => 'array',
+            'experience_required' => 'boolean',
+            'minimum_experience_years' => 'integer',
+            'published_at' => 'datetime',
+            'expires_at' => 'datetime',
+            'applicant_limit' => 'integer',
+            'approval_reviewed_at' => 'datetime',
+        ];
+    }
+
+    public function company(): BelongsTo
+    {
+        return $this->belongsTo(Company::class);
+    }
+
+    public function category(): BelongsTo
+    {
+        return $this->belongsTo(Category::class);
+    }
+
+    public function ojtDetails(): HasOne
+    {
+        return $this->hasOne(OjtListingDetail::class);
+    }
+
+    public function adminActions(): HasMany
+    {
+        return $this->hasMany(JobListingAdminAction::class);
+    }
+
+    public function applications(): HasMany
+    {
+        return $this->hasMany(Application::class);
+    }
+
+    public function savedBy(): HasMany
+    {
+        return $this->hasMany(SavedListing::class);
+    }
+
+    public function scopePubliclyVisible(Builder $query): Builder
+    {
+        return $query
+            ->where('status', 'open')
+            ->whereNotNull('published_at')
+            ->where(function (Builder $query): void {
+                $query->whereNull('expires_at')->orWhere('expires_at', '>', now());
+            })
+            ->whereHas('category', fn (Builder $category): Builder => $category->where('is_active', true))
+            ->whereHas('company', function (Builder $company): void {
+                $company
+                    ->where('is_verified', true)
+                    ->whereHas('user', fn (Builder $user): Builder => $user->where('account_status', 'active'))
+                    ->whereHas('verification', fn (Builder $verification): Builder => $verification->where('status', 'verified'));
+            });
+    }
+
+    public function canReceiveApplications(): bool
+    {
+        $limit = $this->applicant_limit
+            ?? ($this->listing_type === 'ojt' ? $this->ojtDetails?->slots : null);
+        $atLimit = $limit !== null && $this->applications()->count() >= (int) $limit;
+
+        return $this->status === 'open'
+            && $this->published_at !== null
+            && ! $atLimit
+            && ($this->expires_at === null || $this->expires_at->isFuture())
+            && $this->company?->is_verified === true
+            && $this->company?->user?->account_status === 'active'
+            && $this->company?->verification?->status === 'verified'
+            && $this->category?->is_active === true;
+    }
+}

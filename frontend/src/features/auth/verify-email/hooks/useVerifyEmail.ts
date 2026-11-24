@@ -1,0 +1,117 @@
+import { useState, type FormEvent } from "react";
+import { useLocation, useNavigate } from "react-router";
+import { authApi } from "@/features/auth/api";
+import { useAuth } from "@/features/auth/useAuth";
+import { validateVerifyEmailAddress, validateVerifyEmailCode } from "@/features/auth/verify-email/validation";
+
+export function useVerifyEmail() {
+  const { verifyEmail } = useAuth();
+  const location = useLocation();
+  const navigate = useNavigate();
+  const codeWasSent = new URLSearchParams(location.search).get("codeSent") === "1";
+
+  const [email, setEmail] = useState(
+    () => new URLSearchParams(location.search).get("email") ?? "",
+  );
+  const [codeRequested, setCodeRequested] = useState(codeWasSent);
+  const [notice, setNotice] = useState(
+    codeWasSent
+      ? "A 6-digit verification code was sent to your email. Enter it below."
+      : null,
+  );
+  const [error, setError] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  async function sendVerificationCode() {
+    setError(null);
+    setNotice(null);
+
+    const emailValidationError = validateVerifyEmailAddress(email);
+    if (emailValidationError) {
+      setError(emailValidationError);
+      return;
+    }
+
+    setIsSubmitting(true);
+
+    try {
+      await authApi.requestEmailVerificationCode(email.trim());
+      setCodeRequested(true);
+      setNotice(
+        "A 6-digit verification code was sent to your email.",
+      );
+    } catch (requestError) {
+      setError(
+        requestError instanceof Error
+          ? requestError.message
+          : "Unable to request a verification code.",
+      );
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
+  async function requestCode(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    await sendVerificationCode();
+  }
+
+  async function resendCode() {
+    await sendVerificationCode();
+  }
+
+  async function submitCode(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const formData = new FormData(event.currentTarget);
+    const code = String(formData.get("code") ?? "");
+
+    const codeValidationError = validateVerifyEmailCode(code);
+    if (codeValidationError) {
+      setError(codeValidationError);
+      return;
+    }
+
+    setError(null);
+    setNotice(null);
+    setIsSubmitting(true);
+
+    try {
+      await verifyEmail(email.trim(), code);
+      navigate("/profile", { replace: true });
+    } catch (verificationError) {
+      setError(
+        verificationError instanceof Error
+          ? verificationError.message
+          : "Unable to verify your email.",
+      );
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
+  function resetRequestState() {
+    setCodeRequested(false);
+    setError(null);
+    setNotice(null);
+  }
+
+  function changeEmail(value: string) {
+    setEmail(value);
+    setError(null);
+    setNotice(null);
+  }
+
+  return {
+    email,
+    setEmail: changeEmail,
+    codeRequested,
+    setCodeRequested,
+    notice,
+    error,
+    isSubmitting,
+    requestCode,
+    resendCode,
+    submitCode,
+    resetRequestState,
+  };
+}

@@ -3,13 +3,17 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\ActivityLog;
 use App\Models\User;
+use App\Services\NotificationService;
 use App\Services\OtpCodeService;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\Rules\Password;
 use Illuminate\Validation\ValidationException;
 
 class AuthController extends Controller
@@ -18,19 +22,103 @@ class AuthController extends Controller
 
     public function register(Request $request): JsonResponse
     {
-        $validated = $request->validate([
-            'name' => ['required', 'string', 'max:255'],
-            'email' => ['required', 'string', 'email', 'max:255', 'unique:users,email'],
-            'password' => ['required', 'string', 'min:8', 'confirmed'],
-            'role' => ['sometimes', Rule::in(['applicant', 'employer'])],
-        ]);
+        return $this->registerForRole($request, null);
+    }
 
-        $validated['role'] ??= 'applicant';
+    public function registerApplicant(Request $request): JsonResponse
+    {
+        return $this->registerForRole($request, 'applicant');
+    }
+
+    public function registerEmployer(Request $request): JsonResponse
+    {
+        return $this->registerForRole($request, 'employer');
+    }
+
+    private function registerForRole(Request $request, ?string $forcedRole): JsonResponse
+    {
+        $rules = [
+            'name' => ['required', 'string', 'max:255'],
+            'email' => ['required', 'string', 'email', 'max:255'],
+            'password' => ['required', 'string', 'confirmed', Password::min(12)->letters()->mixedCase()->numbers()->symbols()],
+            'role' => [
+                'sometimes',
+                Rule::in($forcedRole === null ? ['applicant', 'employer'] : [$forcedRole]),
+            ],
+        ];
+        if ($forcedRole === 'employer') {
+            $rules += [
+                'company_name' => ['required', 'string', 'max:255'],
+                'company_size' => ['required', Rule::in([
+                    '1-10',
+                    '11-50',
+                    '51-200',
+                    '201-500',
+                    '501-1000',
+                    '1000+',
+                ])],
+                'industry' => ['required', 'string', 'max:100'],
+                'website' => ['nullable', 'url', 'max:255'],
+            ];
+        }
+
+        $validated = $request->validate($rules);
+
+        $validated['role'] = $forcedRole ?? ($validated['role'] ?? 'applicant');
+        $validated['name'] = mb_convert_case(trim($validated['name']), MB_CASE_TITLE, 'UTF-8');
+        $companyData = null;
+        if ($forcedRole === 'employer') {
+            $companyData = [
+                'name' => trim($validated['company_name']),
+                'company_size' => $validated['company_size'],
+                'industry' => trim($validated['industry']),
+                'website' => $validated['website'] ?? null,
+                'contact_name' => $validated['name'],
+                'contact_email' => $validated['email'],
+            ];
+            unset(
+                $validated['company_name'],
+                $validated['company_size'],
+                $validated['industry'],
+                $validated['website'],
+            );
+        }
+        $existingUser = User::where('email', $validated['email'])->first();
+
+        if ($existingUser !== null) {
+            $response = $this->resumeApplicantVerification($existingUser, $validated['role']);
+
+            if ($response !== null) {
+                return $response;
+            }
+
+            throw ValidationException::withMessages([
+                'email' => ['The email has already been taken.'],
+            ]);
+        }
 
         try {
-            $user = User::create($validated);
+            $user = DB::transaction(function () use ($validated, $companyData): User {
+                $user = User::create($validated);
+                if ($companyData !== null) {
+                    $company = $user->company()->create($companyData);
+                    $company->verification()->create([
+                        'status' => 'incomplete',
+                    ]);
+                }
+
+                return $user;
+            });
         } catch (QueryException $exception) {
-            if (User::where('email', $validated['email'])->exists()) {
+            $existingUser = User::where('email', $validated['email'])->first();
+
+            if ($existingUser !== null) {
+                $response = $this->resumeApplicantVerification($existingUser, $validated['role']);
+
+                if ($response !== null) {
+                    return $response;
+                }
+
                 throw ValidationException::withMessages([
                     'email' => ['The email has already been taken.'],
                 ]);
@@ -40,12 +128,64 @@ class AuthController extends Controller
         }
 
         $user->refresh();
+        ActivityLog::create([
+            'user_id' => $user->id,
+            'actor_id' => null,
+            'action' => 'account.registered',
+            'subject_type' => User::class,
+            'subject_id' => $user->id,
+            'payload' => [
+                'description' => sprintf('%s registered as %s', $user->name, $user->role),
+                'role' => $user->role,
+            ],
+        ]);
+        foreach (User::query()->where('role', 'admin')->get(['id', 'name', 'email']) as $admin) {
+            app(NotificationService::class)->send(
+                $admin,
+                'account_registered',
+                'New account registered',
+                sprintf('%s registered as %s.', $user->name, $user->role),
+                [
+                    'dedupe_key' => 'account_registered-'.$user->id,
+                    'user_id' => $user->id,
+                    'role' => $user->role,
+                ],
+            );
+        }
         $this->otpCodes->send($user->email, 'email_verification');
+        $onboardingToken = $user->role === 'applicant'
+            ? $user->createToken(
+                'careerconnect-onboarding-resume',
+                ['onboarding:resume', 'onboarding:profile'],
+                now()->addDays(7),
+            )->plainTextToken
+            : null;
 
         return response()->json([
             'message' => 'A verification code has been sent to your email address.',
             'user' => $this->userData($user),
+            ...($onboardingToken === null ? [] : ['onboarding_token' => $onboardingToken]),
         ], 201);
+    }
+
+    private function resumeApplicantVerification(User $user, string $registrationRole): ?JsonResponse
+    {
+        if (
+            $user->role === $registrationRole
+            && $user->account_status === 'active'
+            && $user->email_verified_at === null
+        ) {
+            $this->otpCodes->send($user->email, 'email_verification');
+
+            return response()->json([
+                'message' => 'This email needs verification. Continue with the verification code.',
+                'resume_verification' => true,
+            ]);
+        }
+
+        throw ValidationException::withMessages([
+            'email' => ['This email is already registered. Log in instead.'],
+        ]);
     }
 
     public function login(Request $request): JsonResponse
@@ -90,7 +230,7 @@ class AuthController extends Controller
     {
         $validated = $request->validate([
             'current_password' => ['required', 'string'],
-            'password' => ['required', 'string', 'min:8', 'confirmed'],
+            'password' => ['required', 'string', 'confirmed', Password::min(12)->letters()->mixedCase()->numbers()->symbols()],
         ]);
 
         $user = $request->user();
@@ -118,10 +258,14 @@ class AuthController extends Controller
     }
 
     /**
-     * @return array{id: int, name: string, email: string, role: string, account_status: string, email_verified_at: ?string}
+     * @return array{id: int, name: string, email: string, role: string, account_status: string, email_verified_at: ?string, has_been_hired: bool, identity_verification_status: ?string, identity_verification_rejection_reason: ?string}
      */
     private function userData(User $user): array
     {
+        $identityVerification = $user->role === 'applicant'
+            ? $user->identityVerification
+            : null;
+
         return [
             'id' => $user->id,
             'name' => $user->name,
@@ -129,6 +273,11 @@ class AuthController extends Controller
             'role' => $user->role,
             'account_status' => $user->account_status,
             'email_verified_at' => $user->email_verified_at?->toISOString(),
+            'has_been_hired' => $user->role === 'applicant' && $user->hasBeenHired(),
+            'identity_verification_status' => $user->role === 'applicant'
+                ? ($identityVerification?->status ?? 'unverified')
+                : null,
+            'identity_verification_rejection_reason' => $identityVerification?->rejection_reason,
         ];
     }
 }

@@ -4,8 +4,12 @@ use App\Mail\OtpCodeMail;
 use App\Models\OtpCode;
 use App\Models\User;
 use Illuminate\Foundation\Testing\LazilyRefreshDatabase;
+use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Storage;
 
 uses(LazilyRefreshDatabase::class);
 
@@ -60,6 +64,128 @@ it('defaults registration to applicant', function (): void {
         'password_confirmation' => 'Password123!',
     ])->assertCreated()
         ->assertJsonPath('user.role', 'applicant');
+});
+
+it('issues a limited resume upload token for new applicants and revokes it after verification', function (): void {
+    Mail::fake();
+    Storage::fake('local');
+    Config::set('careerconnect.media_storage_disk', 'local');
+
+    $registration = $this->postJson('/api/register', [
+        'name' => 'Resume Applicant',
+        'email' => 'resume-applicant@example.com',
+        'password' => 'Password123!',
+        'password_confirmation' => 'Password123!',
+        'role' => 'applicant',
+    ])->assertCreated()
+        ->assertJsonStructure(['onboarding_token'])
+        ->assertJsonMissingPath('token');
+
+    $user = User::where('email', 'resume-applicant@example.com')->firstOrFail();
+    $token = $registration->json('onboarding_token');
+
+    $this->withToken($token)->post('/api/onboarding/resume', [
+        'resume' => UploadedFile::fake()->createWithContent(
+            'resume.pdf',
+            "%PDF-1.4\n1 0 obj\n<< /Type /Catalog >>\nendobj\ntrailer\n<< /Root 1 0 R >>\n%%EOF",
+        ),
+    ])->assertCreated()
+        ->assertJsonPath('data.original_filename', 'resume.pdf');
+
+    $this->withToken($token)->getJson('/api/user')->assertForbidden();
+
+    $code = Mail::sent(OtpCodeMail::class)->first()->code;
+    $this->postJson('/api/otp/verify', [
+        'email' => $user->email,
+        'code' => $code,
+    ])->assertOk()
+        ->assertJsonStructure(['token']);
+
+    $this->assertDatabaseMissing('personal_access_tokens', [
+        'tokenable_id' => $user->id,
+        'name' => 'careerconnect-onboarding-resume',
+    ]);
+    Auth::forgetGuards();
+    $this->withToken($token)->getJson('/api/user')->assertUnauthorized();
+});
+
+it('resumes verification for an existing unverified applicant without changing account details', function (): void {
+    Mail::fake();
+    $user = User::factory()->unverified()->create([
+        'name' => 'Original Applicant',
+        'email' => 'pending-applicant@example.com',
+    ]);
+
+    $this->postJson('/api/register', [
+        'name' => 'Replacement Name',
+        'email' => $user->email,
+        'password' => 'DifferentPassword123!',
+        'password_confirmation' => 'DifferentPassword123!',
+        'role' => 'applicant',
+    ])->assertOk()
+        ->assertJsonPath('resume_verification', true)
+        ->assertJsonMissingPath('onboarding_token')
+        ->assertJsonMissingPath('user');
+
+    expect($user->refresh()->name)->toBe('Original Applicant');
+    expect(Hash::check('password', $user->password))->toBeTrue();
+    expect(OtpCode::where('email', $user->email)
+        ->where('purpose', 'email_verification')
+        ->exists())->toBeTrue();
+    Mail::assertSent(OtpCodeMail::class);
+});
+
+it('rejects registration for an already verified applicant without sending a code', function (): void {
+    Mail::fake();
+    $user = User::factory()->create([
+        'email' => 'verified-applicant@example.com',
+    ]);
+
+    $this->postJson('/api/register', [
+        'name' => 'Another Name',
+        'email' => $user->email,
+        'password' => 'DifferentPassword123!',
+        'password_confirmation' => 'DifferentPassword123!',
+        'role' => 'applicant',
+    ])->assertUnprocessable()
+        ->assertJsonValidationErrors('email');
+
+    expect($user->refresh()->name)->not->toBe('Another Name');
+    Mail::assertNothingSent();
+});
+
+it('resumes verification for an existing unverified employer and rejects a verified employer', function (): void {
+    Mail::fake();
+    $employer = User::factory()->unverified()->create([
+        'name' => 'Pending Employer',
+        'email' => 'pending-employer@example.com',
+        'role' => 'employer',
+    ]);
+
+    $this->postJson('/api/register', [
+        'name' => 'Replacement Employer',
+        'email' => $employer->email,
+        'password' => 'DifferentPassword123!',
+        'password_confirmation' => 'DifferentPassword123!',
+        'role' => 'employer',
+    ])->assertOk()
+        ->assertJsonPath('resume_verification', true);
+
+    Mail::assertSent(OtpCodeMail::class);
+
+    $employer->forceFill(['email_verified_at' => now()])->save();
+    Mail::fake();
+
+    $this->postJson('/api/register', [
+        'name' => 'Another Employer',
+        'email' => $employer->email,
+        'password' => 'DifferentPassword123!',
+        'password_confirmation' => 'DifferentPassword123!',
+        'role' => 'employer',
+    ])->assertUnprocessable()
+        ->assertJsonValidationErrors('email');
+
+    Mail::assertNothingSent();
 });
 
 it('resends an email-verification code without exposing it in the response', function (): void {
@@ -171,6 +297,14 @@ it('sends a password-reset code and revokes existing tokens after reset', functi
         'password' => 'NewPassword123!',
         'password_confirmation' => 'NewPassword123!',
     ])->assertOk();
+
+    $this->postJson('/api/reset-password', [
+        'email' => $user->email,
+        'code' => $mail->code,
+        'password' => 'AnotherPassword123!',
+        'password_confirmation' => 'AnotherPassword123!',
+    ])->assertUnprocessable()
+        ->assertJsonValidationErrors('code');
 
     expect(Hash::check('NewPassword123!', $user->refresh()->password))->toBeTrue();
     $this->assertDatabaseMissing('otp_codes', [

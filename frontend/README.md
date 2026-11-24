@@ -1,5 +1,11 @@
 # React + TypeScript + Vite
 
+## CareerConnect API
+
+Copy `.env.example` to `.env`. Set `HOST=localhost` for this computer only, or set it to this computer's LAN IP (for example, `HOST=192.168.254.125`) to access the dev server from another device on the same network. The API URL uses the same host automatically. Run `npm run dev`, then open `http://<HOST>:5173`; the backend must be running and reachable on port 8000. The shared client in `src/lib/api.ts` sends JSON requests and exposes API validation errors through `ApiError`.
+
+Call `setApiToken(token)` after login or email verification and `setApiToken(null)` after logout. Tokens are kept only in module memory; they are not written to `localStorage` or `sessionStorage`, so a page reload requires signing in again. For long-lived browser sessions, use an HTTP-only, secure cookie design rather than persisting bearer tokens in JavaScript storage.
+
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
 
 Currently, two official plugins are available:
