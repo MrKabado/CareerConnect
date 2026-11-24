@@ -237,7 +237,7 @@ export function useJobApplication() {
 
   function reviewApplication() {
     if (canApply === false) {
-      setSubmitError(applicationEligibilityError ?? "You have been marked as hired and cannot submit new applications.");
+      setSubmitError(applicationEligibilityError ?? "You are not currently eligible to apply. Check your account and identity verification status.");
       return;
     }
     if (canApply === null) {
@@ -256,7 +256,7 @@ export function useJobApplication() {
 
   async function submitApplication() {
     if (canApply === false) {
-      setSubmitError(applicationEligibilityError ?? "You have been marked as hired and cannot submit new applications.");
+      setSubmitError(applicationEligibilityError ?? "You are not currently eligible to apply. Check your account and identity verification status.");
       return;
     }
     if (canApply === null) {

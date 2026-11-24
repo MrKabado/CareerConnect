@@ -1202,21 +1202,17 @@ export default function MainBody({
                     <div className="flex items-center gap-3">
                       <button
                         className="rounded-lg bg-[#078b8d] px-3 py-1.5 text-[10px] font-semibold text-white hover:bg-[#067476] disabled:cursor-not-allowed disabled:bg-[#9aa6a7]"
-                        aria-describedby={user?.has_been_hired
-                          ? `hired-application-notice-${job.listingId}`
-                          : identityVerificationBlocksApplications
-                            ? `identity-application-notice-${job.listingId}`
-                            : undefined}
-                        disabled={user?.has_been_hired || identityVerificationBlocksApplications || hasActiveApplication || isCooldownActive}
+                        aria-describedby={identityVerificationBlocksApplications
+                          ? `identity-application-notice-${job.listingId}`
+                          : undefined}
+                        disabled={identityVerificationBlocksApplications || hasActiveApplication || isCooldownActive}
                         onClick={(event) => {
                           event.stopPropagation();
                           navigate(`/apply/${job.listingId}`);
                         }}
                         type="button"
                       >
-                        {user?.has_been_hired
-                          ? "Applications unavailable"
-                          : hasActiveApplication
+                        {hasActiveApplication
                             ? "Applied"
                             : isCooldownActive
                               ? "Reapply unavailable"
@@ -1233,12 +1229,7 @@ export default function MainBody({
                       >
                         View details
                       </button>
-                      {user?.has_been_hired && (
-                        <span className="text-[9px] text-[#758687]" id={`hired-application-notice-${job.listingId}`}>
-                          You have been marked as hired and cannot submit new applications.
-                        </span>
-                      )}
-                      {identityVerificationBlocksApplications && !user?.has_been_hired && (
+                      {identityVerificationBlocksApplications && (
                         <span className="max-w-56 text-[9px] text-[#758687]" id={`identity-application-notice-${job.listingId}`}>
                           {identityVerificationMessage}
                         </span>

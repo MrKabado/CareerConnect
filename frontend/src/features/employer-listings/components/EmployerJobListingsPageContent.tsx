@@ -52,6 +52,7 @@ export default function EmployerJobListingsPageContent() {
     salaryRangeError,
     updateNewListingForm,
     updateNewListingAddress,
+    updateNewListingCoordinates,
     updateNewListingList,
     handleSaveDraft,
     handlePublish,
@@ -138,6 +139,7 @@ export default function EmployerJobListingsPageContent() {
         onBack={() => setNewListingStep(1)}
         onFieldChange={(field, value) => updateNewListingForm(field, value)}
         onLocationChange={updateNewListingAddress}
+        onCoordinatesChange={updateNewListingCoordinates}
         onListChange={updateNewListingList}
         onSaveDraft={handleSaveDraft}
         onPublish={handlePublish}

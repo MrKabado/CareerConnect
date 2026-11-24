@@ -6,6 +6,7 @@ use App\Models\CompanyVerification;
 use App\Models\IdentityVerification;
 use App\Models\JobListing;
 use App\Models\User;
+use App\Services\JobLocationGeocoder;
 use Illuminate\Foundation\Testing\LazilyRefreshDatabase;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\Http;
@@ -40,9 +41,13 @@ beforeEach(function (): void {
 
         return Http::response([
             [
-                'lat' => '10.3157',
-                'lon' => '123.8854',
-                'type' => $request['q'] === 'Zamboanga City' ? 'city' : 'house',
+                'lat' => str_starts_with($request['q'], 'Marigondon,') ? '10.2650' : '10.3157',
+                'lon' => str_starts_with($request['q'], 'Marigondon,') ? '123.9500' : '123.8854',
+                'type' => $request['q'] === 'Zamboanga City'
+                    || str_contains($request['q'], '10 Imaginary Street')
+                    || str_contains($request['q'], 'Skina Ylaya')
+                    ? 'city'
+                    : (str_starts_with($request['q'], 'Marigondon,') ? 'suburb' : 'house'),
             ],
         ]);
     });
@@ -154,6 +159,54 @@ it('stores precise job coordinates and exposes them through the public listing A
     Http::assertSentCount(1);
 });
 
+it('stores employer-selected map coordinates without geocoding', function (): void {
+    $employer = User::factory()->create(['role' => 'employer']);
+    listingTestCompany($employer, true);
+    $category = Category::create(['name' => 'Engineering', 'is_active' => true]);
+    $token = $employer->createToken('employer')->plainTextToken;
+
+    $response = $this->withToken($token)->postJson('/api/jobs', listingTestPayload($category, [
+        'latitude' => 10.265,
+        'longitude' => 123.95,
+    ]))
+        ->assertCreated()
+        ->assertJsonPath('data.latitude', 10.265)
+        ->assertJsonPath('data.longitude', 123.95);
+
+    $this->assertDatabaseHas('job_listings', [
+        'id' => $response->json('data.id'),
+        'latitude' => '10.2650000',
+        'longitude' => '123.9500000',
+    ]);
+    Http::assertNotSent(fn (HttpRequest $request): bool => str_contains($request->url(), 'nominatim'));
+});
+
+it('requires map coordinates to be submitted as a valid pair', function (): void {
+    $employer = User::factory()->create(['role' => 'employer']);
+    listingTestCompany($employer, true);
+    $category = Category::create(['name' => 'Engineering', 'is_active' => true]);
+    $token = $employer->createToken('employer')->plainTextToken;
+
+    $this->withToken($token)->postJson('/api/jobs', listingTestPayload($category, [
+        'latitude' => 10.265,
+    ]))
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors(['latitude']);
+});
+
+it('previews an employer address for the interactive location picker', function (): void {
+    $employer = User::factory()->create(['role' => 'employer']);
+    $token = $employer->createToken('employer')->plainTextToken;
+
+    $this->withToken($token)->postJson('/api/employer/jobs/location-preview', [
+        'location' => 'Skina Ylaya, Marigondon, City of Lapu-Lapu, Cebu, Region VII (Central Visayas), 6015, Philippines',
+        'fallback_location' => 'Marigondon, City of Lapu-Lapu, Cebu, Region VII (Central Visayas), Philippines',
+    ])
+        ->assertOk()
+        ->assertJsonPath('data.latitude', 10.265)
+        ->assertJsonPath('data.longitude', 123.95);
+});
+
 it('stores and returns a validated Philippine workplace address', function (): void {
     $employer = User::factory()->create(['role' => 'employer']);
     listingTestCompany($employer, true);
@@ -195,7 +248,48 @@ it('stores and returns a validated Philippine workplace address', function (): v
         ->assertJsonPath('data.street_address', '10 Main Street');
 });
 
-it('does not store coordinates for an imprecise geocoding result', function (): void {
+it('retries geocoding without the street when that street cannot be matched', function (): void {
+    $employer = User::factory()->create(['role' => 'employer']);
+    listingTestCompany($employer, true);
+    $category = Category::create(['name' => 'Engineering', 'is_active' => true]);
+    $token = $employer->createToken('employer')->plainTextToken;
+
+    $this->withToken($token)->postJson('/api/jobs', listingTestPayload($category, [
+        'location' => 'Zamboanga City',
+        'work_setup' => 'onsite',
+        'region_code' => '0100000000',
+        'province_code' => '0102800000',
+        'city_municipality_code' => '0128010000',
+        'barangay_code' => '0128010001',
+        'street_address' => '10 Imaginary Street',
+        'zip_code' => '1234',
+    ]))
+        ->assertCreated()
+        ->assertJsonPath('data.latitude', 10.3157)
+        ->assertJsonPath('data.longitude', 123.8854);
+
+    Http::assertSent(fn (HttpRequest $request): bool => str_contains($request->url(), 'nominatim')
+        && str_contains($request['q'], '10 Imaginary Street'));
+    Http::assertSent(fn (HttpRequest $request): bool => str_contains($request->url(), 'nominatim')
+        && ! str_contains($request['q'], '10 Imaginary Street')
+        && str_contains($request['q'], 'Barangay One'));
+});
+
+it('falls back from an unmatched street to the Marigondon locality', function (): void {
+    $coordinates = app(JobLocationGeocoder::class)->geocodeAddress(
+        'Skina Ylaya, Marigondon, City of Lapu-Lapu, Cebu, Region VII (Central Visayas), 6015, Philippines',
+        'Marigondon, City of Lapu-Lapu, Cebu, Region VII (Central Visayas), Philippines',
+    );
+
+    expect($coordinates)->toBe(['latitude' => 10.265, 'longitude' => 123.95]);
+    Http::assertSent(fn (HttpRequest $request): bool => str_contains($request->url(), 'nominatim')
+        && str_contains($request['q'], 'Skina Ylaya'));
+    Http::assertSent(fn (HttpRequest $request): bool => str_contains($request->url(), 'nominatim')
+        && str_starts_with($request['q'], 'Marigondon,')
+        && ! str_contains($request['q'], 'Skina Ylaya'));
+});
+
+it('stores city-level coordinates when a precise workplace match is unavailable', function (): void {
     $employer = User::factory()->create(['role' => 'employer']);
     listingTestCompany($employer);
     $category = Category::create(['name' => 'Engineering', 'is_active' => true]);
@@ -205,8 +299,49 @@ it('does not store coordinates for an imprecise geocoding result', function (): 
         'location' => 'Zamboanga City',
     ]))
         ->assertCreated()
-        ->assertJsonPath('data.latitude', null)
-        ->assertJsonPath('data.longitude', null);
+        ->assertJsonPath('data.latitude', 10.3157)
+        ->assertJsonPath('data.longitude', 123.8854);
+});
+
+it('geocodes existing listings when their details are opened', function (): void {
+    $employer = User::factory()->create(['role' => 'employer']);
+    $listing = listingTestRecord($employer, Category::create([
+        'name' => 'Engineering',
+        'is_active' => true,
+    ]));
+
+    $this->getJson("/api/jobs/{$listing->id}")
+        ->assertOk()
+        ->assertJsonPath('data.latitude', 10.3157)
+        ->assertJsonPath('data.longitude', 123.8854);
+
+    $this->assertDatabaseHas('job_listings', [
+        'id' => $listing->id,
+        'latitude' => '10.3157000',
+        'longitude' => '123.8854000',
+    ]);
+    Http::assertSentCount(1);
+});
+
+it('geocodes existing employer listings when their details are opened', function (): void {
+    $employer = User::factory()->create(['role' => 'employer']);
+    $listing = listingTestRecord($employer, Category::create([
+        'name' => 'Engineering',
+        'is_active' => true,
+    ]));
+    $token = $employer->createToken('employer')->plainTextToken;
+
+    $this->withToken($token)->getJson("/api/employer/jobs/{$listing->id}")
+        ->assertOk()
+        ->assertJsonPath('data.latitude', 10.3157)
+        ->assertJsonPath('data.longitude', 123.8854);
+
+    $this->assertDatabaseHas('job_listings', [
+        'id' => $listing->id,
+        'latitude' => '10.3157000',
+        'longitude' => '123.8854000',
+    ]);
+    Http::assertSentCount(1);
 });
 
 it('supports custom categories, applicant limits, expiration, manual closure and reopening', function (): void {

@@ -1,6 +1,10 @@
 import { useId, useRef, useState } from "react";
 import { useDialogBehavior } from "@/hooks/useDialogBehavior";
 import { toNameCase } from "@/features/auth/nameFormatting";
+import { useAuth } from "@/features/auth/useAuth";
+import { employerListingsApi } from "@/features/employer-listings/backendApi";
+import LocationPinPicker from "@/features/employer-listings/components/LocationPinPicker";
+import { formatPhilippineAddressLabel } from "@/features/locations/api";
 import LocationSelector from "@/features/locations/LocationSelector";
 import type { PhilippineAddress } from "@/features/locations/types";
 
@@ -16,6 +20,8 @@ type CreateListingModalProps = {
     customCategoryName: string;
     location: string;
     locationAddress: PhilippineAddress;
+    latitude: number | null;
+    longitude: number | null;
     workSetup: string;
     availableSlots: string;
     requiredHours: string;
@@ -43,10 +49,11 @@ type CreateListingModalProps = {
   onTypePick: (type: "job" | "ojt") => void;
   onBack: () => void;
   onFieldChange: (
-    field: Exclude<keyof CreateListingModalProps["newListingForm"], "requirements" | "requiredSkills" | "locationAddress">,
+    field: Exclude<keyof CreateListingModalProps["newListingForm"], "requirements" | "requiredSkills" | "locationAddress" | "latitude" | "longitude">,
     value: string,
   ) => void;
   onLocationChange: (address: PhilippineAddress) => void;
+  onCoordinatesChange: (latitude: number | null, longitude: number | null) => void;
   onListChange: (field: "requirements" | "requiredSkills", values: string[]) => void;
   onSaveDraft: () => void;
   onPublish: () => void;
@@ -143,15 +150,37 @@ export default function CreateListingModal({
   onBack,
   onFieldChange,
   onLocationChange,
+  onCoordinatesChange,
   onListChange,
   onSaveDraft,
   onPublish,
 }: CreateListingModalProps) {
   const dialogRef = useRef<HTMLDivElement>(null);
   const titleId = useId();
+  const { token } = useAuth();
   useDialogBehavior(dialogRef, isOpen, onClose);
 
   if (!isOpen) return null;
+
+  const fullAddress = formatPhilippineAddressLabel(newListingForm.locationAddress)
+    || newListingForm.location;
+  const fallbackAddress = formatPhilippineAddressLabel({
+    ...newListingForm.locationAddress,
+    street_address: null,
+    zip_code: null,
+  }) || fullAddress;
+  const addressWithCountry = (value: string) =>
+    value && !/philippines$/i.test(value) ? `${value}, Philippines` : value;
+
+  async function locateAddress(address: string, fallback: string) {
+    if (!token) throw new Error("Your session expired. Sign in again to find this address.");
+    const response = await employerListingsApi.previewLocation(token, {
+      location: addressWithCountry(address),
+      fallback_location: addressWithCountry(fallback),
+    });
+    const { latitude, longitude } = response.data;
+    return latitude !== null && longitude !== null ? { latitude, longitude } : null;
+  }
 
   return (
     <div
@@ -263,6 +292,17 @@ export default function CreateListingModal({
                   <p className="mt-1 text-[10px] text-[#849293]">
                     Select a region and city or municipality. For on-site or hybrid roles, add the barangay and street address before publishing.
                   </p>
+                  <LocationPinPicker
+                    address={addressWithCountry(fullAddress)}
+                    fallbackAddress={addressWithCountry(fallbackAddress)}
+                    latitude={newListingForm.latitude}
+                    longitude={newListingForm.longitude}
+                    onCoordinatesChange={(coordinates) => onCoordinatesChange(
+                      coordinates?.latitude ?? null,
+                      coordinates?.longitude ?? null,
+                    )}
+                    onLocateAddress={locateAddress}
+                  />
                 </div>
                 <label className="block text-[11px] font-medium text-[#445a5d]">
                   <span className="mb-1.5 block">Work setup *</span>

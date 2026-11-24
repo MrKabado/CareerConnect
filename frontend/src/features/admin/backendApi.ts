@@ -77,6 +77,21 @@ export type AdminIdentityVerificationDetails = AdminIdentityVerificationRecord &
   };
 };
 
+export type AdminEmployerReport = {
+  id: number;
+  reason: "abusive_behavior" | "unpaid_salary" | "fraud_or_scam" | "unsafe_workplace" | "other";
+  details: string;
+  status: "pending" | "investigating" | "resolved" | "dismissed";
+  decision: "deactivate_employer" | "no_action" | null;
+  admin_notes: string | null;
+  reviewed_at: string | null;
+  created_at: string;
+  reporter: { id: number; name: string; email: string };
+  employer: { id: number; name: string; email: string; account_status: string };
+  company: { id: number; name: string } | null;
+  reviewer: { id: number; name: string } | null;
+};
+
 type Paginated<T> = {
   data: T[];
   current_page: number;
@@ -264,6 +279,35 @@ export const adminApi = {
 
   applicantIdentityVerificationDocument(token: string, id: number) {
     return apiBlob(`/admin/identity-verifications/${id}/document`, token);
+  },
+
+  employerReports(
+    token: string,
+    status: "all" | "pending" | "investigating" | "resolved" | "dismissed" = "pending",
+    page = 1,
+  ) {
+    return apiRequest<{
+      data: AdminEmployerReport[];
+      current_page: number;
+      last_page: number;
+      total: number;
+    }>("/admin/employer-reports", { params: { status, page, per_page: 20 } }, token);
+  },
+
+  reviewEmployerReport(
+    token: string,
+    id: number,
+    values: {
+      status: "investigating" | "resolved" | "dismissed";
+      decision?: "deactivate_employer" | "no_action";
+      admin_notes?: string;
+    },
+  ) {
+    return apiRequest<{ message: string }>(
+      `/admin/employer-reports/${id}`,
+      { method: "PATCH", data: values },
+      token,
+    );
   },
 
   reviewApplicantIdentityVerification(

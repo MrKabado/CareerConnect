@@ -28,6 +28,8 @@ type NewListingFormState = {
   customCategoryName: string;
   location: string;
   locationAddress: PhilippineAddress;
+  latitude: number | null;
+  longitude: number | null;
   workSetup: string;
   availableSlots: string;
   requiredHours: string;
@@ -58,6 +60,8 @@ function emptyForm(
     customCategoryName: "",
     location: formatPhilippineAddressLabel(locationAddress) || location,
     locationAddress,
+    latitude: null,
+    longitude: null,
     workSetup: "hybrid",
     availableSlots: "1",
     requiredHours: "480",
@@ -141,6 +145,8 @@ function toListing(listing: EmployerJobListing): EmployerListing {
     category: listing.category?.name ?? listing.custom_category_name ?? "",
     categoryId: listing.category?.id,
     location: listing.location ?? "",
+    latitude: listing.latitude,
+    longitude: listing.longitude,
     locationAddress: {
       ...emptyPhilippineAddress(),
       region_code: listing.region_code ?? null,
@@ -254,6 +260,9 @@ function createPayload(
     barangay_code: form.locationAddress.barangay_code,
     street_address: form.locationAddress.street_address,
     zip_code: form.locationAddress.zip_code,
+    ...(form.latitude !== null && form.longitude !== null
+      ? { latitude: form.latitude, longitude: form.longitude }
+      : {}),
     ...(!saveAsDraft || form.workSetup !== "hybrid"
       ? { work_setup: normalizeWorkSetup(form.workSetup) }
       : {}),
@@ -415,6 +424,8 @@ export function useEmployerJobListings() {
       title: listing.title,
       categoryId: listing.categoryId ? String(listing.categoryId) : "",
       location: listing.location,
+      latitude: listing.latitude ?? null,
+      longitude: listing.longitude ?? null,
       workSetup: listing.workSetup ?? "hybrid",
       summary: listing.description,
       responsibilities: listing.responsibilities.join("\n"),
@@ -442,7 +453,7 @@ export function useEmployerJobListings() {
   }
 
   function updateNewListingForm(
-    field: Exclude<keyof NewListingFormState, "requirements" | "requiredSkills" | "locationAddress">,
+    field: Exclude<keyof NewListingFormState, "requirements" | "requiredSkills" | "locationAddress" | "latitude" | "longitude">,
     value: string,
   ) {
     if (field === "title" || field === "location" || field === "customCategoryName") {
@@ -458,7 +469,13 @@ export function useEmployerJobListings() {
       ...current,
       locationAddress,
       location: formatPhilippineAddressLabel(locationAddress),
+      latitude: null,
+      longitude: null,
     }));
+  }
+
+  function updateNewListingCoordinates(latitude: number | null, longitude: number | null) {
+    setNewListingForm((current) => ({ ...current, latitude, longitude }));
   }
 
   function updateNewListingList(field: "requirements" | "requiredSkills", values: string[]) {
@@ -479,6 +496,7 @@ export function useEmployerJobListings() {
       || (newListingForm.location.trim() && newListingForm.location !== companyProfile.location)
       || newListingForm.locationAddress.region_code
       || newListingForm.locationAddress.street_address
+      || (newListingForm.latitude !== null && newListingForm.longitude !== null)
       || newListingForm.summary.trim()
       || newListingForm.responsibilities.trim()
       || newListingForm.requirements.length
@@ -681,6 +699,7 @@ export function useEmployerJobListings() {
     salaryRangeError,
     updateNewListingForm,
     updateNewListingAddress,
+    updateNewListingCoordinates,
     updateNewListingList,
     handleSaveDraft,
     handlePublish,

@@ -59,6 +59,33 @@ body {
   background: #eef3f2;
 }
 
+.leaflet-div-icon.careerconnect-map-pin {
+  border: 0;
+  background: transparent;
+}
+
+.careerconnect-map-pin::before {
+  position: absolute;
+  inset: 3px 3px 7px;
+  border: 3px solid #fff;
+  border-radius: 50% 50% 50% 0;
+  background: #078b8d;
+  box-shadow: 0 2px 6px rgba(29, 49, 51, 0.3);
+  content: "";
+  transform: rotate(-45deg);
+}
+
+.careerconnect-map-pin::after {
+  position: absolute;
+  top: 9px;
+  left: 9px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #fff;
+  content: "";
+}
+
 button,
 a,
 input,

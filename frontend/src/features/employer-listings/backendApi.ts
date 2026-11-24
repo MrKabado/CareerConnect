@@ -21,6 +21,8 @@ export type CreateEmployerListingPayload = {
   barangay_code?: string | null;
   street_address?: string | null;
   zip_code?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
   work_setup?: "onsite" | "hybrid" | "remote" | null;
   experience_required?: boolean;
   minimum_experience_years?: number | null;
@@ -54,6 +56,18 @@ export const employerListingsApi = {
     return apiRequest<Paginated<EmployerJobListing>>(
       "/employer/jobs",
       { params: { per_page: 50, ...filters } },
+      token,
+    );
+  },
+
+  show(token: string, id: number) {
+    return apiRequest<{ data: EmployerJobListing }>(`/employer/jobs/${id}`, {}, token);
+  },
+
+  previewLocation(token: string, data: { location: string; fallback_location: string }) {
+    return apiRequest<{ data: { latitude: number | null; longitude: number | null } }>(
+      "/employer/jobs/location-preview",
+      { method: "POST", data },
       token,
     );
   },

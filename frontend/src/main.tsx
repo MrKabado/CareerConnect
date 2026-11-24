@@ -20,6 +20,7 @@ import UsersPage from "@/page/admin/StatCard";
 import VerificationPage from "@/page/admin/VerificationPage";
 import JobListingApprovalsPage from "@/page/admin/JobListingApprovalsPage";
 import AdminJobListingsPage from "@/page/admin/AdminJobListingsPage";
+import EmployerReportsPage from "@/page/admin/EmployerReportsPage";
 import {
   ApplicationsPage,
   ApplicantMessagesPage,
@@ -225,6 +226,7 @@ createRoot(document.getElementById("root")!).render(
             <Route path="categories" element={<CategoriesPage />} />
             <Route path="job-approvals" element={<JobListingApprovalsPage />} />
             <Route path="job-listings" element={<AdminJobListingsPage />} />
+            <Route path="employer-reports" element={<EmployerReportsPage />} />
             <Route path="users" element={<UsersPage />} />
           </Route>
           <Route path="/reports" element={<Navigate to="/admin" replace />} />

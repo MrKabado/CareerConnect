@@ -1,6 +1,8 @@
+import { useCallback } from "react";
 import { MapPin } from "lucide-react";
 import Modal from "@/components/common/Modal";
 import JobLocationMap from "@/components/features/jobsearch/JobLocationMap";
+import { publicJobsApi } from "@/features/jobs/backendApi";
 import type { JobListing } from "@/features/jobs/jobListings";
 
 function formatDate(value: string | null | undefined): string | null {
@@ -37,6 +39,13 @@ export default function JobDetailsModal({
   listing: JobListing | null;
   onClose: () => void;
 }) {
+  const listingId = listing?.listingId;
+  const resolveCoordinates = useCallback(async () => {
+    if (listingId == null) return null;
+    const resolved = await publicJobsApi.show(listingId);
+    return { latitude: resolved.latitude, longitude: resolved.longitude };
+  }, [listingId]);
+
   if (!listing) return null;
 
   const company = listing.company === "Company unavailable" ? null : listing.company;
@@ -84,6 +93,7 @@ export default function JobDetailsModal({
               latitude={listing.latitude}
               longitude={listing.longitude}
               address={address}
+              resolveCoordinates={listingId == null ? undefined : resolveCoordinates}
             />
           </div>
           {address && (

@@ -11,6 +11,8 @@ export type EmployerListing = {
   category: string;
   categoryId?: number;
   location: string;
+  latitude?: number | null;
+  longitude?: number | null;
   locationAddress?: PhilippineAddress;
   department: string;
   applicants?: number;
@@ -83,6 +85,8 @@ function isEmployerListing(value: unknown): value is EmployerListing {
     (listing.type === "Job" || listing.type === "OJT") &&
     typeof listing.category === "string" &&
     typeof listing.location === "string" &&
+    (listing.latitude === undefined || listing.latitude === null || typeof listing.latitude === "number") &&
+    (listing.longitude === undefined || listing.longitude === null || typeof listing.longitude === "number") &&
     typeof listing.department === "string" &&
     typeof listing.applicants === "number" &&
     typeof listing.shortlisted === "number" &&

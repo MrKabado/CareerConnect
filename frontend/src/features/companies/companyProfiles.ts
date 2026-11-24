@@ -52,6 +52,18 @@ export type CompanyProfile = {
     skills: string[];
     responsibilities?: string[];
     schoolPartnerships?: string;
+    employmentType?: string;
+    salaryMin?: number | null;
+    salaryMax?: number | null;
+    requirementsText?: string;
+    experienceRequired?: boolean;
+    minimumExperienceYears?: number | null;
+    applicantLimit?: number | null;
+    expiresAt?: string | null;
+    publishedAt?: string | null;
+    streetAddress?: string;
+    latitude?: number | null;
+    longitude?: number | null;
   }>;
 };
 
@@ -124,7 +136,19 @@ function isEditableCompanyProfile(value: unknown): value is SavedCompanyProfile 
         Array.isArray(role.skills) && role.skills.every((skill) => typeof skill === "string") &&
         (role.department === undefined || typeof role.department === "string") &&
         (role.responsibilities === undefined || (Array.isArray(role.responsibilities) && role.responsibilities.every((item) => typeof item === "string"))) &&
-        (role.schoolPartnerships === undefined || typeof role.schoolPartnerships === "string"),
+        (role.schoolPartnerships === undefined || typeof role.schoolPartnerships === "string") &&
+        (role.employmentType === undefined || typeof role.employmentType === "string") &&
+        (role.salaryMin === undefined || role.salaryMin === null || typeof role.salaryMin === "number") &&
+        (role.salaryMax === undefined || role.salaryMax === null || typeof role.salaryMax === "number") &&
+        (role.requirementsText === undefined || typeof role.requirementsText === "string") &&
+        (role.experienceRequired === undefined || typeof role.experienceRequired === "boolean") &&
+        (role.minimumExperienceYears === undefined || role.minimumExperienceYears === null || typeof role.minimumExperienceYears === "number") &&
+        (role.applicantLimit === undefined || role.applicantLimit === null || typeof role.applicantLimit === "number") &&
+        (role.expiresAt === undefined || role.expiresAt === null || typeof role.expiresAt === "string") &&
+        (role.publishedAt === undefined || role.publishedAt === null || typeof role.publishedAt === "string") &&
+        (role.streetAddress === undefined || typeof role.streetAddress === "string") &&
+        (role.latitude === undefined || role.latitude === null || typeof role.latitude === "number") &&
+        (role.longitude === undefined || role.longitude === null || typeof role.longitude === "number"),
     )))
   );
 }

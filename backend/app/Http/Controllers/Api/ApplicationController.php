@@ -45,9 +45,7 @@ class ApplicationController extends Controller
         $verification = $this->applicationEligibility->currentVerification($user);
         $reason = $user->email_verified_at === null
             ? 'Verify your email address before submitting applications.'
-            : ($user->hasBeenHired()
-                ? 'You have been marked as hired and cannot submit new applications.'
-                : $this->applicationEligibility->verificationReason($verification));
+            : $this->applicationEligibility->verificationReason($verification);
 
         return response()->json([
             'can_apply' => $reason === null,
@@ -96,13 +94,6 @@ class ApplicationController extends Controller
         [$application, $isReapplication, $fullReached] = DB::transaction(function () use ($applicant, $jobListing, $validated): array {
             $fullReached = false;
             User::query()->whereKey($applicant->id)->lockForUpdate()->firstOrFail();
-            if ($applicant->hasBeenHired()) {
-                throw new HttpResponseException(response()->json([
-                    'message' => 'You have been marked as hired and cannot submit new applications.',
-                    'code' => 'applicant_already_hired',
-                ], 403));
-            }
-
             $verification = $this->applicationEligibility->currentVerification($applicant, true);
             $verificationReason = $this->applicationEligibility->verificationReason($verification);
             if ($verificationReason !== null) {

@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Resources\JobListingResource;
 use App\Models\Company;
 use App\Models\JobListing;
+use App\Services\JobLocationGeocoder;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
@@ -15,6 +16,8 @@ use Illuminate\Validation\Rule;
 
 class PublicJobListingController extends Controller
 {
+    public function __construct(private JobLocationGeocoder $jobLocationGeocoder) {}
+
     public function index(Request $request): AnonymousResourceCollection
     {
         $validator = Validator::make($request->query(), [
@@ -112,6 +115,8 @@ class PublicJobListingController extends Controller
                 'ojtDetails:job_listing_id,duration_hours,allowance_type,allowance_amount,slots,accepted_courses,moa_accepted',
             ])
             ->findOrFail($jobListing);
+
+        $this->jobLocationGeocoder->geocodeListing($listing);
 
         return new JobListingResource($listing);
     }

@@ -80,8 +80,8 @@ class JobListingRequest extends FormRequest
             'barangay_code' => ['sometimes', 'nullable', 'regex:/^\d{10}$/D'],
             'street_address' => ['sometimes', 'nullable', 'string', 'max:255'],
             'zip_code' => ['sometimes', 'nullable', 'regex:/^\d{4}$/D'],
-            'latitude' => ['prohibited'],
-            'longitude' => ['prohibited'],
+            'latitude' => ['sometimes', 'nullable', 'numeric', 'between:-90,90'],
+            'longitude' => ['sometimes', 'nullable', 'numeric', 'between:-180,180'],
             'work_setup' => [
                 Rule::requiredIf(! $isDraft),
                 'nullable',
@@ -148,6 +148,10 @@ class JobListingRequest extends FormRequest
     public function withValidator(Validator $validator): void
     {
         $validator->after(function (Validator $validator): void {
+            if ($this->filled('latitude') !== $this->filled('longitude')) {
+                $validator->errors()->add('latitude', 'Provide both map coordinates together.');
+            }
+
             if ($this->boolean('save_as_draft')) {
                 $draftFields = collect($this->all())->except([
                     'listing_type',

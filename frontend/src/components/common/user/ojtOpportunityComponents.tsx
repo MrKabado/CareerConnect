@@ -290,27 +290,20 @@ export function OjtOpportunityCard({
               {/^\d+$/.test(opportunity.id) && (
                 <>
                   <button
-                    aria-describedby={user?.has_been_hired
-                      ? `hired-application-notice-${opportunity.id}`
-                      : verificationRequired
-                        ? `identity-application-notice-${opportunity.id}`
-                        : undefined}
+                    aria-describedby={verificationRequired
+                      ? `identity-application-notice-${opportunity.id}`
+                      : undefined}
                     className="rounded-lg bg-[#078b8d] px-3 py-1.5 text-[10px] font-semibold text-white hover:bg-[#067476] disabled:cursor-not-allowed disabled:bg-[#9aa6a7]"
-                    disabled={user?.has_been_hired || verificationRequired}
+                    disabled={verificationRequired}
                     onClick={(event) => {
                       event.stopPropagation();
                       navigate(`/apply/${opportunity.id}`);
                     }}
                     type="button"
                   >
-                    {user?.has_been_hired || verificationRequired ? "Applications unavailable" : "Apply"}
+                    {verificationRequired ? "Verification required" : "Apply"}
                   </button>
-                  {user?.has_been_hired && (
-                    <span className="text-[9px] text-[#758687]" id={`hired-application-notice-${opportunity.id}`}>
-                      You have been marked as hired and cannot submit new applications.
-                    </span>
-                  )}
-                  {verificationRequired && !user?.has_been_hired && (
+                  {verificationRequired && (
                     <span className="max-w-56 text-[9px] text-[#758687]" id={`identity-application-notice-${opportunity.id}`}>
                       {verificationMessage}
                     </span>

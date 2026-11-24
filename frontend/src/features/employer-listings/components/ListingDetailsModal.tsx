@@ -1,4 +1,8 @@
+import { useCallback } from "react";
 import Modal from "@/components/common/Modal";
+import JobLocationMap from "@/components/features/jobsearch/JobLocationMap";
+import { useAuth } from "@/features/auth/useAuth";
+import { employerListingsApi } from "@/features/employer-listings/backendApi";
 import StatusPill from "@/features/employer-listings/components/StatusPill";
 import type { EmployerListing } from "@/features/employer-listings/listings";
 
@@ -60,6 +64,14 @@ export default function ListingDetailsModal({
   error?: string | null;
   isSaving?: boolean;
 }) {
+  const { token } = useAuth();
+  const listingId = listing ? Number(listing.id) : null;
+  const resolveCoordinates = useCallback(async () => {
+    if (!token || listingId == null || !Number.isInteger(listingId)) return null;
+    const resolved = await employerListingsApi.show(token, listingId);
+    return { latitude: resolved.data.latitude, longitude: resolved.data.longitude };
+  }, [listingId, token]);
+
   if (!listing) return null;
 
   const requirements = listing.requirements?.filter((item) => item.trim()) ?? [];
@@ -157,6 +169,20 @@ export default function ListingDetailsModal({
             <DetailField label="Date posted" value={datePosted} />
             <DetailField label="Last updated" value={updatedAt} />
           </dl>
+        )}
+
+        {listing.location && (
+          <section className="mt-5">
+            <h3 className="text-sm font-semibold text-[#263638]">Workplace map</h3>
+            <div className="mt-3">
+              <JobLocationMap
+                latitude={listing.latitude}
+                longitude={listing.longitude}
+                address={listing.location}
+                resolveCoordinates={token && Number.isInteger(listingId) ? resolveCoordinates : undefined}
+              />
+            </div>
+          </section>
         )}
 
         {hasDescription && (

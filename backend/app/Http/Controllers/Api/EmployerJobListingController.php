@@ -79,8 +79,26 @@ class EmployerJobListingController extends Controller
             ->findOrFail($jobListing);
 
         Gate::authorize('view', $listing);
+        $this->jobLocationGeocoder->geocodeListing($listing);
 
         return new JobListingResource($listing);
+    }
+
+    public function previewLocation(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'location' => ['required', 'string', 'max:255'],
+            'fallback_location' => ['nullable', 'string', 'max:255'],
+        ]);
+        $coordinates = $this->jobLocationGeocoder->geocodeAddress(
+            $validated['location'],
+            $validated['fallback_location'] ?? $validated['location'],
+        );
+
+        return response()->json(['data' => [
+            'latitude' => $coordinates['latitude'] ?? null,
+            'longitude' => $coordinates['longitude'] ?? null,
+        ]]);
     }
 
     public function store(JobListingRequest $request): JsonResponse
@@ -90,7 +108,8 @@ class EmployerJobListingController extends Controller
         $validated = $request->validated();
         $validated = $this->resolveLocation($validated);
         $validated = $this->resolveCategory($validated);
-        $coordinates = $this->jobLocationGeocoder->geocode($validated['location'] ?? null);
+        $coordinates = $this->submittedCoordinates($validated)
+            ?? $this->geocodeLocation($validated);
 
         $listing = DB::transaction(function () use ($company, $validated, $coordinates): JobListing {
             $customCategory = isset($validated['custom_category_name'])
@@ -144,9 +163,10 @@ class EmployerJobListingController extends Controller
         $validated = $this->resolveCategory($validated);
         $location = $validated['location'] ?? $listing->location;
         $locationChanged = trim((string) $location) !== trim((string) $listing->location);
-        $coordinates = $locationChanged || $listing->latitude === null || $listing->longitude === null
-            ? $this->jobLocationGeocoder->geocode($location)
-            : ['latitude' => $listing->latitude, 'longitude' => $listing->longitude];
+        $coordinates = $this->submittedCoordinates($validated)
+            ?? ($locationChanged || $listing->latitude === null || $listing->longitude === null
+                ? $this->geocodeLocation($validated)
+                : ['latitude' => $listing->latitude, 'longitude' => $listing->longitude]);
 
         DB::transaction(function () use ($listing, $validated, $coordinates): void {
             $listing->fill($this->listingAttributes($validated));
@@ -433,6 +453,36 @@ class EmployerJobListingController extends Controller
         }
 
         return $validated;
+    }
+
+    private function geocodeLocation(array $location): ?array
+    {
+        $address = $location['location'] ?? null;
+        $fallbackAddress = $address;
+        if (filled($location['city_municipality_name'] ?? null)) {
+            $fallbackAddress = $this->locations->formatAddress([
+                ...$location,
+                'street_address' => null,
+                'zip_code' => null,
+            ]);
+        }
+
+        return $this->jobLocationGeocoder->geocodeAddress($address, $fallbackAddress);
+    }
+
+    /**
+     * @return array{latitude: float, longitude: float}|null
+     */
+    private function submittedCoordinates(array $validated): ?array
+    {
+        if (! isset($validated['latitude'], $validated['longitude'])) {
+            return null;
+        }
+
+        return [
+            'latitude' => (float) $validated['latitude'],
+            'longitude' => (float) $validated['longitude'],
+        ];
     }
 
     private function resolveCategory(array $validated): array

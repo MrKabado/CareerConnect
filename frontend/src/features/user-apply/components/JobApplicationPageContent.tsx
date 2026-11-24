@@ -102,7 +102,7 @@ export default function JobApplicationPageContent() {
             </p>
           ) : canApply === false ? (
             <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-center text-sm text-amber-900" role="alert">
-              {applicationEligibilityError ?? "You have been marked as hired and cannot submit new applications."}
+              {applicationEligibilityError ?? "You are not currently eligible to apply. Check your account and identity verification status."}
             </div>
           ) : canApply === null ? (
             <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-center text-sm text-red-800" role="alert">

@@ -11,6 +11,7 @@ const navItems = [
   { label: "Categories", to: "/admin/categories", icon: Grid2X2 },
   { label: "Job Approvals", to: "/admin/job-approvals", icon: BriefcaseBusiness },
   { label: "Job Listings", to: "/admin/job-listings", icon: BriefcaseBusiness },
+  { label: "Employer Reports", to: "/admin/employer-reports", icon: Users },
   { label: "Users", to: "/admin/users", icon: Users },
 ] as const;
 

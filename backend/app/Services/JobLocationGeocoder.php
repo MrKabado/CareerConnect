@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\JobListing;
 use Illuminate\Contracts\Cache\LockTimeoutException;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Support\Facades\Cache;
@@ -35,19 +36,71 @@ class JobLocationGeocoder
         'government',
         'station',
         'airport',
+        'road',
+        'residential',
+        'pedestrian',
     ];
+
+    private const APPROXIMATE_PLACE_TYPES = [
+        'city',
+        'town',
+        'village',
+        'municipality',
+        'suburb',
+        'quarter',
+        'neighbourhood',
+        'hamlet',
+        'locality',
+        'administrative',
+    ];
+
+    public function geocodeListing(JobListing $listing): void
+    {
+        if ($listing->latitude !== null && $listing->longitude !== null) {
+            return;
+        }
+
+        $fallbackAddress = $this->formatListingFallbackAddress($listing);
+        $coordinates = $this->geocodeAddress($listing->location, $fallbackAddress);
+        if ($coordinates === null) {
+            return;
+        }
+
+        $listing->forceFill($coordinates)->saveQuietly();
+    }
 
     /**
      * @return array{latitude: float, longitude: float}|null
      */
-    public function geocode(?string $location): ?array
+    public function geocodeAddress(?string $address, ?string $fallbackAddress = null): ?array
+    {
+        $address = Str::squish($address ?? '');
+        $fallbackAddress = Str::squish($fallbackAddress ?? '');
+
+        if ($address === '') {
+            return $fallbackAddress === '' ? null : $this->geocode($fallbackAddress, true);
+        }
+
+        if ($fallbackAddress === '' || Str::lower($fallbackAddress) === Str::lower($address)) {
+            return $this->geocode($address, true);
+        }
+
+        return $this->geocode($address, false)
+            ?? $this->geocode($fallbackAddress, true);
+    }
+
+    /**
+     * @return array{latitude: float, longitude: float}|null
+     */
+    private function geocode(?string $location, bool $allowApproximate): ?array
     {
         $address = Str::squish($location ?? '');
         if ($address === '') {
             return null;
         }
 
-        $cacheKey = 'job-location-geocode:'.hash('sha256', Str::lower($address));
+        $precisionKey = $allowApproximate ? 'approximate' : 'precise';
+        $cacheKey = 'job-location-geocode:v3:'.$precisionKey.':'.hash('sha256', Str::lower($address));
         $cached = Cache::get($cacheKey);
         if (is_array($cached)) {
             return ($cached['found'] ?? false) === true
@@ -95,7 +148,11 @@ class JobLocationGeocoder
             return null;
         }
 
-        if (! in_array(Str::lower((string) ($result['type'] ?? '')), self::PRECISE_PLACE_TYPES, true)) {
+        $placeType = Str::lower((string) ($result['type'] ?? ''));
+        $isPrecise = in_array($placeType, self::PRECISE_PLACE_TYPES, true);
+        $isApproximate = $allowApproximate
+            && in_array($placeType, self::APPROXIMATE_PLACE_TYPES, true);
+        if (! $isPrecise && ! $isApproximate) {
             Cache::put($cacheKey, ['found' => false], now()->addDay());
 
             return null;
@@ -145,5 +202,24 @@ class JobLocationGeocoder
         }
 
         return Cache::lock('openstreetmap-nominatim-request', 10)->block(10, $sendRequest);
+    }
+
+    private function formatListingFallbackAddress(JobListing $listing): string
+    {
+        $parts = array_filter([
+            $listing->barangay_name,
+            $listing->city_municipality_name,
+            $listing->province_name,
+            $listing->region_name,
+            $listing->zip_code,
+        ], fn (?string $value): bool => $value !== null && trim($value) !== '');
+
+        if ($parts === []) {
+            return $listing->location;
+        }
+
+        $parts[] = 'Philippines';
+
+        return implode(', ', $parts);
     }
 }

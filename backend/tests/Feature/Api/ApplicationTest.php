@@ -1184,7 +1184,7 @@ it('allows applications without exact skill matches regardless of experience', f
     }
 });
 
-it('prevents applicants marked hired from applying to any further listing', function (): void {
+it('allows applicants marked hired to apply to additional listings', function (): void {
     Storage::fake('local');
     $applicant = phaseFiveApplicant(['email_verified_at' => now()]);
     $hiredEmployer = User::factory()->create(['role' => 'employer']);
@@ -1202,8 +1202,8 @@ it('prevents applicants marked hired from applying to any further listing', func
 
     $this->withToken($token)->getJson('/api/applicant/application-eligibility')
         ->assertOk()
-        ->assertJsonPath('can_apply', false)
-        ->assertJsonPath('reason', 'You have been marked as hired and cannot submit new applications.');
+        ->assertJsonPath('can_apply', true)
+        ->assertJsonPath('reason', null);
 
     $this->app['auth']->forgetGuards();
     $this->withToken($token)->getJson('/api/user')
@@ -1212,7 +1212,6 @@ it('prevents applicants marked hired from applying to any further listing', func
 
     $this->app['auth']->forgetGuards();
     $this->withToken($token)->postJson("/api/jobs/{$newListing->id}/applications")
-        ->assertForbidden()
-        ->assertJsonPath('code', 'applicant_already_hired')
-        ->assertJsonPath('message', 'You have been marked as hired and cannot submit new applications.');
+        ->assertCreated()
+        ->assertJsonPath('data.status', 'pending');
 });

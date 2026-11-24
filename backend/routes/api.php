@@ -11,6 +11,7 @@ use App\Http\Controllers\Api\CategoryController;
 use App\Http\Controllers\Api\CompanyRatingController;
 use App\Http\Controllers\Api\DashboardController;
 use App\Http\Controllers\Api\EmployerJobListingController;
+use App\Http\Controllers\Api\EmployerReportController;
 use App\Http\Controllers\Api\EmployerVerificationController;
 use App\Http\Controllers\Api\IdentityVerificationController;
 use App\Http\Controllers\Api\InterviewController;
@@ -44,6 +45,8 @@ Route::middleware('throttle:60,1')->prefix('locations')->group(function (): void
         ->where('locality', '[0-9]{10}');
 });
 Route::get('/companies/{companySlug}/ratings', [CompanyRatingController::class, 'show']);
+Route::post('/companies/{companySlug}/reports', [EmployerReportController::class, 'store'])
+    ->middleware(['auth:sanctum', 'account.active', 'abilities:*', 'role:applicant', 'throttle:5,1']);
 Route::put('/companies/{companySlug}/ratings', [CompanyRatingController::class, 'save'])
     ->middleware(['auth:sanctum', 'account.active', 'abilities:*', 'role:applicant', 'throttle:60,1']);
 Route::post('/onboarding/resume', [ApplicantResumeController::class, 'store'])
@@ -131,6 +134,7 @@ Route::middleware(['auth:sanctum', 'account.active', 'abilities:*', 'throttle:60
             ->whereNumber('verificationDocument');
         Route::post('/verification/submit', [EmployerVerificationController::class, 'submit']);
         Route::get('/verification', [EmployerVerificationController::class, 'status']);
+        Route::post('/jobs/location-preview', [EmployerJobListingController::class, 'previewLocation']);
         Route::get('/jobs', [EmployerJobListingController::class, 'index']);
         Route::get('/jobs/{jobListing}', [EmployerJobListingController::class, 'show'])->whereNumber('jobListing');
         Route::get('/applications', [ApplicationController::class, 'employerIndex']);
@@ -201,6 +205,9 @@ Route::middleware(['auth:sanctum', 'account.active', 'abilities:*', 'throttle:60
             ->whereNumber('document');
         Route::post('/company-verifications/{companyVerification}/review', [EmployerVerificationController::class, 'review']);
         Route::get('/users', [AdminUserController::class, 'index']);
+        Route::get('/employer-reports', [EmployerReportController::class, 'index']);
+        Route::patch('/employer-reports/{employerReport}', [EmployerReportController::class, 'review'])
+            ->whereNumber('employerReport');
         Route::get('/users/{user}', [AdminUserController::class, 'show'])->whereNumber('user');
         Route::put('/users/{user}', [AdminUserController::class, 'update'])->whereNumber('user');
         Route::delete('/users/{user}', [AdminUserController::class, 'destroy'])->whereNumber('user');

@@ -43,13 +43,6 @@ class ApplicantCanApply
             ], 403);
         }
 
-        if ($user->hasBeenHired()) {
-            return response()->json([
-                'message' => 'You have been marked as hired and cannot submit new applications.',
-                'code' => 'applicant_already_hired',
-            ], 403);
-        }
-
         $verification = $this->applicationEligibility->currentVerification($user);
         $verificationReason = $this->applicationEligibility->verificationReason($verification);
         if ($verificationReason !== null) {

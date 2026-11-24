@@ -1,8 +1,14 @@
+import { useCallback, useState, type FormEvent } from "react";
+import { Flag } from "lucide-react";
 import { Link } from "react-router";
+import Modal from "@/components/common/Modal";
+import JobLocationMap from "@/components/features/jobsearch/JobLocationMap";
+import { publicJobsApi } from "@/features/jobs/backendApi";
 import { useAuth } from "@/features/auth/useAuth";
 import type { CompanyProfile } from "@/features/companies/companyProfiles";
 import { getHiringSetupRequirements } from "@/features/company-verification/stages";
 import { getIdentityVerificationMessage } from "@/features/user-applications/identityVerification";
+import { apiRequest } from "@/lib/axios";
 
 function CompanyMetric({
   label,
@@ -51,7 +57,16 @@ export function CompanyProfileHeader() {
   );
 }
 
-export function CompanyHero({ profile }: { profile: CompanyProfile }) {
+export function CompanyHero({
+  profile,
+  companySlug,
+}: {
+  profile: CompanyProfile;
+  companySlug?: string;
+}) {
+  const { user, token } = useAuth();
+  const [reportOpen, setReportOpen] = useState(false);
+
   return (
     <section className="border-b border-[#e1efec] bg-[radial-gradient(ellipse_at_80%_10%,rgba(192,244,232,0.5),transparent_44%),linear-gradient(112deg,#eff9f7_0%,#e9f8f5_56%,#ddf5ef_100%)] px-6 py-7 max-[680px]:px-4 max-[680px]:py-5">
       <div className="mx-auto max-w-[1136px]">
@@ -90,10 +105,26 @@ export function CompanyHero({ profile }: { profile: CompanyProfile }) {
             </div>
           </div>
 
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <CompanyMetric label="Open roles" value={String(profile.openRoles.length)} />
             <CompanyMetric label="Team members" value={profile.teamSize} />
             <CompanyMetric label="Employer rating" value={profile.rating} />
+            {user?.role === "applicant" && token && companySlug && (
+              <button
+                aria-haspopup="dialog"
+                className="group inline-flex min-h-11 items-center gap-2.5 rounded-xl border border-rose-200 bg-white/85 px-3 py-2 text-left shadow-[0_4px_12px_rgba(127,29,29,0.06)] transition hover:border-rose-300 hover:bg-rose-50 hover:shadow-[0_6px_16px_rgba(127,29,29,0.1)] focus-visible:outline-[3px] focus-visible:outline-[#67c9c1] focus-visible:outline-offset-2"
+                onClick={() => setReportOpen(true)}
+                type="button"
+              >
+                <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-rose-50 text-rose-600 transition group-hover:bg-white">
+                  <Flag aria-hidden="true" className="size-4" />
+                </span>
+                <span>
+                  <span className="block text-[10px] font-bold text-rose-800">Report employer</span>
+                  <span className="mt-0.5 block text-[8px] text-[#879394]">Raise a concern</span>
+                </span>
+              </button>
+            )}
           </div>
         </div>
 
@@ -103,7 +134,111 @@ export function CompanyHero({ profile }: { profile: CompanyProfile }) {
           </p>
         ) : null}
       </div>
+      {reportOpen && companySlug && token && (
+        <EmployerReportDialog
+          companyName={profile.name}
+          companySlug={companySlug}
+          onClose={() => setReportOpen(false)}
+          token={token}
+        />
+      )}
     </section>
+  );
+}
+
+function EmployerReportDialog({
+  companyName,
+  companySlug,
+  token,
+  onClose,
+}: {
+  companyName: string;
+  companySlug: string;
+  token: string;
+  onClose: () => void;
+}) {
+  const [reason, setReason] = useState("abusive_behavior");
+  const [details, setDetails] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [submitted, setSubmitted] = useState(false);
+
+  async function submitReport(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setError(null);
+    setIsSubmitting(true);
+    try {
+      await apiRequest(`/companies/${encodeURIComponent(companySlug)}/reports`, {
+        method: "POST",
+        data: { reason, details },
+      }, token);
+      setSubmitted(true);
+    } catch (requestError) {
+      setError(requestError instanceof Error ? requestError.message : "Unable to submit your report.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
+  return (
+    <Modal
+      title={submitted ? "Report submitted" : "Report employer"}
+      subtitle={companyName}
+      onClose={onClose}
+      widthClass="max-w-lg"
+    >
+      {submitted ? (
+        <div className="space-y-4 px-6 pb-6">
+          <p className="text-sm leading-6 text-[#526466]">
+            Thank you. CareerConnect Admin will investigate this report and decide whether action is needed.
+          </p>
+          <button className="rounded-lg bg-[#078b98] px-4 py-2 text-sm font-semibold text-white" onClick={onClose} type="button">
+            Done
+          </button>
+        </div>
+      ) : (
+        <form className="space-y-4 px-6 pb-6" onSubmit={(event) => void submitReport(event)}>
+          <p className="text-sm leading-6 text-[#526466]">
+            Report concerns such as abusive behavior, unpaid salaries, or suspected fraud. Provide factual details so Admin can investigate.
+          </p>
+          <label className="block text-xs font-semibold text-[#34494b]">
+            Reason
+            <select
+              className="mt-1.5 h-11 w-full rounded-lg border border-[#d8e3e1] bg-white px-3 text-sm font-normal text-[#34494b]"
+              onChange={(event) => setReason(event.target.value)}
+              value={reason}
+            >
+              <option value="abusive_behavior">Abusive behavior</option>
+              <option value="unpaid_salary">Unpaid salary</option>
+              <option value="fraud_or_scam">Fraud or scam</option>
+              <option value="unsafe_workplace">Unsafe workplace</option>
+              <option value="other">Other concern</option>
+            </select>
+          </label>
+          <label className="block text-xs font-semibold text-[#34494b]">
+            What happened?
+            <textarea
+              className="mt-1.5 min-h-32 w-full resize-y rounded-lg border border-[#d8e3e1] px-3 py-2 text-sm font-normal leading-6 text-[#34494b]"
+              maxLength={5000}
+              minLength={20}
+              onChange={(event) => setDetails(event.target.value)}
+              required
+              value={details}
+            />
+            <span className="mt-1 block font-normal text-[#758687]">Include at least 20 characters. Do not include passwords or other sensitive information.</span>
+          </label>
+          {error && <p className="text-sm text-red-700" role="alert">{error}</p>}
+          <div className="flex justify-end gap-2 border-t border-[#edf1f1] pt-4">
+            <button className="rounded-lg border border-[#d8e3e1] px-4 py-2 text-sm font-semibold text-[#526466]" onClick={onClose} type="button">
+              Cancel
+            </button>
+            <button className="rounded-lg bg-[#078b98] px-4 py-2 text-sm font-semibold text-white disabled:opacity-60" disabled={isSubmitting} type="submit">
+              {isSubmitting ? "Submitting…" : "Submit report"}
+            </button>
+          </div>
+        </form>
+      )}
+    </Modal>
   );
 }
 
@@ -386,18 +521,30 @@ export function CompanyOpenRoles({
   onRetry?: () => void;
 }) {
   const { user } = useAuth();
+  const [selectedRole, setSelectedRole] = useState<CompanyProfile["openRoles"][number] | null>(null);
+  const selectedRoleId = selectedRole && /^\d+$/.test(selectedRole.id)
+    ? Number(selectedRole.id)
+    : null;
+  const resolveCoordinates = useCallback(async () => {
+    if (selectedRoleId == null) return null;
+    const resolved = await publicJobsApi.show(selectedRoleId);
+    return { latitude: resolved.latitude, longitude: resolved.longitude };
+  }, [selectedRoleId]);
 
   return (
-    <section aria-labelledby="company-open-roles" className="min-w-0">
+    <section
+      aria-labelledby="company-open-roles"
+      className="min-w-0 rounded-[16px] border border-[#e8eeee] bg-[#f9fcfb] p-4 md:sticky md:top-5 md:max-h-[calc(100vh-2.5rem)] md:overflow-y-auto"
+    >
       <div className="mb-3">
         <h2
           className="text-[16px] font-bold tracking-[-0.25px] text-[#2d4244]"
           id="company-open-roles"
         >
-          Open opportunities
+          Open positions <span className="text-[#829091]">({profile.openRoles.length})</span>
         </h2>
         <p className="mt-1 text-[9px] text-[#839192]">
-          Current active opportunities from {profile.name}.
+          Select a position to see its complete details.
         </p>
       </div>
 
@@ -419,113 +566,49 @@ export function CompanyOpenRoles({
           )}
         </div>
       ) : profile.openRoles.length ? (
-      <div className="space-y-3">
+      <div className="space-y-2.5">
         {profile.openRoles.map((role) => (
           <article
-            className="rounded-[15px] border border-[#e7eeee] bg-white p-4 shadow-[0_4px_14px_rgba(39,85,82,0.04)]"
+            className="rounded-[12px] border border-[#e3ecea] bg-white p-3 shadow-[0_4px_14px_rgba(39,85,82,0.04)]"
             key={role.id}
           >
-            <div className="flex items-start justify-between gap-3">
-              <div className="min-w-0">
-                <div className="flex flex-wrap items-center gap-1.5">
-                  <h3 className="text-[12px] font-bold text-[#2d4244]">
-                    {role.title}
-                  </h3>
-                  <span
-                    className={`rounded px-1.5 py-0.5 text-[8px] font-semibold ${
-                      role.type === "OJT"
-                        ? "bg-[#fff0dc] text-[#bd852d]"
-                        : "bg-[#e4f5f2] text-[#28847f]"
-                    }`}
-                  >
-                    {role.type}
-                  </span>
-                </div>
-                <p className="mt-1 text-[9px] font-medium text-[#718184]">
-                  {role.category}
-                </p>
-              </div>
-              {user?.has_been_hired ? (
-                <div className="text-right">
-                  <button
-                    className="cursor-not-allowed rounded-[7px] bg-[#9aa6a7] px-2.5 py-1.5 text-[8px] font-semibold text-white"
-                    disabled
-                    type="button"
-                  >
-                    Applications unavailable
-                  </button>
-                  <p className="mt-1 max-w-36 text-[8px] text-[#758687]">
-                    You have been marked as hired and cannot submit new applications.
-                  </p>
-                </div>
-              ) : user?.role === "applicant" && user.identity_verification_status !== "verified" ? (
-                <div className="text-right">
-                  <button
-                    className="cursor-not-allowed rounded-[7px] bg-[#9aa6a7] px-2.5 py-1.5 text-[8px] font-semibold text-white"
-                    disabled
-                    type="button"
-                  >
-                    Verification required
-                  </button>
-                  <p className="mt-1 max-w-36 text-[8px] text-[#758687]">
-                    {getIdentityVerificationMessage(
-                      user.identity_verification_status ?? "unverified",
-                      user.identity_verification_rejection_reason,
-                    )}
-                  </p>
-                </div>
-              ) : <Link
-                className="inline-flex shrink-0 items-center gap-1 rounded-[7px] bg-[#078b98] px-2.5 py-1.5 text-[8px] font-semibold text-white shadow-[0_3px_8px_rgba(7,139,152,0.16)] hover:bg-[#067983] focus-visible:outline-[3px] focus-visible:outline-[#67c9c1] focus-visible:outline-offset-2"
-                to={`/apply/${role.id}`}
-              >
-                Apply now <span aria-hidden="true">→</span>
-              </Link>}
-            </div>
-
-            <div className="mt-2 flex flex-wrap gap-x-2 gap-y-1 text-[8px] text-[#839192]">
-              <span>{role.location}</span>
-              <span>·</span>
-              <span>{role.arrangement}</span>
-              <span>·</span>
-              <span className="font-semibold text-[#7b898a]">{role.salary}</span>
-            </div>
-            <p className="mt-2 text-[9px] leading-[1.5] text-[#748385]">
-              {role.description}
-            </p>
-            {role.responsibilities?.length ? (
-              <div className="mt-2">
-                <p className="text-[8px] font-semibold uppercase tracking-[0.1em] text-[#758687]">
-                  Responsibilities
-                </p>
-                <ul className="mt-1 space-y-1">
-                  {role.responsibilities.map((responsibility) => (
-                    <li
-                      className="flex gap-1.5 text-[8px] leading-[1.5] text-[#748385]"
-                      key={responsibility}
-                    >
-                      <span className="text-[#078b98]" aria-hidden="true">•</span>
-                      {responsibility}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ) : null}
-            {role.schoolPartnerships ? (
-              <p className="mt-2 text-[8px] leading-[1.5] text-[#748385]">
-                <strong className="text-[#526b6d]">Eligibility: </strong>
-                {role.schoolPartnerships}
-              </p>
-            ) : null}
-            <div className="mt-2 flex flex-wrap gap-1">
-              {role.skills.map((skill) => (
-                <span
-                  className="rounded-full bg-[#f0f6f5] px-2 py-1 text-[8px] font-medium text-[#607a7b]"
-                  key={skill}
-                >
-                  {skill}
+            <button
+              aria-label={`View details for ${role.title}`}
+              className="block w-full text-left focus-visible:outline-[3px] focus-visible:outline-[#67c9c1] focus-visible:outline-offset-2"
+              onClick={() => setSelectedRole(role)}
+              type="button"
+            >
+              <span className="flex items-start justify-between gap-2">
+                <span className="min-w-0">
+                  <span className="block text-[12px] font-bold text-[#2d4244]">{role.title}</span>
+                  <span className="mt-1 block text-[9px] font-medium text-[#718184]">{role.category}</span>
                 </span>
-              ))}
-            </div>
+                <span className={`shrink-0 rounded px-1.5 py-0.5 text-[8px] font-semibold ${
+                  role.type === "OJT" ? "bg-[#fff0dc] text-[#bd852d]" : "bg-[#e4f5f2] text-[#28847f]"
+                }`}>{role.type}</span>
+              </span>
+              <span className="mt-2 flex flex-wrap gap-x-2 gap-y-1 text-[8px] text-[#839192]">
+                <span>{role.location}</span>
+                <span aria-hidden="true">·</span>
+                <span>{role.arrangement}</span>
+                <span aria-hidden="true">·</span>
+                <span className="font-semibold text-[#607779]">{role.salary}</span>
+              </span>
+              <span className="mt-2 block line-clamp-2 text-[9px] leading-4 text-[#748385]">
+                {role.description}
+              </span>
+              <span className="mt-2 block text-[9px] font-semibold text-[#078b98]">
+                View full details <span aria-hidden="true">→</span>
+              </span>
+            </button>
+            {user?.role === "applicant" && user.identity_verification_status !== "verified" && (
+              <p className="mt-2 text-[8px] leading-4 text-[#758687]">
+                {getIdentityVerificationMessage(
+                  user.identity_verification_status ?? "unverified",
+                  user.identity_verification_rejection_reason,
+                )}
+              </p>
+            )}
           </article>
         ))}
       </div>
@@ -534,8 +617,120 @@ export function CompanyOpenRoles({
           {profile.name} has no active job or OJT listings right now. Please check back later.
         </p>
       )}
+      {selectedRole && (
+        <Modal
+          title={selectedRole.title || "Position details"}
+          subtitle={`${profile.name} · ${selectedRole.category}`}
+          onClose={() => setSelectedRole(null)}
+          widthClass="max-w-3xl"
+        >
+          <div className="space-y-5 px-6 pb-6 max-[680px]:px-4">
+            <dl className="grid gap-3 sm:grid-cols-2">
+              <RoleDetail label="Position type" value={selectedRole.type} />
+              <RoleDetail label="Employment type" value={selectedRole.employmentType?.replaceAll("_", " ")} />
+              <RoleDetail label="Work arrangement" value={selectedRole.arrangement} />
+              <RoleDetail label="Salary or allowance" value={selectedRole.salary} />
+              <RoleDetail label="Location" value={selectedRole.location} />
+              <RoleDetail label="Experience" value={
+                selectedRole.experienceRequired
+                  ? selectedRole.minimumExperienceYears != null
+                    ? `${selectedRole.minimumExperienceYears} ${selectedRole.minimumExperienceYears === 1 ? "year" : "years"} required`
+                    : "Experience required"
+                  : selectedRole.experienceRequired === false ? "No experience required" : null
+              } />
+              <RoleDetail label="Applicant limit" value={selectedRole.applicantLimit} />
+              <RoleDetail label="Posted" value={formatCompanyRoleDate(selectedRole.publishedAt)} />
+              <RoleDetail label="Application deadline" value={formatCompanyRoleDate(selectedRole.expiresAt)} />
+            </dl>
+            {selectedRole.location && (
+              <section>
+                <h3 className="text-sm font-semibold text-[#263638]">Job location</h3>
+                <div className="mt-3">
+                  <JobLocationMap
+                    latitude={selectedRole.latitude}
+                    longitude={selectedRole.longitude}
+                    address={selectedRole.streetAddress
+                      ? `${selectedRole.streetAddress}, ${selectedRole.location}`
+                      : selectedRole.location}
+                    resolveCoordinates={selectedRoleId == null ? undefined : resolveCoordinates}
+                  />
+                </div>
+              </section>
+            )}
+            <section>
+              <h3 className="text-sm font-semibold text-[#263638]">Job description</h3>
+              <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-[#5b7072]">{selectedRole.description || "No description provided."}</p>
+            </section>
+            {selectedRole.responsibilities?.length ? (
+              <section>
+                <h3 className="text-sm font-semibold text-[#263638]">Responsibilities</h3>
+                <ul className="mt-2 list-disc space-y-1.5 pl-5 text-sm leading-6 text-[#5b7072]">
+                  {selectedRole.responsibilities.map((item) => <li key={item}>{item}</li>)}
+                </ul>
+              </section>
+            ) : null}
+            {selectedRole.requirementsText?.trim() ? (
+              <section>
+                <h3 className="text-sm font-semibold text-[#263638]">Qualifications and requirements</h3>
+                <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-[#5b7072]">{selectedRole.requirementsText}</p>
+              </section>
+            ) : null}
+            {selectedRole.skills.length > 0 && (
+              <section>
+                <h3 className="text-sm font-semibold text-[#263638]">Required skills</h3>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {selectedRole.skills.map((skill) => (
+                    <span className="rounded-full bg-[#eef7f6] px-3 py-1.5 text-xs font-medium text-[#397276]" key={skill}>{skill}</span>
+                  ))}
+                </div>
+              </section>
+            )}
+            {selectedRole.schoolPartnerships && (
+              <section>
+                <h3 className="text-sm font-semibold text-[#263638]">Eligible courses</h3>
+                <p className="mt-2 text-sm leading-6 text-[#5b7072]">{selectedRole.schoolPartnerships}</p>
+              </section>
+            )}
+            {user?.role === "applicant" && user.identity_verification_status !== "verified" ? (
+              <p className="rounded-lg bg-amber-50 p-3 text-sm text-amber-900" role="status">
+                {getIdentityVerificationMessage(
+                  user.identity_verification_status ?? "unverified",
+                  user.identity_verification_rejection_reason,
+                )}
+              </p>
+            ) : /^\d+$/.test(selectedRole.id) ? (
+              <div className="flex justify-end border-t border-[#edf1f1] pt-4">
+                <Link
+                  className="rounded-lg bg-[#078b98] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[#067983]"
+                  to={`/apply/${selectedRole.id}`}
+                >
+                  Apply for this position
+                </Link>
+              </div>
+            ) : null}
+          </div>
+        </Modal>
+      )}
     </section>
   );
+}
+
+function RoleDetail({ label, value }: { label: string; value: string | number | null | undefined }) {
+  if (value == null || (typeof value === "string" && !value.trim())) return null;
+  return (
+    <div className="rounded-lg border border-[#e5eeeb] bg-[#f8fbfa] p-3">
+      <dt className="text-xs font-medium capitalize text-[#718181]">{label}</dt>
+      <dd className="mt-1 break-words text-sm font-semibold capitalize text-[#263638]">{value}</dd>
+    </div>
+  );
+}
+
+function formatCompanyRoleDate(value: string | null | undefined): string | null {
+  if (!value) return null;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime())
+    ? null
+    : new Intl.DateTimeFormat("en-PH", { dateStyle: "medium" }).format(date);
 }
 
 export function CompanyLifeAt({ profile }: { profile: CompanyProfile }) {
@@ -550,10 +745,10 @@ export function CompanyLifeAt({ profile }: { profile: CompanyProfile }) {
         </p>
       ) : null}
       <div className="mt-3 grid gap-2 sm:grid-cols-3">
-        {profile.lifeAt.map((item) => (
+        {profile.lifeAt.map((item, index) => (
           <article
             className="rounded-[12px] bg-[#f1f7f6] p-3"
-            key={item.title}
+            key={`${item.title}-${index}`}
           >
             <h3 className="text-[9px] font-bold text-[#34494b]">
               {item.title}
