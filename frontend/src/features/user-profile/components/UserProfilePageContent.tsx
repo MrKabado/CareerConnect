@@ -33,6 +33,7 @@ import {
   type ApplicantResumeFile,
   type ApplicantStoredDocument,
 } from "@/features/user-profile/backendApi";
+import { emptyPhilippineAddress } from "@/features/locations/types";
 import { useDialogBehavior } from "@/hooks/useDialogBehavior";
 
 const maxResumeSize = 10 * 1024 * 1024;
@@ -713,6 +714,7 @@ export default function ProfilePage() {
           name: preferences.name.trim(),
           phone: preferences.phone.trim() || null,
           city: preferences.city.trim() || null,
+          ...preferences.locationAddress,
           looking_for_jobs: !isOjtSeeker,
           looking_for_ojt: isOjtSeeker,
           category_ids: categoryIds,
@@ -1332,6 +1334,19 @@ export default function ProfilePage() {
     name: applicantProfile?.name || providedName,
     phone: applicantProfile?.phone || "",
     city: applicantProfile?.city || "",
+    locationAddress: {
+      ...emptyPhilippineAddress(),
+      region_code: applicantProfile?.region_code ?? null,
+      region_name: applicantProfile?.region_name ?? null,
+      province_code: applicantProfile?.province_code ?? null,
+      province_name: applicantProfile?.province_name ?? null,
+      city_municipality_code: applicantProfile?.city_municipality_code ?? null,
+      city_municipality_name: applicantProfile?.city_municipality_name ?? applicantProfile?.city ?? null,
+      barangay_code: applicantProfile?.barangay_code ?? null,
+      barangay_name: applicantProfile?.barangay_name ?? null,
+      street_address: applicantProfile?.street_address ?? null,
+      zip_code: applicantProfile?.zip_code ?? null,
+    },
     portfolioLink: applicantProfile?.profile_links?.portfolio || "",
     githubLink: applicantProfile?.profile_links?.github || "",
     linkedinLink: applicantProfile?.profile_links?.linkedin || "",
@@ -2484,6 +2499,7 @@ export default function ProfilePage() {
       {isPreferencesEditorOpen && (
         <ProfilePreferencesEditor
           initialPreferences={preferencesForEditor}
+          isBackendApplicant={isBackendApplicant}
           isSaving={isSavingPreferences}
           isOjtSeeker={isOjtSeeker}
           categories={availableCategories}

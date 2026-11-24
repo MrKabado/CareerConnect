@@ -7,14 +7,10 @@ const listingsPerPage = 5;
 
 type JobListingsBoardProps = {
   listings: EmployerListing[];
-  selectedId: string;
-  setSelectedId: (value: string) => void;
-  onStatusChange: (id: string, status: "draft" | "open" | "closed") => void;
-  onEdit: (listing: EmployerListing) => void;
   onView: (listing: EmployerListing) => void;
 };
 
-export default function JobListingsBoard({ listings, selectedId, setSelectedId, onStatusChange, onEdit, onView }: JobListingsBoardProps) {
+export default function JobListingsBoard({ listings, onView }: JobListingsBoardProps) {
   const [page, setPage] = useState(1);
   const pageCount = Math.max(1, Math.ceil(listings.length / listingsPerPage));
   const currentPage = Math.min(page, pageCount);
@@ -22,20 +18,17 @@ export default function JobListingsBoard({ listings, selectedId, setSelectedId, 
     (currentPage - 1) * listingsPerPage,
     currentPage * listingsPerPage,
   );
-  const selectedListing = listings.find((listing) => listing.id === selectedId) ?? null;
-
   return (
-    <section
-      className={`grid gap-4 ${selectedListing ? "xl:grid-cols-[minmax(0,1.4fr)_minmax(260px,0.8fr)]" : ""}`}
-    >
+    <section>
       <div className="overflow-hidden rounded-[20px] border border-[#e5eeeb] bg-white shadow-[0_10px_20px_rgba(20,47,47,0.02)]">
         <div className="max-h-[min(60vh,560px)] overflow-y-auto overscroll-contain divide-y divide-[#e7efee] rounded-b-[22px] [scrollbar-gutter:stable] [-webkit-overflow-scrolling:touch]">
           {pageListings.map((listing) => (
             <button
               key={listing.id}
               type="button"
-              onClick={() => setSelectedId(listing.id)}
-              className={`block w-full px-4 py-4 text-left transition ${selectedId === listing.id ? "bg-[#f4fbfa]" : "bg-white hover:bg-[#f8fbfa]"}`}
+              onClick={() => onView(listing)}
+              aria-label={`View details for ${listing.title || "job listing"}`}
+              className="block w-full px-4 py-4 text-left transition hover:bg-[#f8fbfa] focus-visible:outline-2 focus-visible:outline-[#078B8D]"
             >
               <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                 <div className="flex min-w-0 items-center gap-3">
@@ -102,113 +95,6 @@ export default function JobListingsBoard({ listings, selectedId, setSelectedId, 
         </div>
       </div>
 
-      {selectedListing && (
-        <aside className="max-h-[min(60vh,560px)] overflow-y-auto overscroll-contain rounded-[20px] border border-[#e5eeeb] bg-white p-4 shadow-[0_10px_24px_rgba(31,51,52,0.03)] [scrollbar-gutter:stable] [-webkit-overflow-scrolling:touch] md:p-5">
-          <div className="mb-4 flex items-center justify-between gap-3">
-            <div>
-              <EmployerOpportunityTypeBadge>{selectedListing.type}</EmployerOpportunityTypeBadge>
-            </div>
-            <span className="text-[11px] text-[#738285]">{selectedListing.updated}</span>
-          </div>
-          <div className="flex items-start justify-between gap-3">
-            <div>
-              <h3 className="text-[18px] font-bold tracking-[-0.05em] text-[#1e3135]">{selectedListing.title}</h3>
-              <p className="mt-1 text-[11px] text-[#697d7d]">{selectedListing.category}</p>
-            </div>
-            <StatusPill status={selectedListing.status} />
-          </div>
-          <div className="mt-4 grid gap-2 text-[11px] text-[#5f6f70]">
-            <div className="flex items-center justify-between gap-3 rounded-xl bg-[#f6faf9] px-3 py-2">
-              <span>Location</span>
-              <span className="font-medium text-[#1d3133]">{selectedListing.location}</span>
-            </div>
-            <div className="flex items-center justify-between gap-3 rounded-xl bg-[#f6faf9] px-3 py-2">
-              <span>Schedule</span>
-              <span className="font-medium text-[#1d3133]">{selectedListing.hiring.schedule}</span>
-            </div>
-            <div className="flex items-center justify-between gap-3 rounded-xl bg-[#f6faf9] px-3 py-2">
-              <span>Type</span>
-              <EmployerOpportunityTypeBadge>{selectedListing.hiring.type}</EmployerOpportunityTypeBadge>
-            </div>
-            {selectedListing.experienceRequirement && (
-              <div className="flex items-center justify-between gap-3 rounded-xl bg-[#f6faf9] px-3 py-2">
-                <span>Experience</span>
-                <span className="font-medium text-[#1d3133]">{selectedListing.experienceRequirement}</span>
-              </div>
-            )}
-          </div>
-          <div className="mt-5 rounded-[16px] border border-[#e5eeeb] bg-[#fbfdfd] p-3">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[#62777a]">About this role</p>
-            <p className="mt-3 text-[12px] leading-5 text-[#495e60]">{selectedListing.description}</p>
-            <ul className="mt-4 space-y-2 text-[11px] leading-5 text-[#4d6366]">
-              {selectedListing.responsibilities.map((item) => (
-                <li key={item} className="flex gap-2">
-                  <span className="mt-1.5 h-1.5 w-1.5 rounded-full bg-[#0f909f]" />
-                  <span>{item}</span>
-                </li>
-              ))}
-            </ul>
-          </div>
-          {selectedListing.type === "OJT" && (
-            <div className="mt-4 rounded-[16px] border border-[#dfeae9] bg-[#edf5f4] p-3">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[#5d7071]">Accepted courses</p>
-              <p className="mt-2 text-[11px] leading-5 text-[#4a5d5f]">{selectedListing.hiring.schoolPartnerships}</p>
-            </div>
-          )}
-          {selectedListing.approvalStatus && selectedListing.approvalStatus !== "not_required" && (
-            <div className="mt-4 rounded-[16px] border border-[#e5eeeb] bg-[#fbfdfd] p-3">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[#62777a]">Custom category approval</p>
-              <p className="mt-2 text-[11px] font-semibold text-[#1d3133]">
-                {selectedListing.approvalStatus === "pending"
-                  ? "Awaiting admin approval"
-                  : selectedListing.approvalStatus === "approved"
-                    ? "Approved"
-                    : "Rejected"}
-              </p>
-              {selectedListing.approvalReason ? (
-                <p className="mt-1 text-[11px] text-[#a2534c]">{selectedListing.approvalReason}</p>
-              ) : null}
-            </div>
-          )}
-          <button
-            className="mt-5 inline-flex w-full items-center justify-center rounded-xl border border-[#dfe8e7] bg-white px-4 py-2.5 text-sm font-semibold text-[#087879]"
-            onClick={() => onView(selectedListing)}
-            type="button"
-          >
-            View details
-          </button>
-          {selectedListing.status !== "deactivated" && (
-            <button
-              className="mt-5 inline-flex w-full items-center justify-center rounded-xl border border-[#dfe8e7] bg-white px-4 py-2.5 text-sm font-semibold text-[#087879]"
-              onClick={() => onEdit(selectedListing)}
-              type="button"
-            >
-              Edit listing
-            </button>
-          )}
-          <button
-            className="mt-5 inline-flex w-full items-center justify-center rounded-xl bg-[#0e8e9b] px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-[#0a7d8a]"
-            disabled={["deactivated", "full", "expired"].includes(selectedListing.status)}
-            onClick={() => onStatusChange(
-              selectedListing.id,
-              selectedListing.status === "active" ? "closed" : "open",
-            )}
-            type="button"
-          >
-            {selectedListing.status === "active"
-              ? "Close listing"
-              : selectedListing.status === "draft"
-                ? "Publish listing"
-                : selectedListing.status === "deactivated"
-                  ? "Listing deactivated"
-                  : selectedListing.status === "full"
-                    ? "Listing full"
-                    : selectedListing.status === "expired"
-                      ? "Listing expired"
-                      : "Reopen listing"}
-          </button>
-        </aside>
-      )}
     </section>
   );
 }

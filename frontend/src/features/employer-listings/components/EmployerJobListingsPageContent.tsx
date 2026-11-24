@@ -6,7 +6,6 @@ import JobListingsBoard from "@/features/employer-listings/components/JobListing
 import Modal from "@/components/common/Modal";
 import ListingDetailsModal from "@/features/employer-listings/components/ListingDetailsModal";
 import { useState } from "react";
-import type { EmployerListing } from "@/features/employer-listings/listings";
 
 function SummaryCard({ label, value, detail, tone }: { label: string; value: number; detail: string; tone: string }) {
   const visibilityLabel =
@@ -32,15 +31,13 @@ function SummaryCard({ label, value, detail, tone }: { label: string; value: num
 }
 
 export default function EmployerJobListingsPageContent() {
-  const [viewedListing, setViewedListing] = useState<EmployerListing | null>(null);
+  const [viewedListingId, setViewedListingId] = useState<string | null>(null);
   const {
     companyProfile,
     listings,
     visibleListings,
     filter,
     setFilter,
-    selectedId,
-    setSelectedId,
     activeListingCount,
     draftListingCount,
     isCreateModalOpen,
@@ -54,6 +51,7 @@ export default function EmployerJobListingsPageContent() {
     newListingForm,
     salaryRangeError,
     updateNewListingForm,
+    updateNewListingAddress,
     updateNewListingList,
     handleSaveDraft,
     handlePublish,
@@ -68,6 +66,7 @@ export default function EmployerJobListingsPageContent() {
     setClosingListingId,
     confirmCloseListing,
   } = useEmployerJobListings();
+  const viewedListing = listings.find((listing) => listing.id === viewedListingId) ?? null;
 
   return (
     <EmployerWorkspaceLayout>
@@ -105,7 +104,7 @@ export default function EmployerJobListingsPageContent() {
             </div>
           </div>
           <div className="p-4">
-            {error && (
+            {error && !viewedListing && (
               <div className="mb-3 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-xs text-red-800" role="alert">
                 <span>{error}</span><button className="font-semibold underline" onClick={retry} type="button">Try again</button>
               </div>
@@ -116,11 +115,7 @@ export default function EmployerJobListingsPageContent() {
               <JobListingsBoard
                 key={filter}
                 listings={visibleListings}
-                selectedId={selectedId}
-                setSelectedId={setSelectedId}
-                onStatusChange={updateListingStatus}
-                onEdit={openEditModal}
-                onView={setViewedListing}
+                onView={(listing) => setViewedListingId(listing.id)}
               />
             )}
           </div>
@@ -142,6 +137,7 @@ export default function EmployerJobListingsPageContent() {
         onTypePick={handleNewListingTypePick}
         onBack={() => setNewListingStep(1)}
         onFieldChange={(field, value) => updateNewListingForm(field, value)}
+        onLocationChange={updateNewListingAddress}
         onListChange={updateNewListingList}
         onSaveDraft={handleSaveDraft}
         onPublish={handlePublish}
@@ -155,6 +151,11 @@ export default function EmployerJobListingsPageContent() {
         >
           <div className="px-6 pb-6">
             <p className="text-sm leading-6 text-[#5b7072]">The listing will stop accepting new applications and will be removed from public search.</p>
+            {error && (
+              <p role="alert" className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">
+                {error}
+              </p>
+            )}
             <div className="mt-5 flex justify-end gap-2">
               <button className="rounded-lg border border-[#dfe8e7] px-4 py-2 text-sm font-semibold text-[#526365]" disabled={isSaving} type="button" onClick={() => setClosingListingId(null)}>Cancel</button>
               <button className="rounded-lg bg-[#a7464b] px-4 py-2 text-sm font-semibold text-white disabled:opacity-60" disabled={isSaving} type="button" onClick={() => void confirmCloseListing()}>{isSaving ? "Closing…" : "Confirm close"}</button>
@@ -162,7 +163,17 @@ export default function EmployerJobListingsPageContent() {
           </div>
         </Modal>
       )}
-      <ListingDetailsModal listing={viewedListing} onClose={() => setViewedListing(null)} />
+      <ListingDetailsModal
+        listing={viewedListing}
+        onClose={() => setViewedListingId(null)}
+        onEdit={(listing) => {
+          setViewedListingId(null);
+          openEditModal(listing);
+        }}
+        onStatusChange={updateListingStatus}
+        error={error}
+        isSaving={isSaving}
+      />
     </EmployerWorkspaceLayout>
   );
 }

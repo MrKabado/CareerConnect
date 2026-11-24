@@ -26,6 +26,7 @@ import {
   type ScoredOjtOpportunity,
 } from "@/features/jobs/ojtMatching";
 import { getCompanyProfileUrl } from "@/features/companies/companyProfiles";
+import JobDetailsModal from "@/components/features/jobsearch/JobDetailsModal";
 import { savedOpportunityStore } from "@/features/jobs/savedOpportunities";
 import { loadCitiesForCountry } from "@/lib/cityData";
 import {
@@ -63,6 +64,8 @@ function toFrontendListing(listing: PublicJobListing): ApiJobListing {
     title: listing.title,
     category: listing.category?.name ?? "Uncategorized",
     location: listing.location,
+    latitude: listing.latitude,
+    longitude: listing.longitude,
     countryCode: "",
     country: "",
     city: listing.company?.city ?? "",
@@ -81,15 +84,19 @@ function toFrontendListing(listing: PublicJobListing): ApiJobListing {
           -Math.max(1, hoursSincePublished >= 24 ? Math.floor(hoursSincePublished / 24) : hoursSincePublished),
           hoursSincePublished >= 24 ? "day" : "hour",
         ),
+    postedAt: listing.published_at,
     postedHoursAgo: hoursSincePublished,
     description: listing.description,
+    responsibilities: listingText(listing.responsibilities),
     skills: listing.required_skills?.length
       ? listing.required_skills
       : listingText(listing.requirements),
-    requirementsText: listingText(listing.requirements).join(" "),
+    requirementsText: listingText(listing.requirements).join("\n"),
     requiredSkills: listing.required_skills ?? [],
     experienceRequired: listing.experience_required ?? false,
     minimumExperienceYears: listing.minimum_experience_years ?? null,
+    applicantLimit: listing.applicant_limit ?? null,
+    expiresAt: listing.expires_at ?? null,
   };
 }
 
@@ -204,6 +211,7 @@ export default function MainBody({
   const [activeTab, setActiveTab] = useState("For you");
   const [showSavedOnly, setShowSavedOnly] = useState(false);
   const [employmentTypes, setEmploymentTypes] = useState<string[]>([]);
+  const [viewedJobId, setViewedJobId] = useState<number | null>(null);
   const [selectedWorkSetup, setSelectedWorkSetup] = useState("");
   const [selectedCountryCode, setSelectedCountryCode] = useState("");
   const [selectedCity, setSelectedCity] = useState("");
@@ -255,6 +263,7 @@ export default function MainBody({
     : null;
   const profileError = token && profileResult?.token === token ? profileResult.error : null;
   const listingIds = useMemo(() => apiJobs.map((job) => job.listingId), [apiJobs]);
+  const viewedJob = apiJobs.find((job) => job.listingId === viewedJobId) ?? null;
   const listingStatusKey = token
     && audience === "job-seeker"
     && user?.role === "applicant"
@@ -1213,6 +1222,17 @@ export default function MainBody({
                               ? "Reapply unavailable"
                               : "Apply"}
                       </button>
+                      <button
+                        className="rounded-lg border border-[#078b8d] px-3 py-1.5 text-[10px] font-semibold text-[#078b8d] hover:bg-[#eff9f7]"
+                        aria-label={`View details for ${job.title}`}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          setViewedJobId(job.listingId);
+                        }}
+                        type="button"
+                      >
+                        View details
+                      </button>
                       {user?.has_been_hired && (
                         <span className="text-[9px] text-[#758687]" id={`hired-application-notice-${job.listingId}`}>
                           You have been marked as hired and cannot submit new applications.
@@ -1254,6 +1274,7 @@ export default function MainBody({
         </div>
         )}
       </div>
+      <JobDetailsModal listing={viewedJob} onClose={() => setViewedJobId(null)} />
     </section>
   );
 }

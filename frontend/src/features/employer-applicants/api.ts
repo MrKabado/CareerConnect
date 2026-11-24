@@ -6,6 +6,7 @@ import type {
   ApplicantStatusUpdatePayload,
   InterviewAvailabilityDetails,
 } from "@/features/employer-applicants/types";
+import { emptyPhilippineAddress } from "@/features/locations/types";
 
 export type BackendApplicationStatus = "pending" | "reviewing" | "shortlisted" | "interview" | "hired" | "rejected";
 type BackendStatus = BackendApplicationStatus;
@@ -63,6 +64,16 @@ type InterviewRecord = {
   timezone: string;
   mode: "online" | "onsite" | "phone";
   location: string | null;
+  street_address?: string | null;
+  region_code?: string | null;
+  region_name?: string | null;
+  province_code?: string | null;
+  province_name?: string | null;
+  city_municipality_code?: string | null;
+  city_municipality_name?: string | null;
+  barangay_code?: string | null;
+  barangay_name?: string | null;
+  zip_code?: string | null;
   meeting_url: string | null;
   meeting_instructions: string | null;
   applicant_notes?: string | null;
@@ -172,8 +183,40 @@ function mapAvailability(interview: InterviewRecord | undefined): InterviewAvail
       : interview.mode === "onsite"
         ? interview.location ?? ""
         : "",
+    locationAddress: {
+      ...emptyPhilippineAddress(),
+      region_code: interview.region_code ?? null,
+      region_name: interview.region_name ?? null,
+      province_code: interview.province_code ?? null,
+      province_name: interview.province_name ?? null,
+      city_municipality_code: interview.city_municipality_code ?? null,
+      city_municipality_name: interview.city_municipality_name ?? null,
+      barangay_code: interview.barangay_code ?? null,
+      barangay_name: interview.barangay_name ?? null,
+      street_address: interview.street_address ?? null,
+      zip_code: interview.zip_code ?? null,
+    },
     message: interview.applicant_notes ?? interview.meeting_instructions ?? undefined,
   };
+}
+
+function interviewLocationPayload(details: InterviewAvailabilityDetails) {
+  if (details.format === "onsite") {
+    const address = details.locationAddress;
+    return {
+      location: details.locationOrLink,
+      ...(address ? {
+        region_code: address.region_code,
+        province_code: address.province_code,
+        city_municipality_code: address.city_municipality_code,
+        barangay_code: address.barangay_code,
+        street_address: address.street_address,
+        zip_code: address.zip_code,
+      } : {}),
+    };
+  }
+  if (details.format === "online") return { meeting_url: details.locationOrLink };
+  return {};
 }
 
 function toApplicant(record: ApplicationRecord, interview?: InterviewRecord): Applicant {
@@ -304,11 +347,7 @@ export async function updateApplicantStatus(
           buffer_minutes: details.bufferMinutes,
           timezone: details.timezone,
           mode: details.format,
-          ...(details.format === "onsite"
-            ? { location: details.locationOrLink }
-            : details.format === "online"
-              ? { meeting_url: details.locationOrLink }
-              : {}),
+          ...interviewLocationPayload(details),
           ...(details.message ? { applicant_notes: details.message } : {}),
         },
       },
@@ -375,11 +414,7 @@ export async function updateApplicantInterviewAvailability(
         buffer_minutes: details.bufferMinutes,
         timezone: details.timezone,
         mode: details.format,
-        ...(details.format === "onsite"
-          ? { location: details.locationOrLink }
-          : details.format === "online"
-            ? { meeting_url: details.locationOrLink }
-            : {}),
+        ...interviewLocationPayload(details),
         ...(details.message ? { applicant_notes: details.message } : {}),
       },
     },
@@ -414,11 +449,7 @@ export async function inviteApplicantAgain(
         buffer_minutes: details.bufferMinutes,
         timezone: details.timezone,
         mode: details.format,
-        ...(details.format === "onsite"
-          ? { location: details.locationOrLink }
-          : details.format === "online"
-            ? { meeting_url: details.locationOrLink }
-            : {}),
+        ...interviewLocationPayload(details),
         ...(details.message ? { applicant_notes: details.message } : {}),
       },
     },

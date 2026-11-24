@@ -1,6 +1,8 @@
 import { useId, useRef, useState } from "react";
 import { useDialogBehavior } from "@/hooks/useDialogBehavior";
 import { toNameCase } from "@/features/auth/nameFormatting";
+import LocationSelector from "@/features/locations/LocationSelector";
+import type { PhilippineAddress } from "@/features/locations/types";
 
 type CreateListingModalProps = {
   companyName: string;
@@ -13,6 +15,7 @@ type CreateListingModalProps = {
     categoryId: string;
     customCategoryName: string;
     location: string;
+    locationAddress: PhilippineAddress;
     workSetup: string;
     availableSlots: string;
     requiredHours: string;
@@ -40,9 +43,10 @@ type CreateListingModalProps = {
   onTypePick: (type: "job" | "ojt") => void;
   onBack: () => void;
   onFieldChange: (
-    field: Exclude<keyof CreateListingModalProps["newListingForm"], "requirements" | "requiredSkills">,
+    field: Exclude<keyof CreateListingModalProps["newListingForm"], "requirements" | "requiredSkills" | "locationAddress">,
     value: string,
   ) => void;
+  onLocationChange: (address: PhilippineAddress) => void;
   onListChange: (field: "requirements" | "requiredSkills", values: string[]) => void;
   onSaveDraft: () => void;
   onPublish: () => void;
@@ -138,6 +142,7 @@ export default function CreateListingModal({
   onTypePick,
   onBack,
   onFieldChange,
+  onLocationChange,
   onListChange,
   onSaveDraft,
   onPublish,
@@ -249,10 +254,16 @@ export default function CreateListingModal({
                     />
                   )}
                 </label>
-                <label className="block text-[11px] font-medium text-[#445a5d]">
-                  <span className="mb-1.5 block">Location *</span>
-                  <input value={newListingForm.location} onChange={(event) => onFieldChange("location", event.target.value)} placeholder="Enter work location" className="w-full rounded-xl border border-[#dfe8e7] bg-white px-3 py-2.5 text-[12px] text-[#1d3133] placeholder:text-[#8a9b9d] outline-none transition focus:border-[#b8dde0]" />
-                </label>
+                <div className="md:col-span-2">
+                  <LocationSelector
+                    onChange={onLocationChange}
+                    title="Job location *"
+                    value={newListingForm.locationAddress}
+                  />
+                  <p className="mt-1 text-[10px] text-[#849293]">
+                    Select a region and city or municipality. For on-site or hybrid roles, add the barangay and street address before publishing.
+                  </p>
+                </div>
                 <label className="block text-[11px] font-medium text-[#445a5d]">
                   <span className="mb-1.5 block">Work setup *</span>
                   <select value={newListingForm.workSetup} onChange={(event) => onFieldChange("workSetup", event.target.value)} className="w-full rounded-xl border border-[#dfe8e7] bg-white px-3 py-2.5 text-[12px] text-[#1d3133] outline-none transition focus:border-[#b8dde0]">

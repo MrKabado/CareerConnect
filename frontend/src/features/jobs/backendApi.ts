@@ -10,6 +10,18 @@ export type PublicJobListing = {
   required_skills?: string[] | null;
   category?: { id: number; name: string } | null;
   location: string;
+  street_address: string | null;
+  region_code: string | null;
+  region_name: string | null;
+  province_code: string | null;
+  province_name: string | null;
+  city_municipality_code: string | null;
+  city_municipality_name: string | null;
+  barangay_code: string | null;
+  barangay_name: string | null;
+  zip_code: string | null;
+  latitude: number | null;
+  longitude: number | null;
   work_setup: "onsite" | "hybrid" | "remote";
   experience_required?: boolean;
   minimum_experience_years?: number | null;

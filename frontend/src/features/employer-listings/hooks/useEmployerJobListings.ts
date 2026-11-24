@@ -8,6 +8,11 @@ import {
 import { employerVerificationFilesApi } from "@/features/employer-verification/backendApi";
 import { toNameCase } from "@/features/auth/nameFormatting";
 import {
+  emptyPhilippineAddress,
+  type PhilippineAddress,
+} from "@/features/locations/types";
+import { formatPhilippineAddressLabel } from "@/features/locations/api";
+import {
   employerListingsApi,
   type CreateEmployerListingPayload,
   type EmployerCategory,
@@ -22,6 +27,7 @@ type NewListingFormState = {
   categoryId: string;
   customCategoryName: string;
   location: string;
+  locationAddress: PhilippineAddress;
   workSetup: string;
   availableSlots: string;
   requiredHours: string;
@@ -42,12 +48,16 @@ type NewListingFormState = {
   expiresAt: string;
 };
 
-function emptyForm(location = ""): NewListingFormState {
+function emptyForm(
+  location = "",
+  locationAddress: PhilippineAddress = emptyPhilippineAddress(),
+): NewListingFormState {
   return {
     title: "",
     categoryId: "",
     customCategoryName: "",
-    location,
+    location: formatPhilippineAddressLabel(locationAddress) || location,
+    locationAddress,
     workSetup: "hybrid",
     availableSlots: "1",
     requiredHours: "480",
@@ -128,9 +138,22 @@ function toListing(listing: EmployerJobListing): EmployerListing {
     approvalStatus: listing.approval_status ?? "not_required",
     approvalReason: listing.approval_reason ?? null,
     type: listing.listing_type === "ojt" ? "OJT" : "Job",
-    category: listing.category?.name ?? "Uncategorized",
+    category: listing.category?.name ?? listing.custom_category_name ?? "",
     categoryId: listing.category?.id,
     location: listing.location ?? "",
+    locationAddress: {
+      ...emptyPhilippineAddress(),
+      region_code: listing.region_code ?? null,
+      region_name: listing.region_name ?? null,
+      province_code: listing.province_code ?? null,
+      province_name: listing.province_name ?? null,
+      city_municipality_code: listing.city_municipality_code ?? null,
+      city_municipality_name: listing.city_municipality_name ?? null,
+      barangay_code: listing.barangay_code ?? null,
+      barangay_name: listing.barangay_name ?? null,
+      street_address: listing.street_address ?? null,
+      zip_code: listing.zip_code ?? null,
+    },
     department: listing.category?.name ?? "",
     status: listing.status === "open"
       ? "active"
@@ -163,7 +186,11 @@ function toListing(listing: EmployerJobListing): EmployerListing {
     salaryMin: listing.salary_min,
     salaryMax: listing.salary_max,
     employmentType: listing.employment_type ?? undefined,
+    experienceRequired: listing.experience_required,
     minimumExperienceYears: listing.minimum_experience_years,
+    postedAt: listing.published_at,
+    expiresAt: listing.expires_at,
+    updatedAt: listing.updated_at,
     ojtDurationHours: listing.ojt?.duration_hours,
     ojtAllowanceType: listing.ojt?.allowance_type,
     ojtAllowanceAmount: listing.ojt?.allowance_amount,
@@ -221,6 +248,12 @@ function createPayload(
       ? { required_skills: form.requiredSkills.map(toNameCase) }
       : {}),
     ...(form.location.trim() ? { location: toNameCase(form.location.trim()) } : {}),
+    region_code: form.locationAddress.region_code,
+    province_code: form.locationAddress.province_code,
+    city_municipality_code: form.locationAddress.city_municipality_code,
+    barangay_code: form.locationAddress.barangay_code,
+    street_address: form.locationAddress.street_address,
+    zip_code: form.locationAddress.zip_code,
     ...(!saveAsDraft || form.workSetup !== "hybrid"
       ? { work_setup: normalizeWorkSetup(form.workSetup) }
       : {}),
@@ -272,11 +305,14 @@ function createPayload(
 
 export function useEmployerJobListings() {
   const { token } = useAuth();
-  const [companyProfile, setCompanyProfile] = useState({ name: "Company profile", location: "" });
+  const [companyProfile, setCompanyProfile] = useState({
+    name: "Company profile",
+    location: "",
+    locationAddress: emptyPhilippineAddress(),
+  });
   const [listings, setListings] = useState<EmployerListing[]>([]);
   const [categories, setCategories] = useState<EmployerCategory[]>([]);
   const [filter, setFilter] = useState<JobFilter>("All statuses");
-  const [selectedId, setSelectedId] = useState("");
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [newListingType, setNewListingType] = useState<"job" | "ojt" | null>(null);
   const [newListingStep, setNewListingStep] = useState<1 | 2>(1);
@@ -314,10 +350,20 @@ export function useEmployerJobListings() {
       setCompanyProfile({
         name: companyResponse.company?.name || "Company profile",
         location: companyResponse.company?.city || companyResponse.company?.address || "",
+        locationAddress: {
+          ...emptyPhilippineAddress(),
+          region_code: companyResponse.company?.region_code ?? null,
+          region_name: companyResponse.company?.region_name ?? null,
+          province_code: companyResponse.company?.province_code ?? null,
+          province_name: companyResponse.company?.province_name ?? null,
+          city_municipality_code: companyResponse.company?.city_municipality_code ?? null,
+          city_municipality_name: companyResponse.company?.city_municipality_name ?? companyResponse.company?.city ?? null,
+          barangay_code: companyResponse.company?.barangay_code ?? null,
+          barangay_name: companyResponse.company?.barangay_name ?? null,
+          street_address: companyResponse.company?.street_address ?? companyResponse.company?.address ?? null,
+          zip_code: companyResponse.company?.zip_code ?? null,
+        },
       });
-      setSelectedId((current) => mapped.some((listing) => listing.id === current)
-        ? current
-        : mapped[0]?.id ?? "");
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : "Unable to load your listings.");
     } finally {
@@ -348,7 +394,7 @@ export function useEmployerJobListings() {
     setEditingListingId(null);
     setNewListingType(null);
     setNewListingStep(1);
-    setNewListingForm(emptyForm(companyProfile.location));
+    setNewListingForm(emptyForm(companyProfile.location, companyProfile.locationAddress));
     setIsCreateModalOpen(true);
   }
 
@@ -365,7 +411,7 @@ export function useEmployerJobListings() {
     setNewListingType(listing.type === "OJT" ? "ojt" : "job");
     setNewListingStep(2);
     setNewListingForm({
-      ...emptyForm(companyProfile.location),
+      ...emptyForm(companyProfile.location, listing.locationAddress ?? emptyPhilippineAddress()),
       title: listing.title,
       categoryId: listing.categoryId ? String(listing.categoryId) : "",
       location: listing.location,
@@ -396,7 +442,7 @@ export function useEmployerJobListings() {
   }
 
   function updateNewListingForm(
-    field: Exclude<keyof NewListingFormState, "requirements" | "requiredSkills">,
+    field: Exclude<keyof NewListingFormState, "requirements" | "requiredSkills" | "locationAddress">,
     value: string,
   ) {
     if (field === "title" || field === "location" || field === "customCategoryName") {
@@ -405,6 +451,14 @@ export function useEmployerJobListings() {
       value = capitalizeFirstLetter(value);
     }
     setNewListingForm((current) => ({ ...current, [field]: value }));
+  }
+
+  function updateNewListingAddress(locationAddress: PhilippineAddress) {
+    setNewListingForm((current) => ({
+      ...current,
+      locationAddress,
+      location: formatPhilippineAddressLabel(locationAddress),
+    }));
   }
 
   function updateNewListingList(field: "requirements" | "requiredSkills", values: string[]) {
@@ -423,6 +477,8 @@ export function useEmployerJobListings() {
       || (newListingForm.categoryId && newListingForm.categoryId !== "other")
       || newListingForm.customCategoryName.trim()
       || (newListingForm.location.trim() && newListingForm.location !== companyProfile.location)
+      || newListingForm.locationAddress.region_code
+      || newListingForm.locationAddress.street_address
       || newListingForm.summary.trim()
       || newListingForm.responsibilities.trim()
       || newListingForm.requirements.length
@@ -450,7 +506,12 @@ export function useEmployerJobListings() {
       || (newListingForm.categoryId === "other" && !newListingForm.customCategoryName.trim())
       || !newListingForm.summary.trim()
       || !newListingForm.responsibilities.trim() || !newListingForm.requirements.length
-      || !newListingForm.location.trim())) {
+      || !newListingForm.location.trim()
+      || !newListingForm.locationAddress.region_code
+      || !newListingForm.locationAddress.city_municipality_code
+      || (newListingForm.workSetup !== "remote"
+        && (!newListingForm.locationAddress.barangay_code
+          || !newListingForm.locationAddress.street_address?.trim())))) {
       setError("Complete the required listing details before saving.");
       return;
     }
@@ -499,7 +560,6 @@ export function useEmployerJobListings() {
         setListings((current) =>
           current.map((listing) => listing.id === updated.id ? updated : listing),
         );
-        setSelectedId(updated.id);
         closeCreateModal();
         window.dispatchEvent(new Event("careerconnect:employer-listings-changed"));
         return;
@@ -511,7 +571,6 @@ export function useEmployerJobListings() {
       const created = toListing(response.data);
       setListings((current) => [created, ...current]);
       window.dispatchEvent(new Event("careerconnect:employer-listings-changed"));
-      setSelectedId(created.id);
       if (publishAfterSaving) {
         try {
           const publishResponse = await employerListingsApi.updateStatus(
@@ -608,8 +667,6 @@ export function useEmployerJobListings() {
     categories,
     filter,
     setFilter,
-    selectedId,
-    setSelectedId,
     activeListingCount,
     draftListingCount,
     isCreateModalOpen,
@@ -623,6 +680,7 @@ export function useEmployerJobListings() {
     newListingForm,
     salaryRangeError,
     updateNewListingForm,
+    updateNewListingAddress,
     updateNewListingList,
     handleSaveDraft,
     handlePublish,

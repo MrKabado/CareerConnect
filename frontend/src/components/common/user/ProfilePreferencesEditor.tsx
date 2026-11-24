@@ -3,6 +3,8 @@ import type { OnboardingAnswers } from "@/features/onboarding/store";
 import { ProfilePanel } from "@/components/common/user/profileComponents";
 import { toNameCase } from "@/features/auth/nameFormatting";
 import { useDialogBehavior } from "@/hooks/useDialogBehavior";
+import LocationSelector from "@/features/locations/LocationSelector";
+import type { PhilippineAddress } from "@/features/locations/types";
 
 export type ProfilePreferencesDraft = Pick<
   OnboardingAnswers,
@@ -30,6 +32,7 @@ export type ProfilePreferencesDraft = Pick<
   name: string;
   phone: string;
   city: string;
+  locationAddress: PhilippineAddress;
   portfolioLink: string;
   githubLink: string;
   linkedinLink: string;
@@ -310,6 +313,7 @@ function CategorySelectField({
 }
 
 export default function ProfilePreferencesEditor({
+  isBackendApplicant,
   isOjtSeeker,
   isSaving,
   initialPreferences,
@@ -320,6 +324,7 @@ export default function ProfilePreferencesEditor({
   onSave,
   saveError,
 }: {
+  isBackendApplicant: boolean;
   isOjtSeeker: boolean;
   isSaving: boolean;
   initialPreferences: ProfilePreferencesDraft;
@@ -416,11 +421,22 @@ export default function ProfilePreferencesEditor({
                   onChange={(phone) => setDraft((current) => ({ ...current, phone }))}
                   value={draft.phone}
                 />
-                <TextField
-                  label="City"
-                  onChange={(city) => setDraft((current) => ({ ...current, city }))}
-                  value={draft.city}
-                />
+                {isBackendApplicant ? (
+                  <div className="col-span-2 max-[460px]:col-span-1">
+                    <LocationSelector
+                      legacyLocation={draft.city}
+                      onChange={(locationAddress) => setDraft((current) => ({ ...current, locationAddress }))}
+                      title="Residential address"
+                      value={draft.locationAddress}
+                    />
+                  </div>
+                ) : (
+                  <TextField
+                    label="City"
+                    onChange={(city) => setDraft((current) => ({ ...current, city }))}
+                    value={draft.city}
+                  />
+                )}
               </div>
             </ProfilePanel>
             <ProfilePanel icon="briefcase" title="Portfolio & professional links (optional)">

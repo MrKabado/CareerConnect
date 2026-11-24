@@ -2,6 +2,9 @@ import { useState } from "react";
 import ApplicantDialog from "@/features/employer-applicants/components/ApplicantDialog";
 import InterviewAvailabilityCalendar from "@/features/interviews/InterviewAvailabilityCalendar";
 import type { InterviewAvailabilityDetails } from "@/features/employer-applicants/types";
+import LocationSelector from "@/features/locations/LocationSelector";
+import { formatPhilippineAddressLabel } from "@/features/locations/api";
+import { emptyPhilippineAddress } from "@/features/locations/types";
 
 type ScheduleInterviewDialogProps = {
   open: boolean;
@@ -56,6 +59,9 @@ export default function ScheduleInterviewDialog({
     () => initialAvailability?.format ?? "online",
   );
   const [locationOrLink, setLocationOrLink] = useState(() => initialAvailability?.locationOrLink ?? "");
+  const [locationAddress, setLocationAddress] = useState(
+    () => initialAvailability?.locationAddress ?? emptyPhilippineAddress(),
+  );
   const [message, setMessage] = useState(() => initialAvailability?.message ?? "");
   const [validationError, setValidationError] = useState<string | null>(null);
 
@@ -79,6 +85,13 @@ export default function ScheduleInterviewDialog({
       setValidationError("The break must be inside working hours and end after it starts.");
       return;
     }
+    if (format === "onsite" && (!locationAddress.region_code
+      || !locationAddress.city_municipality_code
+      || !locationAddress.barangay_code
+      || !locationAddress.street_address?.trim())) {
+      setValidationError("Select the onsite location, barangay, and street address.");
+      return;
+    }
     setValidationError(null);
     const submitted = await onSubmit({
       dates,
@@ -90,7 +103,10 @@ export default function ScheduleInterviewDialog({
       bufferMinutes,
       timezone,
       format,
-      locationOrLink: locationOrLink.trim(),
+      locationOrLink: format === "onsite"
+        ? formatPhilippineAddressLabel(locationAddress)
+        : locationOrLink.trim(),
+      ...(format === "onsite" ? { locationAddress } : {}),
       ...(message.trim() ? { message: message.trim() } : {}),
     });
     if (submitted) onClose();
@@ -168,12 +184,22 @@ export default function ScheduleInterviewDialog({
             ))}
           </div>
         </fieldset>
-        {format !== "phone" && (
+        {format === "onsite" ? (
+          <LocationSelector
+            legacyLocation={initialAvailability?.locationOrLink}
+            onChange={setLocationAddress}
+            requireBarangay
+            requireStreetAddress
+            required
+            title="On-site address"
+            value={locationAddress}
+          />
+        ) : format === "online" ? (
           <label className="block text-xs font-medium text-[#496264]">
-            {format === "online" ? "Meeting link or instructions" : "On-site address"}
-            <input required type={format === "online" ? "url" : "text"} value={locationOrLink} onChange={(event) => setLocationOrLink(event.target.value)} placeholder={format === "online" ? "https://..." : "Office address"} className="mt-1.5 w-full rounded-lg border border-[#d7e6e5] px-3 py-2.5 text-sm text-[#243b3d] outline-none focus:border-[#55a8a8]" />
+            Meeting link or instructions
+            <input required type="url" value={locationOrLink} onChange={(event) => setLocationOrLink(event.target.value)} placeholder="https://..." className="mt-1.5 w-full rounded-lg border border-[#d7e6e5] px-3 py-2.5 text-sm text-[#243b3d] outline-none focus:border-[#55a8a8]" />
           </label>
-        )}
+        ) : null}
         <label className="block text-xs font-medium text-[#496264]">
           Applicant instructions <span className="font-normal text-[#829293]">(optional)</span>
           <textarea rows={3} value={message} onChange={(event) => setMessage(event.target.value)} placeholder="Add a note for the applicant" className="mt-1.5 w-full resize-y rounded-lg border border-[#d7e6e5] px-3 py-2.5 text-sm text-[#243b3d] outline-none focus:border-[#55a8a8]" />

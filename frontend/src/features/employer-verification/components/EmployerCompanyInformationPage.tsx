@@ -5,7 +5,8 @@ import { useAuth } from "@/features/auth/useAuth";
 import { apiRequest } from "@/lib/axios";
 import isoCountries from "i18n-iso-countries";
 import englishCountryNames from "i18n-iso-countries/langs/en.json";
-import { loadCitiesForCountry } from "@/lib/cityData";
+import LocationSelector from "@/features/locations/LocationSelector";
+import { emptyPhilippineAddress, type PhilippineAddress } from "@/features/locations/types";
 import { employerCompanySizes } from "@/features/employer-registration/types";
 import {
   companyVerificationApi,
@@ -90,11 +91,9 @@ export default function EmployerCompanyInformationPage() {
   const [categoryId, setCategoryId] = useState("");
   const [address, setAddress] = useState("");
   const [city, setCity] = useState("");
+  const [philippineAddress, setPhilippineAddress] = useState<PhilippineAddress>(emptyPhilippineAddress);
   const [contactPhone, setContactPhone] = useState("");
   const [otherIndustry, setOtherIndustry] = useState("");
-  const [philippineCities, setPhilippineCities] = useState<string[]>([]);
-  const [isLoadingCities, setIsLoadingCities] = useState(false);
-  const [cityLoadError, setCityLoadError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(Boolean(token));
   const [isSaving, setIsSaving] = useState(false);
   const [information, setInformation] = useState<CompanyVerificationInformation>(
@@ -118,38 +117,6 @@ export default function EmployerCompanyInformationPage() {
     information.teamSize;
 
   useEffect(() => {
-    if (information.country !== "PH") return;
-
-    let active = true;
-    void Promise.resolve()
-      .then(() => {
-        if (!active) return [];
-        setIsLoadingCities(true);
-        setCityLoadError(null);
-        return loadCitiesForCountry("PH");
-      })
-      .then((cities) => {
-        if (active) setPhilippineCities(cities);
-      })
-      .catch((requestError: unknown) => {
-        if (active) {
-          setCityLoadError(
-            requestError instanceof Error
-              ? requestError.message
-              : "Unable to load Philippine cities.",
-          );
-        }
-      })
-      .finally(() => {
-        if (active) setIsLoadingCities(false);
-      });
-
-    return () => {
-      active = false;
-    };
-  }, [information.country]);
-
-  useEffect(() => {
     if (!token || user?.role !== "employer") return;
 
     let active = true;
@@ -169,6 +136,18 @@ export default function EmployerCompanyInformationPage() {
         }
         setAddress(savedCompany.address ?? "");
         setCity(savedCompany.city ?? "");
+        setPhilippineAddress({
+          region_code: savedCompany.region_code,
+          region_name: savedCompany.region_name,
+          province_code: savedCompany.province_code,
+          province_name: savedCompany.province_name,
+          city_municipality_code: savedCompany.city_municipality_code,
+          city_municipality_name: savedCompany.city_municipality_name ?? savedCompany.city,
+          barangay_code: savedCompany.barangay_code,
+          barangay_name: savedCompany.barangay_name,
+          street_address: savedCompany.street_address ?? savedCompany.address,
+          zip_code: savedCompany.zip_code,
+        });
         setContactPhone(savedCompany.contact_phone ?? "");
         setInformation((current) => ({
           ...current,
@@ -233,13 +212,23 @@ export default function EmployerCompanyInformationPage() {
       );
       return;
     }
+    const isPhilippineAddress = information.country === "PH";
+    const companyStreetAddress = isPhilippineAddress
+      ? philippineAddress.street_address?.trim() ?? ""
+      : address.trim();
+    const companyCity = isPhilippineAddress
+      ? philippineAddress.city_municipality_name?.trim() ?? ""
+      : city.trim();
     if (
       !categoryId ||
       (!employerCompanySizes.some((size) => size.value === information.teamSize) &&
         information.teamSize !== "500+") ||
-      !address.trim() ||
+      !companyStreetAddress ||
       !information.country ||
-      !city.trim() ||
+      !companyCity ||
+      (isPhilippineAddress && (!philippineAddress.region_code
+        || !philippineAddress.city_municipality_code
+        || !philippineAddress.barangay_code)) ||
       !contactPhone.trim()
     ) {
       setError("Choose a company category and country, and provide the address, city, and contact phone.");
@@ -265,9 +254,11 @@ export default function EmployerCompanyInformationPage() {
         name: effectiveInformation.legalName.trim(),
         category_id: categoryId === "other" ? null : Number(categoryId),
         company_size: effectiveInformation.teamSize,
-        address: address.trim(),
+        ...(isPhilippineAddress ? philippineAddress : {}),
+        address: companyStreetAddress,
+        street_address: companyStreetAddress,
         country: effectiveInformation.country,
-        city: city.trim(),
+        city: companyCity,
         industry: selectedIndustry,
         website: normalizedWebsite,
         description: effectiveInformation.overview.trim(),
@@ -333,9 +324,8 @@ export default function EmployerCompanyInformationPage() {
                   const countryCode = event.currentTarget.value;
                   updateField("country", countryCode);
                   setCity("");
-                  setPhilippineCities([]);
-                  setCityLoadError(null);
-                  setIsLoadingCities(countryCode === "PH");
+                  setAddress("");
+                  setPhilippineAddress(emptyPhilippineAddress());
                 }}
                 required
                 value={information.country}
@@ -446,75 +436,46 @@ export default function EmployerCompanyInformationPage() {
                 <option value="other">Other</option>
               </select>
             </label>
-            <label className="block">
-              <span className="mb-1.5 block text-xs font-semibold text-[#526365]">
-                Street address
-              </span>
-              <input
-                autoComplete="street-address"
-                className={inputClassName}
-                onChange={(event) => setAddress(event.currentTarget.value)}
-                required
-                value={address}
-              />
-            </label>
-            <label className="block">
-              <span className="mb-1.5 block text-xs font-semibold text-[#526365]">
-                City
-              </span>
-              {information.country === "PH" ? (
-                <>
-                  <select
+            {information.country === "PH" ? (
+              <div className="md:col-span-2">
+                <LocationSelector
+                  legacyLocation={city}
+                  onChange={setPhilippineAddress}
+                  requireBarangay
+                  requireStreetAddress
+                  required
+                  title="Company address"
+                  value={philippineAddress}
+                />
+              </div>
+            ) : (
+              <>
+                <label className="block">
+                  <span className="mb-1.5 block text-xs font-semibold text-[#526365]">
+                    Street address
+                  </span>
+                  <input
+                    autoComplete="street-address"
+                    className={inputClassName}
+                    onChange={(event) => setAddress(event.currentTarget.value)}
+                    required
+                    value={address}
+                  />
+                </label>
+                <label className="block">
+                  <span className="mb-1.5 block text-xs font-semibold text-[#526365]">
+                    City
+                  </span>
+                  <input
                     autoComplete="address-level2"
                     className={inputClassName}
-                    disabled={isLoadingCities || Boolean(cityLoadError)}
                     onChange={(event) => setCity(event.currentTarget.value)}
                     required
                     value={city}
-                  >
-                    <option value="">
-                      {isLoadingCities ? "Loading Philippine cities…" : "Select a city"}
-                    </option>
-                    {philippineCities.map((name) => (
-                      <option key={name} value={name}>{name}</option>
-                    ))}
-                  </select>
-                  {cityLoadError && (
-                    <span className="mt-1 block text-xs text-[#a2534c]" role="alert">
-                      {cityLoadError}
-                    </span>
-                  )}
-                  <span className="mt-1 block text-[10px] text-[#849293]">
-                    City data ©{" "}
-                    <a
-                      className="underline hover:text-[#078b8d]"
-                      href="https://www.geonames.org/"
-                      rel="noreferrer"
-                      target="_blank"
-                    >
-                      GeoNames
-                    </a>{" "}
-                    ·{" "}
-                    <a
-                      className="underline hover:text-[#078b8d]"
-                      href="https://creativecommons.org/licenses/by/4.0/"
-                      rel="noreferrer"
-                      target="_blank"
-                    >
-                      CC BY 4.0
-                    </a>
-                  </span>
-                </>
-              ) : (
-                <input
-                  autoComplete="address-level2"
-                  className={inputClassName}
-                  onChange={(event) => setCity(event.currentTarget.value)}
-                  required
-                  value={city}
-                />
-              )}
-            </label>
+                  />
+                </label>
+              </>
+            )}
             <label className="block">
               <span className="mb-1.5 block text-xs font-semibold text-[#526365]">
                 Contact phone
@@ -589,8 +550,18 @@ const employerCompanyApi = {
         category_id: number | null;
         company_size: string | null;
         address: string | null;
+        street_address: string | null;
         country: string | null;
         city: string | null;
+        region_code: string | null;
+        region_name: string | null;
+        province_code: string | null;
+        province_name: string | null;
+        city_municipality_code: string | null;
+        city_municipality_name: string | null;
+        barangay_code: string | null;
+        barangay_name: string | null;
+        zip_code: string | null;
         industry: string | null;
         website: string | null;
         description: string | null;
@@ -610,8 +581,18 @@ const employerCompanyApi = {
       category_id: number | null;
       company_size: string;
       address: string;
+      street_address: string;
       country: string;
       city: string;
+      region_code?: string | null;
+      region_name?: string | null;
+      province_code?: string | null;
+      province_name?: string | null;
+      city_municipality_code?: string | null;
+      city_municipality_name?: string | null;
+      barangay_code?: string | null;
+      barangay_name?: string | null;
+      zip_code?: string | null;
       industry: string;
       website: string;
       description: string;

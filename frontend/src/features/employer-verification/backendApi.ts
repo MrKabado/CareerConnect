@@ -34,8 +34,18 @@ export type EmployerCompany = {
   category_id: number | null;
   company_size: string | null;
   address: string | null;
+  street_address: string | null;
   country: string | null;
   city: string | null;
+  region_code: string | null;
+  region_name: string | null;
+  province_code: string | null;
+  province_name: string | null;
+  city_municipality_code: string | null;
+  city_municipality_name: string | null;
+  barangay_code: string | null;
+  barangay_name: string | null;
+  zip_code: string | null;
   industry: string | null;
   website: string | null;
   description: string | null;

@@ -1,4 +1,5 @@
 import type { ApplicantStatus } from "@/features/employer-applicants/statuses";
+import type { PhilippineAddress } from "@/features/locations/types";
 
 export type { ApplicantStatus } from "@/features/employer-applicants/statuses";
 
@@ -31,6 +32,7 @@ export type InterviewAvailabilityDetails = {
   timezone: string;
   format: "online" | "onsite" | "phone";
   locationOrLink: string;
+  locationAddress?: PhilippineAddress | null;
   message?: string;
 };
 

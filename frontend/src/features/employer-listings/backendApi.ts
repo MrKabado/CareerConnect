@@ -15,6 +15,12 @@ export type CreateEmployerListingPayload = {
   requirements?: string | null;
   required_skills?: string[];
   location?: string | null;
+  region_code?: string | null;
+  province_code?: string | null;
+  city_municipality_code?: string | null;
+  barangay_code?: string | null;
+  street_address?: string | null;
+  zip_code?: string | null;
   work_setup?: "onsite" | "hybrid" | "remote" | null;
   experience_required?: boolean;
   minimum_experience_years?: number | null;

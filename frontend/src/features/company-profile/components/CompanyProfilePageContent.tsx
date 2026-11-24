@@ -24,6 +24,8 @@ import {
   employerVerificationFilesApi,
   type EmployerCompany,
 } from "@/features/employer-verification/backendApi";
+import LocationSelector from "@/features/locations/LocationSelector";
+import { emptyPhilippineAddress, type PhilippineAddress } from "@/features/locations/types";
 
 const inputClassName = "w-full rounded-xl border border-[#dfe8e7] bg-white px-3 py-2.5 text-sm text-[#344749] outline-none focus:border-[#078b8d] focus:ring-2 focus:ring-[#078b8d]/15";
 const cardEditButtonClass = "text-[10px] font-semibold text-[#087879] underline underline-offset-2";
@@ -52,6 +54,22 @@ function mergeSavedCompany(
 function optionalCompanyField(value: string): string | null {
   const trimmed = value.trim();
   return trimmed && trimmed.toLocaleLowerCase() !== "not provided" ? trimmed : null;
+}
+
+function companyAddress(company: EmployerCompany | null): PhilippineAddress {
+  return {
+    ...emptyPhilippineAddress(),
+    region_code: company?.region_code ?? null,
+    region_name: company?.region_name ?? null,
+    province_code: company?.province_code ?? null,
+    province_name: company?.province_name ?? null,
+    city_municipality_code: company?.city_municipality_code ?? null,
+    city_municipality_name: company?.city_municipality_name ?? null,
+    barangay_code: company?.barangay_code ?? null,
+    barangay_name: company?.barangay_name ?? null,
+    street_address: company?.street_address ?? company?.address ?? null,
+    zip_code: company?.zip_code ?? null,
+  };
 }
 
 function ProfileField({
@@ -151,6 +169,9 @@ export default function EmployerCompanyProfilePage() {
   const [hiringSetupError, setHiringSetupError] = useState<string | null>(null);
   const [editingContact, setEditingContact] = useState(false);
   const [draft, setDraft] = useState<EditableCompanyProfile>(() => toEditableCompanyProfile(profile));
+  const [companyAddressDraft, setCompanyAddressDraft] = useState<PhilippineAddress>(
+    () => companyAddress(serverCompany),
+  );
   const [hiringSetupDraft, setHiringSetupDraft] = useState(() => ({
     title: profile.hiringDefaults?.title ?? "",
     department: profile.hiringDefaults?.department ?? "",
@@ -201,6 +222,7 @@ export default function EmployerCompanyProfilePage() {
           company,
         );
         setServerCompany(company);
+        setCompanyAddressDraft(companyAddress(company));
         setServerWebsite(company.website ?? "");
         setDraft(toEditableCompanyProfile(savedProfile));
         setContactDraft({
@@ -238,7 +260,10 @@ export default function EmployerCompanyProfilePage() {
     return () => { active = false; };
   }, [token, user?.role]);
 
-  async function persistCompanyProfile(profileDraft: EditableCompanyProfile): Promise<void> {
+  async function persistCompanyProfile(
+    profileDraft: EditableCompanyProfile,
+    addressDraft?: PhilippineAddress,
+  ): Promise<void> {
     if (savingProfileRef.current) {
       throw new Error("A company profile save is already in progress.");
     }
@@ -270,9 +295,18 @@ export default function EmployerCompanyProfilePage() {
         name,
         category_id: serverCompany?.category_id ?? null,
         company_size: optionalCompanyField(profileDraft.teamSize),
-        address: serverCompany?.address ?? null,
+        address: addressDraft?.street_address ?? serverCompany?.address ?? null,
         country: serverCompany?.country ?? null,
-        city: optionalCompanyField(profileDraft.location),
+        city: addressDraft?.city_municipality_name
+          ?? optionalCompanyField(profileDraft.location),
+        ...(addressDraft?.region_code ? {
+          region_code: addressDraft.region_code,
+          province_code: addressDraft.province_code,
+          city_municipality_code: addressDraft.city_municipality_code,
+          barangay_code: addressDraft.barangay_code,
+          street_address: addressDraft.street_address,
+          zip_code: addressDraft.zip_code,
+        } : {}),
         industry: optionalCompanyField(profileDraft.industry),
         website: normalizedWebsite,
         description: optionalCompanyField(profileDraft.overview),
@@ -294,6 +328,7 @@ export default function EmployerCompanyProfilePage() {
         logoUrl: profileDraft.logoUrl,
       };
       setServerCompany(company);
+      setCompanyAddressDraft(companyAddress(company));
       setServerWebsite(company.website ?? "");
       updateCompanyProfile(getCompanyProfileSlug(company.name), savedProfile);
     } finally {
@@ -304,6 +339,7 @@ export default function EmployerCompanyProfilePage() {
 
   function openProfileEditor() {
     setDraft(toEditableCompanyProfile(profile));
+    setCompanyAddressDraft(companyAddress(serverCompany));
     setSaveError(null);
     setEditing(true);
   }
@@ -371,6 +407,7 @@ export default function EmployerCompanyProfilePage() {
   }
 
   function openAboutEditor() {
+    setCompanyAddressDraft(companyAddress(serverCompany));
     setAboutDraft({
       overview: profile.overview,
       industry: profile.industry,
@@ -381,12 +418,20 @@ export default function EmployerCompanyProfilePage() {
     setEditingAbout(true);
   }
 
+  function updateCompanyAddress(address: PhilippineAddress) {
+    setCompanyAddressDraft(address);
+    if (address.city_municipality_name) {
+      setDraft((current) => ({ ...current, location: address.city_municipality_name ?? "" }));
+      setAboutDraft((current) => ({ ...current, location: address.city_municipality_name ?? "" }));
+    }
+  }
+
   async function saveAboutEditor() {
     try {
       await persistCompanyProfile({
         ...toEditableCompanyProfile(profile),
         ...aboutDraft,
-      });
+      }, companyAddressDraft);
       setAboutSaveError(null);
       setEditingAbout(false);
     } catch (caught) {
@@ -466,7 +511,7 @@ export default function EmployerCompanyProfilePage() {
   async function handleSave(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     try {
-      await persistCompanyProfile(draft);
+      await persistCompanyProfile(draft, companyAddressDraft);
       setHiringSetupDraft({ ...draft.hiringDefaults });
       companyVerificationApi.setHiringDefaultsComplete(
         Object.values(draft.hiringDefaults).every((value) => value.trim().length > 0),
@@ -596,7 +641,6 @@ export default function EmployerCompanyProfilePage() {
                         <div className="mt-5 grid gap-3 md:grid-cols-3">
                           {([
                             ["industry", "Industry"],
-                            ["location", "HQ"],
                             ["founded", "Founded"],
                           ] as const).map(([field, label]) => (
                             <label className="rounded-[14px] border border-[#edf1f0] bg-[#f7fbfa] p-3" key={field}>
@@ -610,6 +654,28 @@ export default function EmployerCompanyProfilePage() {
                               />
                             </label>
                           ))}
+                          {serverCompany?.country === "PH" ? (
+                            <div className="md:col-span-3">
+                              <LocationSelector
+                                legacyLocation={serverCompany.city ?? serverCompany.address}
+                                onChange={updateCompanyAddress}
+                                requireBarangay={Boolean(companyAddressDraft.region_code)}
+                                requireStreetAddress={Boolean(companyAddressDraft.region_code)}
+                                required={Boolean(companyAddressDraft.region_code)}
+                                title="Headquarters address"
+                                value={companyAddressDraft}
+                              />
+                            </div>
+                          ) : (
+                            <label className="rounded-[14px] border border-[#edf1f0] bg-[#f7fbfa] p-3">
+                              <span className="block text-[11px] font-semibold uppercase tracking-[0.16em] text-[#6d7a7d]">HQ</span>
+                              <input
+                                className="mt-2 w-full rounded-md border border-[#dfe9e7] bg-white px-2 py-1.5 text-[13px] font-semibold text-[#1d3133] outline-none focus:border-[#078b8d] focus:ring-2 focus:ring-[#078b8d]/15"
+                                onChange={(event) => setAboutDraft((current) => ({ ...current, location: event.currentTarget.value }))}
+                                value={aboutDraft.location}
+                              />
+                            </label>
+                          )}
                         </div>
 
                         {aboutSaveError ? (
@@ -1106,7 +1172,21 @@ export default function EmployerCompanyProfilePage() {
                     </p>
                     <ProfileField label="Tagline" value={draft.tagline} onChange={(value) => updateDraft("tagline", value)} />
                     <ProfileField label="Industry" value={draft.industry} onChange={(value) => updateDraft("industry", value)} />
-                    <ProfileField label="Headquarters" value={draft.location} onChange={(value) => updateDraft("location", value)} />
+                    {serverCompany?.country === "PH" ? (
+                      <div className="sm:col-span-2">
+                        <LocationSelector
+                          legacyLocation={serverCompany.city ?? serverCompany.address}
+                          onChange={updateCompanyAddress}
+                          requireBarangay={Boolean(companyAddressDraft.region_code)}
+                          requireStreetAddress={Boolean(companyAddressDraft.region_code)}
+                          required={Boolean(companyAddressDraft.region_code)}
+                          title="Headquarters address"
+                          value={companyAddressDraft}
+                        />
+                      </div>
+                    ) : (
+                      <ProfileField label="Headquarters" value={draft.location} onChange={(value) => updateDraft("location", value)} />
+                    )}
                     <ProfileField label="Company size" value={draft.teamSize} onChange={(value) => updateDraft("teamSize", value)} />
                     <ProfileField label="Founded" value={draft.founded} onChange={(value) => updateDraft("founded", value)} />
                   </div>

@@ -1,3 +1,5 @@
+import type { PhilippineAddress } from "@/features/locations/types";
+
 export type EmployerListingStatus = "active" | "draft" | "closed" | "full" | "expired" | "deactivated";
 
 export type EmployerListing = {
@@ -9,6 +11,7 @@ export type EmployerListing = {
   category: string;
   categoryId?: number;
   location: string;
+  locationAddress?: PhilippineAddress;
   department: string;
   applicants?: number;
   applicantLimit?: number;
@@ -28,7 +31,11 @@ export type EmployerListing = {
   salaryMin?: number | null;
   salaryMax?: number | null;
   employmentType?: "full_time" | "part_time" | "contract";
+  experienceRequired?: boolean;
   minimumExperienceYears?: number | null;
+  postedAt?: string | null;
+  expiresAt?: string | null;
+  updatedAt?: string | null;
   ojtDurationHours?: number | null;
   ojtAllowanceType?: "paid" | "unpaid" | null;
   ojtAllowanceAmount?: number | null;

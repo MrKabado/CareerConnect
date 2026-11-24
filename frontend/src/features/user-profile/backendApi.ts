@@ -1,4 +1,5 @@
 import { apiBlob, apiRequest } from "@/lib/axios";
+import type { PhilippineAddress } from "@/features/locations/types";
 
 export type ApplicantResumeFile = {
   id: number;
@@ -41,6 +42,16 @@ export type ApplicantProfileData = {
   email: string;
   phone: string | null;
   city: string | null;
+  street_address: string | null;
+  region_code: string | null;
+  region_name: string | null;
+  province_code: string | null;
+  province_name: string | null;
+  city_municipality_code: string | null;
+  city_municipality_name: string | null;
+  barangay_code: string | null;
+  barangay_name: string | null;
+  zip_code: string | null;
   profile_links: {
     portfolio?: string | null;
     github?: string | null;
@@ -242,7 +253,7 @@ export const applicantFilesApi = {
 
   updateProfile(
     token: string,
-    details: { name?: string; phone?: string | null; city?: string | null },
+    details: { name?: string; phone?: string | null; city?: string | null } & Partial<PhilippineAddress>,
   ) {
     return apiRequest<{ data: ApplicantProfileData }>(
       "/applicant/profile",
@@ -257,6 +268,12 @@ export const applicantFilesApi = {
       name?: string;
       phone?: string | null;
       city?: string | null;
+      region_code?: string | null;
+      province_code?: string | null;
+      city_municipality_code?: string | null;
+      barangay_code?: string | null;
+      street_address?: string | null;
+      zip_code?: string | null;
       looking_for_jobs?: boolean;
       looking_for_ojt?: boolean;
       category_ids?: number[];

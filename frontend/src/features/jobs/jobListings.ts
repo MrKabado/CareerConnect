@@ -6,6 +6,8 @@ export type JobListing = {
   title: string;
   category: string;
   location: string;
+  latitude?: number | null;
+  longitude?: number | null;
   countryCode: string;
   country: string;
   city: string;
@@ -15,11 +17,15 @@ export type JobListing = {
   salaryMin?: number | null;
   salaryMax?: number | null;
   posted: string;
+  postedAt?: string | null;
   postedHoursAgo: number;
   description: string;
+  responsibilities?: string[];
   skills: string[];
   requirementsText: string;
   requiredSkills: string[];
   experienceRequired: boolean;
   minimumExperienceYears: number | null;
+  applicantLimit?: number | null;
+  expiresAt?: string | null;
 };
