@@ -15,6 +15,7 @@ services:
       DB_DATABASE: ${DB_DATABASE:-careerconnect}
       DB_USERNAME: ${DB_USERNAME:-careerconnect}
       DB_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in backend/.env}
+      REVERB_HOST: reverb
     command: >-
       sh -c "php artisan storage:link --force &&
       php artisan migrate --force &&
@@ -26,6 +27,53 @@ services:
       - backend_vendor:/var/www/html/vendor
     depends_on:
       mysql:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "php", "-r", "exit((int) (@file_get_contents('http://127.0.0.1:8000/up') === false));"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  queue:
+    build:
+      context: ./
+      dockerfile: Dockerfile
+    working_dir: /var/www/html
+    env_file:
+      - ./.env
+    environment:
+      DB_CONNECTION: mysql
+      DB_HOST: mysql
+      DB_PORT: 3306
+      DB_DATABASE: ${DB_DATABASE:-careerconnect}
+      DB_USERNAME: ${DB_USERNAME:-careerconnect}
+      DB_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in backend/.env}
+      REVERB_HOST: reverb
+    command: php artisan queue:work --tries=1
+    volumes:
+      - .:/var/www/html
+      - backend_vendor:/var/www/html/vendor
+    depends_on:
+      backend:
+        condition: service_healthy
+
+  reverb:
+    build:
+      context: ./
+      dockerfile: Dockerfile
+    working_dir: /var/www/html
+    env_file:
+      - ./.env
+    environment:
+      REVERB_HOST: reverb
+    command: php artisan reverb:start --host=0.0.0.0 --port=6001
+    ports:
+      - "6001:6001"
+    volumes:
+      - .:/var/www/html
+      - backend_vendor:/var/www/html/vendor
+    depends_on:
+      backend:
         condition: service_healthy
 
   mysql:

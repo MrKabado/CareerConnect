@@ -28,6 +28,7 @@ import {
 import { getCompanyProfileUrl } from "@/features/companies/companyProfiles";
 import JobDetailsModal from "@/components/features/jobsearch/JobDetailsModal";
 import { savedOpportunityStore } from "@/features/jobs/savedOpportunities";
+import { subscribeToPublicJobListings, subscribeToUserUpdates } from "@/lib/realtime";
 import { loadCitiesForCountry } from "@/lib/cityData";
 import {
   LockedOjtFilters,
@@ -242,6 +243,7 @@ export default function MainBody({
   const [ojtLastPage, setOjtLastPage] = useState(1);
   const [loadingMoreOjt, setLoadingMoreOjt] = useState(false);
   const [jobRetry, setJobRetry] = useState(0);
+  const [statusRetry, setStatusRetry] = useState(0);
   const cityRequestId = useRef(0);
   const jobsRequestId = useRef(0);
   const onboarding = useSyncExternalStore(
@@ -367,7 +369,20 @@ export default function MainBody({
     return () => {
       active = false;
     };
-  }, [listingIds, listingStatusKey, token]);
+  }, [listingIds, listingStatusKey, statusRetry, token]);
+
+  useEffect(() => subscribeToPublicJobListings(() => {
+    setJobRetry((attempt) => attempt + 1);
+  }), []);
+
+  useEffect(() => {
+    if (!token || audience !== "job-seeker" || user?.role !== "applicant") return;
+    return subscribeToUserUpdates((update) => {
+      if (update.resource === "applications") {
+        setStatusRetry((attempt) => attempt + 1);
+      }
+    });
+  }, [audience, token, user?.role]);
 
   useEffect(() => {
     const requestId = ++jobsRequestId.current;

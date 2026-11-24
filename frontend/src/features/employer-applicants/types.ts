@@ -54,6 +54,7 @@ export type ApplicantDocument = {
   fileType: "PDF" | "DOC" | "DOCX" | "Link";
   mimeType?: string;
   dataUrl?: string;
+  blob?: Blob;
   submittedAt: string;
   fileSize: string;
   preview: string[];

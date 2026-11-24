@@ -16,6 +16,7 @@ use App\Services\ApplicantApplicationEligibility;
 use App\Services\ApplicantJobMatcher;
 use App\Services\MediaStorage;
 use App\Services\NotificationService;
+use App\Services\RealtimeUpdateService;
 use App\Services\ResumeStorage;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Builder;
@@ -250,6 +251,14 @@ class ApplicationController extends Controller
         });
 
         $application->loadMissing(['jobListing.company.user']);
+        app(RealtimeUpdateService::class)->user(
+            $applicant,
+            'applications',
+            $isReapplication ? 'updated' : 'created',
+        );
+        if ($fullReached) {
+            app(RealtimeUpdateService::class)->publicJobListings();
+        }
         $employer = $application->jobListing?->company?->user;
         if ($employer !== null) {
             app(NotificationService::class)->send(
@@ -593,6 +602,7 @@ class ApplicationController extends Controller
 
         if ($updated[1]) {
             $updated[0]->loadMissing(['applicant', 'jobListing.company']);
+            app(RealtimeUpdateService::class)->user($request->user(), 'applications');
             $companyName = $updated[0]->jobListing?->company?->name ?? 'the company';
             $jobTitle = $updated[0]->jobListing?->title ?? 'this position';
 

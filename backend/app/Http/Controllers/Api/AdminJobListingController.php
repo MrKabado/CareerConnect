@@ -7,6 +7,7 @@ use App\Http\Requests\DeactivateJobListingRequest;
 use App\Http\Resources\JobListingResource;
 use App\Models\JobListing;
 use App\Services\NotificationService;
+use App\Services\RealtimeUpdateService;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -67,6 +68,9 @@ class AdminJobListingController extends Controller
             ]);
             $jobListing->delete();
         });
+        $realtime = app(RealtimeUpdateService::class);
+        $realtime->user($request->user(), 'job_listings', 'deleted');
+        $realtime->publicJobListings('deleted');
 
         return response()->json([
             'message' => 'Listing deleted safely. Existing applications and historical records remain preserved.',
@@ -91,6 +95,9 @@ class AdminJobListingController extends Controller
                 'reason' => $request->validated('reason'),
             ]);
         });
+        $realtime = app(RealtimeUpdateService::class);
+        $realtime->user($request->user(), 'job_listings');
+        $realtime->publicJobListings();
 
         return response()->json([
             'message' => 'Listing deactivated.',
@@ -135,6 +142,9 @@ class AdminJobListingController extends Controller
                 ['job_listing_id' => $jobListing->id, 'job_listing_title' => $jobListing->title, 'approval_status' => 'approved'],
             );
         }
+        $realtime = app(RealtimeUpdateService::class);
+        $realtime->user($request->user(), 'job_listings');
+        $realtime->publicJobListings();
 
         return response()->json([
             'message' => 'Custom category approved.',
@@ -182,6 +192,9 @@ class AdminJobListingController extends Controller
                 ],
             );
         }
+        $realtime = app(RealtimeUpdateService::class);
+        $realtime->user($request->user(), 'job_listings');
+        $realtime->publicJobListings();
 
         return response()->json([
             'message' => 'Custom category rejected.',
@@ -209,6 +222,9 @@ class AdminJobListingController extends Controller
                 'reason' => $validated['reason'] ?? null,
             ]);
         });
+        $realtime = app(RealtimeUpdateService::class);
+        $realtime->user($request->user(), 'job_listings');
+        $realtime->publicJobListings();
 
         return response()->json([
             'message' => 'Listing restored as closed.',

@@ -13,6 +13,7 @@ use App\Models\JobListing;
 use App\Services\JobLocationGeocoder;
 use App\Services\NotificationService;
 use App\Services\PhilippineLocationService;
+use App\Services\RealtimeUpdateService;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -148,6 +149,7 @@ class EmployerJobListingController extends Controller
                 'listing_title' => $listing->title,
             ],
         ]);
+        app(RealtimeUpdateService::class)->user($request->user(), 'job_listings', 'created');
 
         return (new JobListingResource($listing->load($this->listingRelations())))
             ->response()
@@ -158,6 +160,7 @@ class EmployerJobListingController extends Controller
     {
         $listing = $request->user()->company()->firstOrFail()->jobListings()->findOrFail($jobListing);
         Gate::authorize('update', $listing);
+        $wasPublic = $listing->status === 'open';
         $validated = $request->validated();
         $validated = $this->resolveLocation($validated);
         $validated = $this->resolveCategory($validated);
@@ -218,13 +221,21 @@ class EmployerJobListingController extends Controller
             }
         });
 
-        return new JobListingResource($listing->refresh()->load($this->listingRelations()));
+        $listing = $listing->refresh()->load($this->listingRelations());
+        $realtime = app(RealtimeUpdateService::class);
+        $realtime->user($request->user(), 'job_listings');
+        if ($wasPublic || $listing->status === 'open') {
+            $realtime->publicJobListings();
+        }
+
+        return new JobListingResource($listing);
     }
 
     public function updateStatus(UpdateJobListingStatusRequest $request, int $jobListing): JsonResponse
     {
         $listing = $request->user()->company()->firstOrFail()->jobListings()->findOrFail($jobListing);
         Gate::authorize('update', $listing);
+        $wasPublic = $listing->status === 'open';
         $status = $request->validated('status');
         $transitions = [
             'draft' => ['open'],
@@ -333,6 +344,11 @@ class EmployerJobListingController extends Controller
                 'status' => $status,
             ],
         ]);
+        $realtime = app(RealtimeUpdateService::class);
+        $realtime->user($request->user(), 'job_listings');
+        if ($wasPublic || $listing->status === 'open') {
+            $realtime->publicJobListings();
+        }
 
         return response()->json([
             'message' => 'Listing status updated.',
@@ -344,9 +360,15 @@ class EmployerJobListingController extends Controller
     {
         $listing = $request->user()->company()->firstOrFail()->jobListings()->findOrFail($jobListing);
         Gate::authorize('delete', $listing);
+        $wasPublic = $listing->status === 'open';
 
         $listing->status = 'closed';
         $listing->save();
+        $realtime = app(RealtimeUpdateService::class);
+        $realtime->user($request->user(), 'job_listings', 'deleted');
+        if ($wasPublic) {
+            $realtime->publicJobListings('deleted');
+        }
 
         return response()->json([
             'message' => 'Listing archived.',

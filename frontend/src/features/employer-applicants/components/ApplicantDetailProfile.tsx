@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import ErrorBoundary from "@/components/common/ErrorBoundary";
+import DocxTextPreview from "@/components/common/DocxTextPreview";
 import { Skeleton } from "@/components/ui/skeleton";
 import ApplicantDetailSkeleton from "@/features/employer-applicants/components/ApplicantDetailSkeleton";
 import type { Applicant, ApplicantDocument } from "@/features/employer-applicants/types";
@@ -518,6 +519,8 @@ export function ApplicantDocumentPreviewDialog({
             src={selectedDocument.dataUrl}
             title={`${selectedDocument.title} PDF preview`}
           />
+        ) : selectedDocument.blob && /\.docx$/i.test(selectedDocument.fileName) ? (
+          <DocxTextPreview file={selectedDocument.blob} />
         ) : selectedDocument.dataUrl ? (
           <div className="flex min-h-75 flex-col items-center justify-center px-6 py-10 text-center">
             <p className="text-[13px] font-semibold text-[#2c3e40]">

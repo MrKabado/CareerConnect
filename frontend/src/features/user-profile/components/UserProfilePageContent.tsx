@@ -6,6 +6,7 @@ import {
   type ChangeEvent,
 } from "react";
 import { Link, useNavigate } from "react-router";
+import DocxTextPreview from "@/components/common/DocxTextPreview";
 import Footer from "@/components/common/user/userFooter";
 import Header from "@/components/common/user/userHeader";
 import ProfilePreferencesEditor, {
@@ -1281,6 +1282,10 @@ export default function ProfilePage() {
         documentPreview.file?.type === "application/pdf" ||
         /\.pdf$/i.test(documentPreview.fileName)),
   );
+  const documentPreviewIsDocx = Boolean(
+    documentPreview && /\.docx$/i.test(documentPreview.fileName),
+  );
+  const documentPreviewBlob = documentPreview?.file ?? documentPreview?.blob;
   const isEmailVerified = Boolean(user?.email_verified_at);
   const hasEmailVerificationStatus = Boolean(user) || onboarding.accountCreated;
   const emailStatusClass = `flex flex-wrap items-center justify-between gap-3 rounded-[14px] border px-4 py-3 ${
@@ -2605,6 +2610,8 @@ export default function ProfilePage() {
                 src={documentPreview.url}
                 title={`${documentPreview.title} PDF preview`}
               />
+            ) : documentPreviewIsDocx && documentPreviewBlob ? (
+              <DocxTextPreview file={documentPreviewBlob} />
             ) : (
               <div className="flex min-h-[300px] flex-col items-center justify-center px-6 py-10 text-center">
                 <ProfileIconBadge>

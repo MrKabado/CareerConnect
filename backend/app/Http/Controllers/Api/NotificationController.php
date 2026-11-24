@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Services\RealtimeUpdateService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Notifications\DatabaseNotification;
@@ -45,6 +46,7 @@ class NotificationController extends Controller
     {
         $notification = $request->user()->notifications()->findOrFail($notification);
         $notification->markAsRead();
+        app(RealtimeUpdateService::class)->user($request->user(), 'notifications');
 
         return response()->json([
             'message' => 'Notification marked as read.',
@@ -55,6 +57,9 @@ class NotificationController extends Controller
     public function markAllAsRead(Request $request): JsonResponse
     {
         $count = $request->user()->unreadNotifications()->update(['read_at' => now()]);
+        if ($count > 0) {
+            app(RealtimeUpdateService::class)->user($request->user(), 'notifications');
+        }
 
         return response()->json([
             'message' => 'Notifications marked as read.',

@@ -35,6 +35,7 @@ class NotificationService
                     ],
                     'read_at' => null,
                 ])->save();
+                $this->broadcastUpdates($recipient, $metadata, 'updated');
 
                 return;
             }
@@ -60,6 +61,7 @@ class NotificationService
                     ],
                     'read_at' => null,
                 ])->save();
+                $this->broadcastUpdates($recipient, $metadata, 'updated');
 
                 return;
             }
@@ -89,11 +91,27 @@ class NotificationService
                     ],
                     'read_at' => null,
                 ])->save();
+                $this->broadcastUpdates($recipient, $metadata, 'updated');
 
                 return;
             }
         }
 
         $recipient->notify(new CareerConnectNotification($event, $title, $message, $metadata));
+        $this->broadcastUpdates($recipient, $metadata, 'created');
+    }
+
+    private function broadcastUpdates(User $recipient, array $metadata, string $action): void
+    {
+        $realtime = app(RealtimeUpdateService::class);
+        $realtime->user($recipient, 'notifications', $action);
+
+        if (isset($metadata['application_id'])) {
+            $realtime->user($recipient, 'applications', $action);
+        }
+
+        if (isset($metadata['job_listing_id'])) {
+            $realtime->user($recipient, 'job_listings', $action);
+        }
     }
 }

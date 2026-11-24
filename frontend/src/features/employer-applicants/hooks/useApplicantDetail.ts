@@ -53,15 +53,14 @@ export function useApplicantDetail() {
           if (urls) {
             const isPdf = selectedDocument.mimeType === "application/pdf"
               || /\.pdf$/i.test(selectedDocument.fileName);
-            setSelectedDocument((current) =>
-              current?.id === selectedDocument.id
-                ? {
-                    ...current,
-                    dataUrl: isPdf ? urls.previewUrl : urls.downloadUrl,
-                  }
-                : current,
-            );
-            return;
+            if (isPdf) {
+              setSelectedDocument((current) =>
+                current?.id === selectedDocument.id
+                  ? { ...current, dataUrl: urls.previewUrl }
+                  : current,
+              );
+              return;
+            }
           }
         }
 
@@ -75,6 +74,7 @@ export function useApplicantDetail() {
             ? {
                 ...current,
                 dataUrl,
+                blob: file,
                 mimeType: file.type || current.mimeType,
               }
             : current,

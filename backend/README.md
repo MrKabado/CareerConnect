@@ -6,7 +6,7 @@ Laravel 12 JSON API using MySQL and Sanctum bearer tokens. Public registration s
 
 1. Copy `.env.example` to `.env`, set a unique `DB_PASSWORD` and `DB_ROOT_PASSWORD`, and keep `.env` out of version control.
 2. Generate the application key with `docker compose run --rm backend php artisan key:generate`.
-3. Start MySQL and Laravel from this directory with `docker compose up --build -d`. The backend runs pending migrations on startup.
+3. Start MySQL, Laravel, the queue worker, and the Reverb WebSocket server from this directory with `docker compose up --build -d`. The backend runs pending migrations on startup.
 4. Configure `ADMIN_SEED_NAME`, `ADMIN_SEED_EMAIL`, and `ADMIN_SEED_PASSWORD` in `.env`, then create the bootstrap admin with `docker compose exec -T backend php artisan db:seed --class=AdminUserSeeder --force`.
 5. In `frontend`, copy `.env.example` to `.env`, install dependencies with `npm install`, and start Vite with `npm run dev`. Set `HOST=localhost` for local-only use, or set it to this computer's LAN IP (for example, `HOST=192.168.254.125`) to access the app from another device. `VITE_API_BASE_URL` is built from `HOST`; the API will be reached at port 8000 on that same host.
 6. Open `http://localhost:5173` locally, or `http://<HOST>:5173` from a device on the same network. The backend CORS configuration permits the Vite dev server on private IPv4 addresses. For a different frontend origin, configure `FRONTEND_URL` in `backend/.env`.
@@ -38,6 +38,12 @@ To store new applicant and employer uploads in Cloudinary, set `MEDIA_STORAGE_DI
 The example environment uses Laravel's `log` mailer. Configure `MAIL_MAILER` and the related `MAIL_*` values to deliver verification and password-reset codes by email.
 
 The API uses `Authorization: Bearer <token>` and JSON responses. Sensitive endpoints (login, registration, OTP, and password reset) are rate limited. Email codes are hashed at rest, expire after ten minutes, and are deleted after use.
+
+## Real-time updates
+
+Laravel Reverb and Laravel Echo provide self-hosted real-time updates without a paid realtime provider. The Docker Compose setup starts Reverb on port `6001` and a queue worker; the worker is required to deliver queued broadcasts. Notifications, application changes, and public job-listing changes are sent as small invalidation events, and each user-specific channel is authenticated with that user's Sanctum token.
+
+In `frontend/.env`, set `VITE_REVERB_APP_KEY` to the same public `REVERB_APP_KEY` in `backend/.env`; set the browser-facing host, port, and scheme as appropriate. Never place `REVERB_APP_SECRET` in the frontend. Restart Vite after changing its environment. In production, use unique Reverb credentials, expose the WebSocket server through TLS, and run both Reverb and a queue worker; hosting and server resources may still cost money even though the software is free.
 
 ## Admin bootstrap
 

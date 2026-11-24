@@ -13,6 +13,7 @@ import { useAuth } from "@/features/auth/useAuth";
 import { adminApi } from "@/features/admin/backendApi";
 import { PageHeader } from "@/components/common";
 import Modal from "@/components/common/Modal";
+import { subscribeToPublicJobListings } from "@/lib/realtime";
 
 type Listing = Awaited<ReturnType<typeof adminApi.jobs>>["data"][number];
 
@@ -57,6 +58,10 @@ export default function AdminJobListingsPage() {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void load();
   }, [load]);
+
+  useEffect(() => subscribeToPublicJobListings(() => {
+    void load();
+  }), [load]);
 
   async function deleteListing() {
     if (!token || !deleteTarget) return;

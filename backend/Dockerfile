@@ -7,7 +7,7 @@ RUN apt-get update \
         git \
         libzip-dev \
         unzip \
-    && docker-php-ext-install pdo_mysql zip \
+    && docker-php-ext-install pcntl pdo_mysql zip \
     && printf 'upload_max_filesize=6M\npost_max_size=8M\n' > /usr/local/etc/php/conf.d/uploads.ini \
     && rm -rf /var/lib/apt/lists/*
 

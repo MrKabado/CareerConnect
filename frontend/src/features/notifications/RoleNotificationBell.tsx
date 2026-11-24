@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router";
 import { apiRequest } from "@/lib/axios";
 import { useAuth } from "@/features/auth/useAuth";
+import { subscribeToUserUpdates } from "@/lib/realtime";
 
 type Role = "admin" | "employer" | "applicant";
 
@@ -60,6 +61,13 @@ export default function RoleNotificationBell({ role }: { role: Role }) {
     const interval = window.setInterval(() => void load(), 30000);
     return () => window.clearInterval(interval);
   }, [load]);
+
+  useEffect(() => {
+    if (!token) return;
+    return subscribeToUserUpdates((update) => {
+      if (update.resource === "notifications") void load();
+    });
+  }, [load, token]);
 
   useEffect(() => {
     if (!open) return;

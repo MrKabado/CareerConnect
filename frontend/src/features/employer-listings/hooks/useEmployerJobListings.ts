@@ -18,6 +18,7 @@ import {
   type EmployerCategory,
 } from "@/features/employer-listings/backendApi";
 import type { EmployerListing } from "@/features/employer-listings/listings";
+import { subscribeToUserUpdates } from "@/lib/realtime";
 
 export const filterOptions = ["All statuses", "Jobs", "OJT"] as const;
 export type JobFilter = (typeof filterOptions)[number];
@@ -385,6 +386,10 @@ export function useEmployerJobListings() {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void load();
   }, [load]);
+
+  useEffect(() => subscribeToUserUpdates((update) => {
+    if (update.resource === "job_listings") void load();
+  }), [load]);
 
   const visibleListings = useMemo(() => {
     if (filter === "Jobs") return listings.filter((listing) => listing.type === "Job");

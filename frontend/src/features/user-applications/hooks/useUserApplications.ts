@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { Application } from "@/features/applications/applicationData";
 import { useAuth } from "@/features/auth/useAuth";
+import { subscribeToUserUpdates } from "@/lib/realtime";
 import {
   applicantApplicationsApi,
   applicationStatusLabel,
@@ -109,6 +110,13 @@ export function useUserApplications() {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void loadPage(1, false);
   }, [loadPage]);
+
+  useEffect(() => {
+    if (!token) return;
+    return subscribeToUserUpdates((update) => {
+      if (update.resource === "applications") void loadPage(1, false);
+    });
+  }, [loadPage, token]);
 
   const filteredApplications = useMemo(() => {
     const query = search.trim().toLowerCase();

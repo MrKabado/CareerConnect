@@ -13,6 +13,7 @@ import {
 } from "@/features/auth/api";
 import { AuthContext, type AuthContextValue } from "@/features/auth/AuthContext";
 import { onboardingStore } from "@/features/onboarding/store";
+import { connectRealtime } from "@/lib/realtime";
 
 const TOKEN_STORAGE_KEY = "careerconnect-token";
 
@@ -158,6 +159,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     () => ({ user, token, status, error, login, verifyEmail, logout, refresh }),
     [user, token, status, error, login, verifyEmail, logout, refresh],
   );
+
+  const realtimeUserId = user ? String(user.id) : null;
+  useEffect(() => {
+    let disposed = false;
+    let disconnect = () => {};
+    void connectRealtime(token, realtimeUserId)
+      .then((cleanup) => {
+        if (disposed) cleanup();
+        else disconnect = cleanup;
+      })
+      .catch((realtimeError: unknown) => {
+        if (!disposed) console.error("Unable to initialize real-time updates.", realtimeError);
+      });
+
+    return () => {
+      disposed = true;
+      disconnect();
+    };
+  }, [token, realtimeUserId]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

@@ -213,36 +213,45 @@ export function ApplicationDetailPanel({
       </header>
 
       <div className="space-y-4 p-4">
-        <section className="rounded-[10px] bg-[#f0faf8] p-3">
-          <h3 className="text-[8px] font-bold uppercase tracking-[0.04em] text-[#16827e]">
-            Next step
-          </h3>
-          <p className="mt-1.5 text-[10px] font-semibold text-[#354749]">
-            {application.status === "Interview Scheduled"
-              ? "Prepare for your interview"
-              : application.status === "Hired"
-                ? "Prepare for onboarding"
+        {application.status === "Hired" ? (
+          <section aria-label="Hiring congratulations" className="rounded-[10px] border border-[#ccebdc] bg-[#f0faf5] p-3">
+            <h3 className="text-[10px] font-bold text-[#187850]">
+              Congratulations, you’re hired!
+            </h3>
+            <p className="mt-1.5 text-[9px] leading-[1.55] text-[#58786b]">
+              You’ve been selected for the {application.title} position at {application.company}. Contact the employer for onboarding details.
+            </p>
+          </section>
+        ) : (
+          <section className="rounded-[10px] bg-[#f0faf8] p-3">
+            <h3 className="text-[8px] font-bold uppercase tracking-[0.04em] text-[#16827e]">
+              Next step
+            </h3>
+            <p className="mt-1.5 text-[10px] font-semibold text-[#354749]">
+              {application.status === "Interview Scheduled"
+                ? "Prepare for your interview"
                 : application.status === "Rejected"
                   ? "Explore other opportunities"
                   : "Wait for an employer update"}
-          </p>
-          <p className="mt-1 text-[9px] leading-[1.55] text-[#718184]">
-            {application.interviewStatus === "invited"
-              ? "The employer invited you to choose an interview time from their available dates."
-              : statusGuidance[application.status]}
-          </p>
-          {application.interviewStatus === "invited" && application.interviewId ? (
-            <button
-              className="mt-3 rounded-lg bg-[#0e8e9b] px-3 py-2 text-[10px] font-semibold text-white hover:bg-[#0a7d8a]"
-              onClick={() => setIsInterviewDialogOpen(true)}
-              type="button"
-            >
-              Choose interview time
-            </button>
-          ) : null}
-        </section>
+            </p>
+            <p className="mt-1 text-[9px] leading-[1.55] text-[#718184]">
+              {application.interviewStatus === "invited"
+                ? "The employer invited you to choose an interview time from their available dates."
+                : statusGuidance[application.status]}
+            </p>
+            {application.interviewStatus === "invited" && application.interviewId ? (
+              <button
+                className="mt-3 rounded-lg bg-[#0e8e9b] px-3 py-2 text-[10px] font-semibold text-white hover:bg-[#0a7d8a]"
+                onClick={() => setIsInterviewDialogOpen(true)}
+                type="button"
+              >
+                Choose interview time
+              </button>
+            ) : null}
+          </section>
+        )}
 
-        {application.interviewStatus === "scheduled" && application.interviewSchedule ? (
+        {application.status !== "Hired" && application.interviewStatus === "scheduled" && application.interviewSchedule ? (
           <section aria-label="Interview details" className="rounded-[10px] border border-[#ded5f2] bg-[#faf7ff] p-3">
             <h3 className="text-[8px] font-bold uppercase tracking-[0.04em] text-[#765cb8]">
               Interview details
@@ -288,7 +297,7 @@ export function ApplicationDetailPanel({
             ) : null}
           </section>
         ) : null}
-        {application.interviewStatus === "cancelled" ? (
+        {application.status !== "Hired" && application.interviewStatus === "cancelled" ? (
           <section aria-label="Interview cancellation" className="rounded-[10px] border border-[#f1d8d5] bg-[#fff7f6] p-3">
             <h3 className="text-[8px] font-bold uppercase tracking-[0.04em] text-[#a75b57]">Interview cancelled</h3>
             <p className="mt-1.5 text-[9px] leading-4 text-[#875d5a]">Your interview was cancelled. If the employer sends a new invitation, you can choose another time here.</p>
@@ -398,7 +407,7 @@ export function ApplicationDetailPanel({
           </Link>
         )}
       </div>
-      {isInterviewDialogOpen && application.interviewId ? (
+      {application.status !== "Hired" && isInterviewDialogOpen && application.interviewId ? (
         <ApplicantInterviewBookingDialog
           interviewId={application.interviewId}
           isScheduled={application.interviewStatus === "scheduled"}

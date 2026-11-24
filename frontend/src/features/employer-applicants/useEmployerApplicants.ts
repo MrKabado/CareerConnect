@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useAuth } from "@/features/auth/useAuth";
 import { getEmployerApplicants, type BackendApplicationStatus } from "@/features/employer-applicants/api";
 import type { Applicant } from "@/features/employer-applicants/types";
+import { subscribeToUserUpdates } from "@/lib/realtime";
 
 export function useEmployerApplicants(status?: BackendApplicationStatus) {
   const { token, status: authStatus } = useAuth();
@@ -64,6 +65,13 @@ export function useEmployerApplicants(status?: BackendApplicationStatus) {
     void load();
     return () => { requestSequence.current += 1; };
   }, [load]);
+
+  useEffect(() => {
+    if (!token) return;
+    return subscribeToUserUpdates((update) => {
+      if (update.resource === "applications") void load();
+    });
+  }, [load, token]);
 
   return {
     applicants,
